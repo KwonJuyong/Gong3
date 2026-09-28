@@ -1,0 +1,38 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+/build
+/coverage
+
+# misc
+.DS_Store
+*.pem
+*.keystore
+*.jks
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env — 비밀 값은 절대 커밋하지 않는다. 예시는 .env.example 에.
+.env*
+!.env.example
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+/app/generated/prisma
+
+# 업로드·로컬 DB
+/public/uploads
+private-uploads/
+postgres_data/
+
+# Claude Code 개인 설정
+.claude/settings.local.json
+.claude/worktrees/

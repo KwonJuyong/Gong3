@@ -1,0 +1,989 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  DEVELOPER
+  ADMIN
+}
+
+model User {
+  id           String  @id @default(cuid())
+  studentId    String  @unique // 학번 / 사번 / 이메일 (로그인 ID)
+  password     String
+  name         String
+  major        String  @default("") // 전공 / 업체명
+  phone        String? @unique
+  email        String? @unique
+  role         Role    @default(USER)
+  userType     String  @default("STUDENT") // STUDENT, DEVELOPER, STAFF
+  profileImage String? // 프로필 사진 URL
+
+  /// 이메일 인증을 마친 시각. null 이면 로그인할 수 없다.
+  /// 이 컬럼 이전 가입자는 마이그레이션에서 createdAt 으로 채웠다.
+  emailVerifiedAt DateTime?
+
+  /// ACTIVE | SUSPENDED(일시 정지) | WITHDRAWN(탈퇴)
+  /// 탈퇴해도 행은 지우지 않는다. 보상·원장이 참조하고 지급명세서 근거라 보관해야 한다.
+  /// 주민등록번호 파기는 정산 쪽에서 따로 다룬다.
+  status      String    @default("ACTIVE")
+  withdrawnAt DateTime?
+
+  /// 세션 세대. 값을 올리면 그 사용자의 기존 세션이 모두 무효가 된다(revokeSessions).
+  /// 쿠키 서명에 포함되고 getSessionUserId() 가 DB 값과 대조한다. middleware 는 서명만 본다.
+  sessionEpoch Int @default(0)
+  /// 마지막 활동 시각·IP(관리자 접속 현황용). 요청이 올 때 5분에 한 번 기록한다.
+  lastSeenAt   DateTime?
+  lastSeenIp   String?
+
+  createdProjects   Project[]      @relation("CreatedProjects")
+  responses         Response[]
+  notifications     Notification[] // 내가 "받는" 알림
+  sentNotifications Notification[] @relation("NotificationFromUser") // 내가 "보낸" 알림(요청자)
+
+  sentMessages            Message[]                @relation("SentMessages")
+  conversationMembers     ConversationMember[]
+  enrollments             Enrollment[]
+  payrollProfile          PayrollProfile?
+  laborClaims             LaborClaim[]
+  ownedServices           Service[]                @relation("OwnedServices")
+  surveyResponses         SurveyResponse[]
+  pushSubscriptions       PushSubscription[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  accountClaimTokens      AccountClaimToken[]
+
+  // 마켓플레이스 정산 (연구비 노무비 계통과 별개)
+  orders     Order[]     @relation("BuyerOrders") // 기업으로서 발주한 건
+  rewards    Reward[] // 평가단으로서 받을 보상
+  bizProfile BizProfile? // 기업으로서의 사업자 정보 (발주 폼 프리필)
+
+  // 민감 첨부(신분증·통장사본). public/ 밖에 저장하고 라우트가 권한을 판정한다
+  attachments         Attachment[] @relation("AttachmentOwner")
+  uploadedAttachments Attachment[] @relation("AttachmentUploader")
+
+  createdAt DateTime @default(now())
+}
+
+/// 민감 첨부(신분증·통장사본·서명·직인). public/ 밖에 저장한다.
+/// 파일마다 주인을 기록해 접근을 판정한다: ownerId === me.id || me.role === "ADMIN".
+/// 프로필 사진·메신저·설문 첨부는 아직 public/uploads 에 URL 로만 저장된다.
+model Attachment {
+  id String @id @default(cuid())
+
+  /// ID_CARD(신분증) | BANKBOOK(통장사본)
+  kind String
+
+  /// 파일의 주인. 접근 판정 기준이다.
+  ownerId String
+  owner   User   @relation("AttachmentOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  /// 실제로 올린 사람. 관리자 대리업로드를 구분한다(본인이 올리면 ownerId 와 같다).
+  uploadedById String
+  uploadedBy   User   @relation("AttachmentUploader", fields: [uploadedById], references: [id])
+
+  /// 디스크상의 파일명(UUID). 원본 이름을 그대로 쓰면 경로 조작·중복 위험이 있다.
+  storedName String @unique
+  origName   String
+  mime       String
+  size       Int
+
+  createdAt DateTime @default(now())
+
+  /// unique 가 아닌 이유: ID_CARD·BANKBOOK 은 한 벌만 두고 교체하지만,
+  /// SIGNATURE·SEAL 은 제출된 청구서가 옛 파일을 가리키므로 추가만 한다.
+  /// 규칙은 POST /api/attachments 가 SINGLETON_KINDS 로 강제한다.
+  @@index([ownerId, kind])
+  @@index([kind])
+}
+
+// 웹 푸시 구독. 사용자 1명이 기기·브라우저마다 하나씩 갖는다(노트북 + 휴대폰 = 2건).
+// endpoint 가 구독의 고유 주소라 unique. 브라우저가 구독을 폐기하면(410/404)
+// 발송할 때 정리한다(app/lib/push.ts).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String // 구독 공개키
+  auth      String // 인증 시크릿
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// 비밀번호 재설정 링크(30분, 1회용). 원본 토큰은 저장하지 않고 SHA-256 해시만 남긴다.
+model PasswordResetToken {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// sha256(원본 토큰). 원본은 메일로만 나가고 어디에도 저장하지 않는다.
+  tokenHash String    @unique
+  expiresAt DateTime
+  /// 1회용. 쓰고 나면 찍고, 같은 사용자의 다른 토큰은 전부 지운다.
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// 가입 이메일 인증 링크(24시간, 1회용). 재설정 토큰과 수명이 달라 테이블을 나눴다.
+/// 발급 뒤 이메일을 바꿀 수 있으므로 대상 주소를 함께 저장해 소비할 때 대조한다.
+model EmailVerificationToken {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// 이 토큰이 인증하려는 주소. 소비 시점의 User.email 과 다르면 거부한다.
+  email     String
+  /// sha256(원본 토큰). 원본은 메일로만 나가고 어디에도 저장하지 않는다.
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// 계정 인계 링크. 이메일이 없는 기존 계정을 관리자가 발급한 링크로 복구한다(app/lib/accountClaim.ts).
+/// 구조는 PasswordResetToken 과 같고, 사람이 직접 전달하므로 유효기간은 7일이다.
+model AccountClaimToken {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// sha256(원본 토큰). 원본은 발급 시 한 번만 반환되고 어디에도 저장하지 않는다.
+  tokenHash String    @unique
+  expiresAt DateTime
+  /// 1회용. 행을 지우지 않고 사용 시각을 찍는다(두 번 눌러도 실패로 보이지 않게).
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Project {
+  id                 String       @id @default(cuid())
+  title              String
+  description        String?
+  location           String       @default("미정")
+  startTime          DateTime
+  endTime            DateTime?
+  // PENDING_APPROVAL(승인 대기·학생에게 안 보임) | REJECTED(반려)
+  // RECRUITING(모집중·응답 불가) | ACTIVE(평가 진행) | FINISHED(종료)
+  status             String       @default("ACTIVE")
+  questions          Json
+  link               String?
+  creatorId          String?
+  creator            User?        @relation("CreatedProjects", fields: [creatorId], references: [id])
+  minParticipants    Int          @default(1)
+  maxParticipants    Int          @default(10)
+  enrollmentDeadline DateTime?
+  responses          Response[]
+  enrollments        Enrollment[]
+
+  // 문항 출처. AUTO = 서비스 설문(SurveyVersion)에서 가져옴, MANUAL = 직접 입력.
+  // fundingType 과는 독립이다.
+  questionSource  String         @default("MANUAL")
+  // AUTO 일 때 문항 원본. 학생 응답은 Project 에 붙는다.
+  surveyVersionId String?
+  surveyVersion   SurveyVersion? @relation("ProjectSurveySource", fields: [surveyVersionId], references: [id])
+
+  // 자금 출처와 지급자
+  // COMPANY        업체, 지급자 = 우리(선불)
+  // UNIVERSITY     학교, 지급자 = 우리(보통 후불)
+  // RESEARCH_FUND  연구비, 지급자 = 산학협력단(Reward 를 만들지 않는다)
+  fundingType       String    @default("COMPANY")
+  contractRef       String? // 학교 계약번호
+  fundRef           String? // 연구과제번호
+  // 관리자가 계약서·과제 예산을 확인한 시각. 업체는 입금 확인이 이 역할을 한다.
+  fundConfirmedAt   DateTime?
+  fundConfirmedById String?
+  // 발주가 없는 건(연구비)의 1인 보상 기준. 업체·학교는 Order.rewardPerPerson 을 쓴다.
+  rewardPerPerson   Int?
+  closedAt          DateTime? // 정원이 차거나 관리자가 닫은 시각(목록에서 내려간다)
+  order             Order?    @relation("OrderProject") // 이 평가를 진행하는 발주
+
+  // 관리자 승인. 생성 직후엔 PENDING_APPROVAL 이라 학생에게 보이지 않고,
+  // 승인하면 RECRUITING 으로 열리며 학생 알림이 나간다. 승인은 평가마다 따로 받는다.
+  approvedAt   DateTime?
+  approvedById String? // 관계 없는 스칼라 (confirmedById 와 같은 패턴)
+  rejectedAt   DateTime?
+  rejectReason String?
+  createdAt    DateTime  @default(now())
+}
+
+model Enrollment {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  // PENDING(신청·검토대기) | ACCEPTED(선발) | REJECTED(비선발) | REMOVED(진행 중 관리자 제외)
+  // 응답 제출은 ACCEPTED 만 가능하다. 평가가 시작된 뒤 선발자는 스스로 취소할 수 없고
+  // 관리자가 제외·추가한다(removeParticipantAction·addParticipantAction).
+  status    String   @default("PENDING")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+}
+
+// 채팅방 (카카오톡식): 1:1(DM), 단체(GROUP), AI 도우미(AI)
+model Conversation {
+  id          String               @id @default(cuid())
+  type        String // "DM" | "GROUP" | "AI"
+  title       String? // GROUP 방 이름 (DM/AI는 상대명/‘AI 도우미’로 표시)
+  createdById String?
+  members     ConversationMember[]
+  messages    Message[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @default(now()) // 마지막 활동(정렬용). 메시지 전송 시 갱신
+
+  @@index([type])
+}
+
+// 방 참여자 (읽음/나가기 상태 포함)
+model ConversationMember {
+  id             String       @id @default(cuid())
+  conversationId String
+  userId         String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id])
+  lastReadAt     DateTime? // 이 방에서 마지막으로 읽은 시각 (안읽음 계산)
+  leftAt         DateTime? // 나간 시각 (null = 참여중)
+  pinnedAt       DateTime? // 상단 고정 시각 (null = 일반). 고정 방은 목록 최상단 그룹
+  sortOrder      Int          @default(0) // 고정 방들 사이의 수동 정렬 순서(작을수록 위)
+  createdAt      DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String? // null = AI(assistant)/시스템 메시지
+  sender         User?        @relation("SentMessages", fields: [senderId], references: [id])
+  content        String
+  attachments    Json? // 첨부: [{ url, name, kind: "image"|"file", size }]
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model Response {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  answers   Json
+  project   Project  @relation(fields: [projectId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  // 이 응답에 대한 보상(유상 평가일 때만)
+  reward    Reward?
+  createdAt DateTime @default(now())
+}
+
+/// 개인 정산 정보(1:1). 주민번호는 암호화해 저장한다.
+/// 노무비와 보상 정산이 함께 쓰는 유일한 테이블이다(계좌는 한 번만 받는다).
+model PayrollProfile {
+  id            String  @id @default(cuid())
+  userId        String  @unique
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rrnEnc        String? // AES-256-GCM 암호문 (iv:tag:ct)
+  address       String?
+  bankName      String?
+  accountNumber String?
+  signatureUrl  String? // 전자서명 이미지 (/api/uploads/..)
+
+  /// 예금주. 본인과 다를 수 있다(부모 명의 등). 비어 있으면 Payout 생성 때 User.name 을 쓴다.
+  holderName String?
+
+  /// 본인이 개인정보 수집·이용에 동의한 시각. 관리자 대리입력 때는 채우지 않는다.
+  consentAt DateTime?
+
+  /// 관리자 대리입력 기록. 본인이 다시 저장하면 둘 다 null 로 되돌린다.
+  updatedByAdminId String?
+  updatedByAdminAt DateTime?
+
+  updatedAt DateTime @updatedAt
+}
+
+// 청구 회차 (관리자 생성)
+model ClaimBatch {
+  id          String       @id @default(cuid())
+  title       String // 예: "2026.01.23 노무비"
+  periodStart DateTime
+  periodEnd   DateTime
+  defaultRate Int          @default(0) // 기본 일일노무비(원), 항목 단가 프리필용
+  status      String       @default("OPEN") // OPEN | CLOSED
+  createdById String?
+  claims      LaborClaim[]
+  createdAt   DateTime     @default(now())
+}
+
+// 개인 청구 확인서 (제출 시점 스냅샷)
+model LaborClaim {
+  id              String     @id @default(cuid())
+  batchId         String
+  userId          String
+  batch           ClaimBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  user            User       @relation(fields: [userId], references: [id])
+  // 제출 시점 스냅샷 (이후 프로필 수정에도 제출본 불변)
+  affiliation     String     @default("") // 소속/전공
+  name            String
+  phone           String     @default("")
+  address         String     @default("")
+  bankName        String     @default("")
+  accountNumber   String     @default("")
+  rrnEnc          String? // 암호화
+  entries         Json // [{date, start, end, content, amount}]
+  totalAmount     Int        @default(0)
+  consent         Json // {personal,unique,thirdParty}
+  signatureUrl    String? // 청구확인(근무자)
+  directorSignUrl String? // 근무확인(연구책임자) 서명
+  status          String     @default("DRAFT") // DRAFT | CONFIRMED
+  confirmedAt     DateTime?
+  createdAt       DateTime   @default(now())
+
+  @@unique([batchId, userId])
+}
+
+model Notification {
+  id      String  @id @default(cuid())
+  userId  String // 알림 "받는 사람"(관리자)
+  content String
+  isRead  Boolean @default(false)
+  type    String  @default("INFO")
+
+  fromUserId String? // 알림 "발신자"(권한 요청자)
+  fromUser   User?   @relation("NotificationFromUser", fields: [fromUserId], references: [id])
+
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+// 전역 설정(key-value). 예: directorSignUrl(연구책임자 서명)
+model AppSetting {
+  key       String   @id
+  value     String?
+  updatedAt DateTime @updatedAt
+}
+
+// ============ 설문 생성 시스템 ============
+
+// L0: 구성개념 사전(ISO 정의 기반 참조 데이터, 시드로 관리)
+model Construct {
+  id            String  @id // "func_suitability", "usability", "security" ...
+  group         String // A_CORE | A_AI | A_DOMAIN | B | C
+  name          String // 표시명(한국어)
+  isoRef        String? // "ISO/IEC 25010:2023"
+  description   String // 구성개념 정의(무엇을 재는가)
+  evaluator     String  @default("EVALUATOR") // EVALUATOR | DEVELOPER(자가평가)
+  instrument    String? // SUS | UEQ | NASA_TLX | null(=LLM 적응 블록)
+  defaultWeight Int     @default(100)
+  sortOrder     Int     @default(0)
+  active        Boolean @default(true)
+}
+
+// 검증된 측정 도구의 원문 문항(수정하지 않는다, 시드로 관리)
+model InstrumentItem {
+  id         String  @id @default(cuid())
+  instrument String // SUS | UEQ | NASA_TLX
+  version    String // 도구 판본 "SUS-ko-1.0" (버전동결 추적)
+  locale     String  @default("ko")
+  ordinal    Int // 문항 순서
+  text       String // 원문(불변). 의미변별척도는 "좌 ↔ 우" 표기
+  leftLabel  String? // 의미변별척도 좌측 극(예: UEQ "짜증나게 함")
+  rightLabel String? // 의미변별척도 우측 극(예: UEQ "유쾌함")
+  dimension  String? // 하위척도(예: UEQ ATTRACTIVENESS/PERSPICUITY...)
+  scaleType  String // LIKERT_5 | SEMANTIC_7 | SCALE_0_100
+  reverse    Boolean @default(false) // 역채점 문항(좌측이 긍정 극)
+
+  @@unique([instrument, version, locale, ordinal])
+}
+
+// 평가 대상 서비스 + 서비스 프로파일(속성 플래그)
+model Service {
+  id                String          @id @default(cuid())
+  name              String
+  ownerId           String
+  owner             User            @relation("OwnedServices", fields: [ownerId], references: [id])
+  preset            String? // 6개 유형 프리셋(UX 표기용)
+  modality          String          @default("text") // text|image|voice|multimodal
+  isAiService       Boolean         @default(false) // → A-2 AI 모듈 ON
+  hasRecommendation Boolean         @default(false) // → 추천정확도 모듈 ON
+  isSafetyCritical  Boolean         @default(false) // → 안전성 모듈 ON
+  hasPersonalData   Boolean         @default(false) // → 보안 가중치 상향
+  userFacingUi      Boolean         @default(true) // → 상호작용 역량 강조
+  surveys           SurveyVersion[]
+  orders            Order[]
+  certReadiness     CertReadiness?
+  createdAt         DateTime        @default(now())
+}
+
+// 인증 준비 자가점검. 서비스당 한 벌.
+// 점수나 판정은 저장하지 않고 문항별 답만 둔다. 미비 항목은 화면이 계산한다(app/lib/certChecklist.ts).
+// answers 는 문항 id -> "yes"|"no"|"na" 맵이고 문구는 코드에만 있다.
+model CertReadiness {
+  id          String   @id @default(cuid())
+  serviceId   String   @unique
+  service     Service  @relation(fields: [serviceId], references: [id])
+  answers     Json     @default("{}")
+  note        String?
+  /** 마지막으로 저장한 사람. 소유자 대신 관리자가 볼 수도 있어 남긴다. */
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+// 확정된 설문 버전(스냅샷, 불변)
+model SurveyVersion {
+  id                 String             @id @default(cuid())
+  serviceId          String
+  service            Service            @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  round              Int                @default(1) // 회차
+  status             String             @default("DRAFT") // DRAFT | CONFIRMED | ARCHIVED
+  // 거버넌스 스냅샷(재현성)
+  llmModelId         String? // "gpt-4o" 등 (provider 무관)
+  promptVersion      String?
+  instrumentVersions Json? // {SUS,UEQ,NASA_TLX 판본}
+  constructSnapshot  Json? // 동결 시점 construct 정의 사본
+  blocks             Json? // 조립된 설문 본문(블록 순서대로)
+  drafts             LlmQuestionDraft[]
+  responses          SurveyResponse[]
+  order              Order? // 레거시. 새 발주는 Project 에 붙는다
+  // 이 회차를 문항 원본으로 삼아 만들어진 평가들(questionSource=AUTO)
+  sourcedProjects    Project[]          @relation("ProjectSurveySource")
+  confirmedById      String?
+  confirmedAt        DateTime?
+  // 관리자 승인. CONFIRMED 는 완성 상태일 뿐이고 공개 여부는 app/lib/approvals.ts 가 판정한다.
+  approvedAt         DateTime?
+  approvedById       String?
+  rejectedAt         DateTime?
+  rejectReason       String?
+  createdAt          DateTime           @default(now())
+
+  @@unique([serviceId, round])
+}
+
+// LLM 이 생성한 문항 초안. 확정 전엔 편집할 수 있고 확정되면 SurveyVersion.blocks 에 들어간다
+model LlmQuestionDraft {
+  id              String        @id @default(cuid())
+  surveyVersionId String
+  surveyVersion   SurveyVersion @relation(fields: [surveyVersionId], references: [id], onDelete: Cascade)
+  constructId     String // L0 참조(구성개념 고정)
+  scaleType       String // 척도 고정(LLM이 못 바꿈)
+  generated       String // LLM 생성 문구
+  edited          String? // 게스트 수정본
+  approved        Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+
+  @@unique([surveyVersionId, constructId])
+}
+
+// 평가단 응답 세션 (1인 1회)
+model SurveyResponse {
+  id              String               @id @default(cuid())
+  surveyVersionId String
+  surveyVersion   SurveyVersion        @relation(fields: [surveyVersionId], references: [id])
+  userId          String
+  user            User                 @relation(fields: [userId], references: [id])
+  items           SurveyResponseItem[]
+  reward          Reward? // 이 응답에 대한 보상(마켓플레이스 발주 건일 때만)
+  submittedAt     DateTime?
+  createdAt       DateTime             @default(now())
+
+  @@unique([surveyVersionId, userId])
+}
+
+// 문항 단위 응답 (IRT·비네트 보정 대비 분해 저장)
+model SurveyResponseItem {
+  id          String         @id @default(cuid())
+  responseId  String
+  response    SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  blockType   String // INSTRUMENT | LLM_ADAPTIVE | VIGNETTE
+  constructId String?
+  instrument  String?
+  itemKey     String // 문항 식별자
+  score       Float? // 정량 응답
+  text        String? // 서술형
+}
+
+// 앵커링 비네트(King et al. 2004). 평가자별 척도 사용 차이를 보정하는 고정 시나리오
+model Vignette {
+  id          String  @id @default(cuid())
+  constructId String // 어떤 구성개념을 보정하는가(L0 참조)
+  level       Int // 의도된 품질 수준 순서(1=낮음 ... K=높음)
+  text        String // 고정 시나리오 문구(불변)
+  scaleType   String  @default("LIKERT_5") // 실제 문항과 동일 척도
+  active      Boolean @default(true)
+
+  @@unique([constructId, level])
+}
+
+// ============ 마켓플레이스 정산 ============
+//
+// 돈의 흐름: 기업 -> 결제(Payment) -> 플랫폼 보유 -> 지급(Payout) -> 평가단
+// 연구비 노무비(ClaimBatch/LaborClaim)와는 별개다. 개인 정산 정보(PayrollProfile)만 같이 쓴다.
+//
+// - 금액은 Int(원 단위)로 저장한다.
+// - 비율은 bp(1/100 %)로 저장한다. 1000 bp = 10%, 880 bp = 8.8%.
+// - 금액 집계는 LedgerEntry 에서 한다.
+
+enum OrderStatus {
+  DRAFT // 발주 작성 중 (미결제)
+  PENDING // 결제 대기 (결제창 띄움)
+  PAID // 결제 완료 → 평가단 모집 가능
+  IN_PROGRESS // 평가 진행 중
+  SETTLED // 정산 완료 (지급 + 미달분 환불까지 끝)
+  CANCELLED // 결제 전 취소
+  REFUNDED // 전액 환불
+}
+
+enum PaymentStatus {
+  PENDING // 세금계산서 발행·입금 대기(아직 입금 전)
+  PAID // 관리자가 입금을 확인함. 원장에 수납(+) 기록된 상태
+  CANCELLED // 발주 취소·입금 무산
+}
+
+enum RewardStatus {
+  PENDING // 응답 제출됨, 검수 대기
+  APPROVED // 검수 통과 → 지급 대상
+  REJECTED // 무성의 응답 등. 미지급이고 해당 몫은 환불 대상
+  PAID // 지급 완료
+  FAILED // 이체 실패 (계좌오류 등) → 재시도 대상
+}
+
+enum PayoutStatus {
+  PENDING // 지급 대기열
+  PROCESSING // 이체 실행됨 (파일 내보냄 / API 접수됨)
+  PAID
+  FAILED
+}
+
+/// 기업의 사업자 정보. 발주 폼·견적서·세금계산서 공급받는자란을 미리 채운다.
+/// 편집은 프로필 기업 정보 탭에서만 한다. Order.biz* 는 발주 시점 스냅샷이라 따로 둔다.
+model BizProfile {
+  id       String @id @default(cuid())
+  userId   String @unique
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bizNo    String @default("") // 사업자등록번호 (하이픈 없이 10자리)
+  bizName  String @default("") // 상호
+  bizCeo   String @default("") // 대표자명
+  bizAddr  String @default("") // 사업장 주소
+  bizEmail String @default("") // 세금계산서 수신 이메일
+
+  /// 「이 사업자 명의로 발주할 권한이 있다」에 체크한 시각.
+  /// 권한 판정(canTransact)에는 쓰지 않는 기록용 값이다. 기존 행은 채우지 않는다.
+  /// 사업자번호가 바뀌면 비운다. saveBizProfile 의 attested 가 undefined 면 건드리지 않는다.
+  attestedAt DateTime?
+
+  /// 팝빌 기업정보조회로 확인한 상태: 정상|휴업|폐업|미등록.
+  /// 체크섬은 형식만 확인하므로 저장할 때 한 번 조회한다(건당 과금이라 번호가 바뀔 때만).
+  /// null 은 확인하지 못한 상태로 통과시킨다. "미등록"(조회 결과 없음)과 구분한다.
+  bizState      String?
+  bizVerifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// 기업의 평가 발주. 금액은 발주 시점 스냅샷이라 단가·수수료율이 바뀌어도 그대로다.
+model Order {
+  id              String         @id @default(cuid())
+  orderNo         String         @unique // 사람이 읽는 주문번호 (ORD-20260714-0001)
+  serviceId       String
+  service         Service        @relation(fields: [serviceId], references: [id])
+  // 이 발주로 진행되는 평가. surveyVersionId 는 이전 건을 위한 레거시 링크다.
+  projectId       String?        @unique
+  project         Project?       @relation("OrderProject", fields: [projectId], references: [id])
+  surveyVersionId String?        @unique // 레거시
+  surveyVersion   SurveyVersion? @relation(fields: [surveyVersionId], references: [id])
+  buyerId         String // 기업 (User, role=DEVELOPER)
+  buyer           User           @relation("BuyerOrders", fields: [buyerId], references: [id])
+
+  // 세금계산서 공급받는자 정보(발주 시점 스냅샷)
+  bizNo    String @default("") // 사업자등록번호 (하이픈 없이 10자리)
+  bizName  String @default("") // 상호
+  bizCeo   String @default("") // 대표자명
+  bizAddr  String @default("") // 사업장 주소
+  bizEmail String @default("") // 세금계산서 수신 이메일
+
+  // 금액 스냅샷
+  panelSize       Int // 모집 인원
+  rewardPerPerson Int // 평가단 1인 보상액 (세전)
+  subtotal        Int // panelSize × rewardPerPerson
+  feeRateBp       Int @default(2000) // 플랫폼 수수료율 (2000 bp = 20%)
+  fee             Int // subtotal × feeRateBp / 10000
+  vat             Int // (subtotal + fee) × 10%
+  totalAmount     Int // 결제 대상 금액 = subtotal + fee + vat
+
+  status        OrderStatus   @default(DRAFT)
+  payments      Payment[]
+  rewards       Reward[]
+  ledgerEntries LedgerEntry[]
+
+  settledAt DateTime? // 정산 완료 시각
+
+  /// 정산 마감 때 확정한 미달분 환불액. 원장의 PAYMENT_REFUND 는 refundSentAt 을 찍을 때 쌓인다.
+  refundAmount Int?
+  refundSentAt DateTime? // 기업 계좌로 실제 환불 이체를 마친 시각
+
+  createdAt DateTime @default(now())
+
+  @@index([buyerId, status])
+}
+
+/// 수납(기업이 발주 대금을 낸 기록). 현재는 무통장입금과 세금계산서로 처리한다.
+/// provider 로 방식을 구분하므로 PG 를 붙여도 구조는 그대로다.
+/// amount 는 Order.totalAmount 스냅샷이고, 입금액이 다르면 관리자가 확인 단계에서 거른다.
+model Payment {
+  id      String @id @default(cuid())
+  orderId String // → Order.id (우리 주문)
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  provider String        @default("manual") // manual(무통장입금) | (향후) toss
+  ref      String        @unique // 결제 식별자 = 입금 대사용 코드 (발주번호 기반). 멱등키
+  method   String        @default("BANK_TRANSFER") // BANK_TRANSFER | (향후) CARD, VIRTUAL_ACCOUNT
+  amount   Int // 청구 금액 = Order.totalAmount 스냅샷
+  status   PaymentStatus @default(PENDING)
+
+  // 무통장입금 확인(관리자 수동)
+  depositorName String? // 입금자명(통장 대사용)
+  paidAt        DateTime? // 입금 확인 시각
+  confirmedById String? // 입금을 확인한 관리자
+  memo          String? // 대사 메모 (부분입금·오입금 사유 등)
+
+  // 세금계산서(팝빌 발행). 실패하면 taxInvoiceIssued=false 로 남고 관리자가 재시도한다.
+  taxInvoiceMgtKey String? // 우리가 발급하는 팝빌 문서관리번호 (멱등키). 재발행 방지
+  taxInvoiceIssued Boolean @default(false)
+  taxInvoiceNtsNum String? // 국세청 승인번호 (발행 성공 시)
+  taxInvoiceError  String? // 발행 실패 사유 (재시도 대상)
+
+  // 발행(300)과 국세청 전송(304/305)은 별개 단계다. 전송은 비동기라 주기적으로 조회해 채운다.
+  taxInvoiceNtsState     Int? // 팝빌 상태코드: 300 발행완료 · 304 전송성공 · 305 전송실패 · 600 발행취소
+  taxInvoiceNtsCheckedAt DateTime? // 마지막 상태 조회 시각
+
+  /// 환불 후 수정세금계산서를 발행한 시각. 발행 API 는 연동하지 않았으므로
+  /// 화면이 경고를 띄우고, 관리자가 팝빌이나 홈택스에서 발행한 뒤 기록한다.
+  taxInvoiceAmendedAt DateTime?
+
+  cancelledAt  DateTime? // 수납 취소를 확정한 시각
+  /// 취소분을 기업 계좌로 돌려준 시각. 원장 PAYMENT_REFUND 는 이때 쌓인다.
+  refundSentAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  ledgerEntries LedgerEntry[]
+
+  @@index([orderId])
+  @@index([status])
+}
+
+/// 평가단 1인의 보상. 응답 1건에 보상 1건이고 금액은 발주 시점 Order 값의 스냅샷이다.
+model Reward {
+  id               String          @id @default(cuid())
+  orderId          String
+  order            Order           @relation(fields: [orderId], references: [id])
+  userId           String
+  user             User            @relation(fields: [userId], references: [id])
+  // 어떤 응답에 대한 보상인가(둘 중 하나만 채워진다). surveyResponseId 는 레거시 링크다.
+  responseId       String?         @unique
+  response         Response?       @relation(fields: [responseId], references: [id])
+  surveyResponseId String?         @unique // 레거시
+  surveyResponse   SurveyResponse? @relation(fields: [surveyResponseId], references: [id])
+
+  // 금액·세금 스냅샷(app/lib/withholding.ts 로 계산)
+  grossAmount Int // 세전 = order.rewardPerPerson
+  incomeType  String  @default("OTHER") // OTHER(기타소득) | BUSINESS(사업소득)
+  taxRateBp   Int     @default(880) // 명목 원천징수율(표시용). 기타 880 / 사업 330
+  taxAmount   Int // 실제 원천징수액(과세최저한·소액부징수 반영)
+  taxExempt   Boolean @default(false) // 과세최저한/소액부징수로 비과세됐는가 (지급명세서 판단용)
+  netAmount   Int // 실지급액 = grossAmount - taxAmount
+
+  /// 개인별 금액 조정 기록. grossAmount 는 조정 후 값이다.
+  /// 같은 회차에서도 사람마다 참여 시간이 달라 검수 단계에서 개인 보상액을 조정한다.
+  /// 조정하면 Σ grossAmount 와 Order.subtotal 이 달라지며, 화면이 그 차액을 보여준다.
+  adjustedAt   DateTime?
+  adjustedById String?
+  adjustReason String?
+
+  status       RewardStatus @default(PENDING)
+  rejectReason String? // 검수 탈락 사유
+  reviewedById String?
+  reviewedAt   DateTime?
+  payout       Payout?
+  createdAt    DateTime     @default(now())
+
+  @@unique([orderId, userId]) // 1주문 1인 1보상
+  @@index([status])
+}
+
+/// 실제 이체. Reward 1건에 Payout 1건.
+/// 현재는 driver="manual"(관리자가 한 건씩 이체하고 결과를 기록)만 쓴다.
+/// 지급대행 API 를 붙이더라도 driver 만 바꾸면 된다.
+model Payout {
+  id       String @id @default(cuid())
+  rewardId String @unique
+  reward   Reward @relation(fields: [rewardId], references: [id])
+
+  driver    String @default("manual") // manual | portone
+  payoutKey String @unique // 멱등키 (이체 요청 중복 방지)
+
+  // 이체 시점 스냅샷(프로필이 바뀌어도 그대로)
+  bankName      String
+  accountNumber String
+  holderName    String
+  amount        Int // 실지급액 = reward.netAmount
+
+  pgPayoutId String? // driver=portone일 때 지급대행 거래 ID
+  batchRef   String? // driver=manual일 때 대량이체 파일 식별자
+  status     PayoutStatus @default(PENDING)
+  failReason String?
+  raw        Json?
+  paidAt     DateTime?
+  createdAt  DateTime     @default(now())
+
+  ledgerEntries LedgerEntry[]
+
+  @@index([status, driver])
+}
+
+/// 원장. 추가만 하고 수정·삭제하지 않는다.
+/// amount 는 부호 있는 현금 증감이라 SUM(amount) 가 현금 잔액이다. 취소·환불은 반대 부호 행을 쌓는다.
+/// 원천징수액은 지급 때 적립(TAX_WITHHELD)하고 납부 때 빠진다(TAX_REMITTED).
+model LedgerEntry {
+  id String @id @default(cuid())
+
+  // PAYMENT_IN     (+) 기업 결제 수납
+  // PAYMENT_REFUND (−) 환불 (미달분·검수탈락분 포함)
+  // PAYOUT_OUT     (−) 평가단 실지급(netAmount)
+  // TAX_WITHHELD   ( ) 원천징수 적립. 현금 0, 부채만 기록
+  // TAX_REMITTED   (−) 원천세 납부
+  kind   String
+  amount Int // 부호 있음. IN=+, OUT=−, 비현금=0. SUM(amount) = 통장 잔액
+
+  /// 부채 증감(부호 있음). 원천징수·부가세처럼 보관 중이지만 납부할 금액이다.
+  liability Int @default(0)
+
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id])
+  paymentId String?
+  payment   Payment? @relation(fields: [paymentId], references: [id])
+  payoutId  String?
+  payout    Payout?  @relation(fields: [payoutId], references: [id])
+
+  memo       String   @default("")
+  occurredAt DateTime @default(now())
+
+  @@index([kind, occurredAt])
+  @@index([orderId])
+}
+
+// ============ AI News ============
+
+enum InsightKind {
+  PAPER
+  NEWS
+}
+
+/// 뉴스·논문 항목. 원문은 저장하지 않고 제목·초록·링크·요약만 둔다.
+/// arXiv 는 메타데이터만 CC0 이고, 뉴스는 제목과 링크만 받는다.
+model InsightItem {
+  id   String      @id @default(cuid())
+  kind InsightKind
+
+  source     String // arxiv | gdelt | msit | hn
+  externalId String // 소스 내 고유 id (arXiv: "2607.15275v1")
+  url        String // 원문 링크
+
+  title     String
+  abstract  String? // 원문 초록 (arXiv CC0). 뉴스는 null
+  /// 한국어 요약(1~2문장). 생성에 실패해도 항목은 보여야 하므로 nullable.
+  summaryKo String?
+
+  authors     String[]
+  category    String? // arXiv 분류(cs.AI) 또는 뉴스 카테고리
+  publishedAt DateTime
+  fetchedAt   DateTime @default(now())
+
+  // 같은 항목을 다시 요약하지 않도록 소스별 id 로 중복을 막는다.
+  @@unique([source, externalId])
+  @@index([kind, publishedAt])
+}
+
+/// 모델 순위. 성능(epoch, 벤치마크)과 실사용(openrouter, 토큰 사용량)은 다른 축이라 따로 둔다.
+/// 이력 없이 현재 스냅샷만 upsert 한다.
+model ModelScore {
+  id String @id @default(cuid())
+
+  source   String // epoch | openrouter
+  metric   String // eci | swe_bench_verified | tokens
+  modelKey String // 소스 내 모델 식별자 ("gpt-5.6-sol_promax")
+
+  displayName  String
+  organization String?
+  score        Float
+  rank         Int
+  /// 데이터 기준일. OpenRouter는 출처 표기에 "as of {asOf}"를 요구한다.
+  asOf         DateTime
+  releasedAt   DateTime?
+
+  fetchedAt DateTime @default(now())
+
+  @@unique([source, metric, modelKey])
+  @@index([source, metric, rank])
+}
+
+/// 수집 실행 기록. 소스별로 독립이며 화면에 마지막 갱신 시각과 실패를 보여주는 데 쓴다.
+model InsightSync {
+  id     String  @id @default(cuid())
+  source String // arxiv | epoch | gdelt | msit | hn
+  ok     Boolean
+
+  itemCount Int     @default(0)
+  error     String?
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([source, startedAt])
+}
+
+/// 세무 신고 기록(무엇을, 언제, 얼마로 냈는가).
+/// 수정신고가 있으므로 금액은 고칠 수 있고, 고친 사실은 amendedAt 으로 남긴다.
+/// 현재 집계와 달라도 자동으로 덮어쓰지 않는다.
+model TaxFiling {
+  id String @id @default(cuid())
+
+  /// SIMPLE_STATEMENT(간이지급명세서) | WITHHOLDING(원천세) | LOCAL_TAX(지방소득세)
+  kind  String
+  year  Int
+  month Int
+
+  /// FILED(제출함) | NOT_REQUIRED(그 달 지급이 없어 낼 것이 없음)
+  status String @default("FILED")
+
+  // 신고한 값(수정신고하면 고친다)
+  headcount   Int @default(0)
+  entryCount  Int @default(0)
+  grossAmount Int @default(0)
+  incomeTax   Int @default(0)
+  localTax    Int @default(0)
+
+  /// 홈택스 접수번호
+  receiptNo String?
+  memo      String?
+
+  filedAt   DateTime @default(now())
+  filedById String
+
+  /// 수정신고한 날. 채워져 있으면 화면이 「수정신고」로 표시한다.
+  amendedAt   DateTime?
+  amendedById String?
+
+  updatedAt DateTime @updatedAt
+
+  /// 한 달에 종류별로 한 건
+  @@unique([kind, year, month])
+  @@index([year, month])
+}
+
+/// 관리자 조작 감사 로그. 대상이 사라져도 남아야 하므로 actorId·targetId 에 FK 를 걸지 않는다.
+model AuditLog {
+  id       String @id @default(cuid())
+  actorId  String // 조작한 관리자
+  targetId String // 대상 사용자
+  /// MEMBER_UPDATE | MEMBER_ROLE | MEMBER_STATUS | MEMBER_RESET_MAIL
+  action   String
+  /// 사람이 읽는 요약. "역할 USER → DEVELOPER" 처럼 바뀐 값을 그대로 적는다.
+  summary  String
+
+  createdAt DateTime @default(now())
+
+  @@index([targetId, createdAt])
+  @@index([createdAt])
+}
+
+/// AI 도우미 데이터 조회의 감사 기록.
+/// question 은 redactQuery() 로 민감정보를 가린 값만 저장한다.
+/// 기록이 사용자보다 오래 남아야 하므로 actorId 에 FK 를 걸지 않는다.
+model QueryAuditLog {
+  id String @id @default(cuid())
+
+  actorId String
+  /// 질의 시점의 역할
+  actorRole String
+
+  /// 사용자가 입력한 자연어 질문(마스킹 후)
+  question String
+  /// 실제 호출된 도구 이름
+  tool     String
+  /// 조회 대상. "모델.필드1,필드2" 형태 (예: user.name,major)
+  target   String?
+  /// 적용된 권한 정책 식별자 (예: nonadmin-row-filter, admin-full, admin-only-denied)
+  policy   String?
+
+  /// SUCCESS | BLOCKED | ERROR
+  outcome String
+  /// 차단·오류 사유. 성공이면 null
+  reason  String?
+  /// 반환 행 수. count 는 그 값, 목록은 길이
+  rowCount Int?
+  /// 처리 소요 시간(밀리초)
+  durationMs Int
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([outcome, createdAt])
+}
+
+/// 개인정보처리시스템 접속기록(개인정보의 안전성 확보조치 기준 제8조). 2년 이상 보관한다.
+/// 추가만 하고, 보관기간이 지난 행은 월 점검 때 purgeExpiredAccessLogs() 가 파기한다.
+/// 회원이 삭제돼도 남도록 FK 대신 account 에 당시 계정을 기록한다.
+model AccessLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  /// 행위자. 로그인 실패(계정 없음)는 null
+  userId    String?
+  /// 당시 계정(이메일·학번). 없는 계정의 로그인 실패는 가린 값
+  account   String
+  ip        String
+  userAgent String?
+  /// LOGIN | LOGIN_FAIL | LOGOUT | PASSWORD_CHANGE | PASSWORD_RESET | LOGOUT_OTHERS | PERSONAL_DATA
+  kind      String
+  /// 수행업무: VIEW(조회) | EXPORT(출력) | UPDATE(변경) | DELETE(삭제)
+  action    String?
+  /// 처리한 정보주체(User.id). 여러 명이면 null 이고 detail 에 인원을 적는다
+  subjectId String?
+  /// 사람이 읽는 설명. 예: "회원 상세", "원천징수 명세 2026-08 (12명)"
+  detail    String?
+  /// 실패 사유 등 결과. 성공이면 null
+  result    String?
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([ip])
+  @@index([kind, createdAt])
+}
+
+/// 접속기록 월 1회 점검 이력(고시 제8조 제2항)
+model AccessReview {
+  id         String   @id @default(cuid())
+  /// 예: "2026-09"
+  month      String   @unique
+  reviewerId String
+  /// 점검 시 자동으로 추린 이상 징후 건수(당시 값 스냅샷)
+  findings   Int
+  note       String?
+  createdAt  DateTime @default(now())
+}

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>오프라인 · AI 평가단</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+        background: #ffffff; color: #1f2937;
+        display: flex; align-items: center; justify-content: center;
+        padding: 24px; text-align: center;
+      }
+      .box { max-width: 360px; }
+      .mark {
+        width: 64px; height: 64px; margin: 0 auto 20px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 18px; background: #f3f4f6;
+      }
+      h1 { font-size: 18px; margin: 0 0 8px; }
+      p { font-size: 14px; color: #6b7280; line-height: 1.6; margin: 0 0 20px; }
+      button {
+        appearance: none; border: 0; cursor: pointer;
+        background: #111827; color: #fff; font-size: 14px; font-weight: 600;
+        padding: 10px 20px; border-radius: 10px;
+      }
+      button:active { opacity: .85; }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <div class="mark">
+        <svg width="34" height="30" viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 10 90 L 45 10 L 55 10 L 90 90 L 78 90 L 68 66 L 32 66 L 22 90 Z M 37 54 L 63 54 L 50 24 Z" fill="#3b3b3b"/>
+          <rect x="62" y="30" width="48" height="12" fill="#3b3b3b"/>
+          <rect x="62" y="54" width="40" height="12" fill="#3b3b3b"/>
+          <rect x="62" y="78" width="48" height="12" fill="#3b3b3b"/>
+        </svg>
+      </div>
+      <h1>오프라인 상태입니다</h1>
+      <p>인터넷 연결이 끊겼습니다.<br />연결을 확인한 뒤 다시 시도해 주세요.</p>
+      <button onclick="location.reload()">다시 시도</button>
+    </div>
+  </body>
+</html>

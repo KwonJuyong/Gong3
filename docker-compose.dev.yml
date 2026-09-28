@@ -1,0 +1,14 @@
+# 로컬 개발용 DB 하나만 띄운다. 앱은 `npm run dev` 로 호스트에서 돌린다.
+#   docker compose -f docker-compose.dev.yml up -d
+# 운영·스테이징 compose 는 이 저장소에 없다(배포는 본 저장소에서만 한다).
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: aieval
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data

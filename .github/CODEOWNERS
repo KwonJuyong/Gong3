@@ -1,0 +1,8 @@
+# 인증·권한·돈·스키마는 저장소 관리자 리뷰가 있어야 합쳐진다(브랜치 보호에서 「Require review from Code Owners」를 켤 것).
+*                   @KwonJuyong
+/middleware.ts      @KwonJuyong
+/app/api/           @KwonJuyong
+/app/lib/           @KwonJuyong
+/prisma/            @KwonJuyong
+/package.json       @KwonJuyong
+/package-lock.json  @KwonJuyong

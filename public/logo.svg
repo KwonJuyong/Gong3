@@ -1,0 +1,23 @@
+<svg width="40" height="40" viewBox="0 0 120 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- AE Monogram Logo -->
+  <path d="
+    M 10 90
+    L 45 10
+    L 55 10
+    L 90 90
+    L 78 90
+    L 68 66
+    L 68 66
+    L 32 66
+    L 22 90
+    Z
+    M 37 54
+    L 63 54
+    L 50 24
+    Z
+  " fill="#3b3b3b"/>
+  <!-- E horizontal bars -->
+  <rect x="62" y="30" width="48" height="12" fill="#3b3b3b"/>
+  <rect x="62" y="54" width="40" height="12" fill="#3b3b3b"/>
+  <rect x="62" y="78" width="48" height="12" fill="#3b3b3b"/>
+</svg>
