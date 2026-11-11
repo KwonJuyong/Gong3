@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { getSessionUserId } from "@/app/session-server";
 import { prisma } from "@/app/db";
 import { checkRateLimit } from "@/app/rate-limit";
+import { readUploadForm } from "@/app/lib/uploadForm";
 import { checkUploadQuota } from "@/app/lib/uploadGuard";
 import {
   MAX_ATTACHMENT_SIZE,
@@ -32,17 +33,13 @@ export async function POST(request: Request) {
   });
   if (!me) return NextResponse.json({ error: "인증이 필요합니다." }, { status: 401 });
 
-  // formData() 는 본문 전체를 메모리에 올리므로 크기를 먼저 봄. 서명·직인은 쌓이므로 횟수도 제한함
-  const declared = Number(request.headers.get("content-length") ?? "");
-  if (!Number.isFinite(declared) || declared > MAX_ATTACHMENT_SIZE + 64 * 1024) {
-    return NextResponse.json({ error: "파일 크기는 10MB 이하만 가능합니다." }, { status: 413 });
-  }
   const rl = checkRateLimit(`attachment:${me.id}`, 30, 10 * 60 * 1000);
   if (rl) return NextResponse.json({ error: rl }, { status: 429 });
-  const quotaErr = await checkUploadQuota(me.id, "attachment", declared);
+  const upload = await readUploadForm(request, MAX_ATTACHMENT_SIZE);
+  if ("error" in upload) return NextResponse.json({ error: upload.error }, { status: upload.status });
+  const quotaErr = await checkUploadQuota(me.id, "attachment", upload.bytes);
   if (quotaErr) return NextResponse.json({ error: quotaErr }, { status: 429 });
-
-  const form = await request.formData();
+  const form = upload.form;
   const file = form.get("file");
   const kind = String(form.get("kind") ?? "");
   const rawOwner = String(form.get("ownerId") ?? "");

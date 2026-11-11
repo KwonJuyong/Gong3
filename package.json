@@ -8,10 +8,12 @@
     "start": "next start",
     "lint": "eslint",
     "check:style": "node scripts/check-style.mjs",
-    "verify": "tsc --noEmit && eslint && node scripts/check-style.mjs && npm run test:session && npm run test:query && npm run test:limits",
+    "verify": "tsc --noEmit && eslint && node scripts/check-style.mjs && npm run test:session && npm run test:query && npm run test:limits && npm run test:security",
     "prepare": "node -e \"try{require('child_process').execSync('git config core.hooksPath .githooks',{stdio:'ignore'})}catch{}\"",
     "test:query": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-hooks.mjs scripts/query-selftest.mjs",
     "test:session": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-hooks.mjs scripts/session-selftest.mjs",
+    "test:api": "node scripts/api-smoke.mjs",
+    "test:security": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-hooks.mjs scripts/security-selftest.mjs",
     "test:limits": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-hooks.mjs scripts/limits-selftest.mjs",
     "bench:query": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-hooks.mjs scripts/query-benchmark.mjs",
     "check:metadata": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-hooks.mjs scripts/query-selftest.mjs"

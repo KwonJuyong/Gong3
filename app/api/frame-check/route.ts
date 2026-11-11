@@ -6,6 +6,7 @@ import { request as httpsRequest } from "https";
 import { isIP, type LookupFunction } from "net";
 import { prisma } from "@/app/db";
 import { getSessionUserId } from "@/app/session-server";
+import { isPublicAddress } from "@/app/lib/publicAddress";
 import { checkLimit } from "@/app/lib/limits";
 
 /**
@@ -23,30 +24,13 @@ const MAX_REDIRECTS = 3;
 const CACHE_MS = 10 * 60 * 1000;
 const cache = new Map<string, { at: number; embeddable: boolean | null }>();
 
-function isPrivateAddress(ip: string): boolean {
-  if (isIP(ip) === 4) {
-    const [a, b] = ip.split(".").map(Number);
-    return (
-      a === 0 || a === 10 || a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      a >= 224
-    );
-  }
-  const v = ip.toLowerCase();
-  if (v.startsWith("::ffff:")) return isPrivateAddress(v.slice(7));
-  return v === "::" || v === "::1" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe80");
-}
-
 async function isPublicHost(url: URL): Promise<boolean> {
   if (url.protocol !== "https:" && url.protocol !== "http:") return false;
   const host = url.hostname.replace(/^\[|\]$/g, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
   try {
     const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
-    return addrs.length > 0 && addrs.every((a) => !isPrivateAddress(a.address));
+    return addrs.length > 0 && addrs.every((a) => isPublicAddress(a.address));
   } catch {
     return false;
   }
@@ -59,7 +43,7 @@ async function isPublicHost(url: URL): Promise<boolean> {
 const publicOnlyLookup: LookupFunction = (hostname, options, callback) => {
   lookupCb(hostname, { all: true }, (err, addrs: LookupAddress[]) => {
     if (err) return callback(err, "", 0);
-    if (addrs.length === 0 || addrs.some((a) => isPrivateAddress(a.address))) {
+    if (addrs.length === 0 || addrs.some((a) => !isPublicAddress(a.address))) {
       return callback(new Error("private address"), "", 0);
     }
     if ((options as { all?: boolean }).all) {
@@ -122,7 +106,11 @@ async function check(link: string, ourHost: string): Promise<boolean | null> {
     if (!res) return null;
     const loc = headerValue(res.headers, "location");
     if (res.status >= 300 && res.status < 400 && loc) {
-      url = new URL(loc, url);
+      try {
+        url = new URL(loc, url);
+      } catch {
+        return null;
+      }
       continue;
     }
     return allowsFraming(res.headers, ourHost);
@@ -146,7 +134,8 @@ export async function GET(req: NextRequest) {
   const allowed = !!project && (user?.role === "ADMIN" || project.creatorId === userId || project.enrollments.length > 0);
   if (!allowed || !project?.link) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const hit = cache.get(project.link);
+  const cacheKey = `${req.nextUrl.host}:${project.link}`;
+  const hit = cache.get(cacheKey);
   let embeddable: boolean | null;
   if (hit && Date.now() - hit.at < CACHE_MS) {
     embeddable = hit.embeddable;
@@ -154,7 +143,11 @@ export async function GET(req: NextRequest) {
     // 외부 서버로 요청이 나가는 경로. 판단 불가(null)면 화면은 버튼만 숨김
     if (checkLimit("frameCheck", userId)) return NextResponse.json({ embeddable: null });
     embeddable = await check(project.link, req.nextUrl.host);
-    cache.set(project.link, { at: Date.now(), embeddable });
+    for (const [key, entry] of cache) {
+      if (Date.now() - entry.at >= CACHE_MS) cache.delete(key);
+    }
+    if (cache.size >= 1000) cache.clear();
+    cache.set(cacheKey, { at: Date.now(), embeddable });
   }
   return NextResponse.json({ embeddable }, { headers: { "Cache-Control": "private, max-age=600" } });
 }

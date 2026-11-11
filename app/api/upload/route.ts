@@ -4,6 +4,7 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { checkRateLimit } from "@/app/rate-limit";
+import { readUploadForm } from "@/app/lib/uploadForm";
 import { checkUploadQuota } from "@/app/lib/uploadGuard";
 
 const ALLOWED_TYPES = [
@@ -38,20 +39,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "인증이 필요합니다." }, { status: 401 });
     }
 
-    // formData() 는 본문 전체를 메모리에 올리므로 크기를 먼저 봄
-    const declared = Number(request.headers.get("content-length") ?? "");
-    if (!Number.isFinite(declared) || declared > MAX_SIZE + 64 * 1024) {
-      return NextResponse.json({ error: "파일 크기는 5MB 이하만 가능합니다." }, { status: 413 });
-    }
     const rl = checkRateLimit(`upload:${userId}`, 30, 10 * 60 * 1000);
     if (rl) return NextResponse.json({ error: rl }, { status: 429 });
-    const quotaErr = await checkUploadQuota(userId, "image", declared);
+    const upload = await readUploadForm(request, MAX_SIZE);
+    if ("error" in upload) return NextResponse.json({ error: upload.error }, { status: upload.status });
+    const quotaErr = await checkUploadQuota(userId, "image", upload.bytes);
     if (quotaErr) return NextResponse.json({ error: quotaErr }, { status: 429 });
+    const formData = upload.form;
+    const file = formData.get("file");
 
-    const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-
-    if (!file) {
+    if (!(file instanceof File)) {
       return NextResponse.json({ error: "파일이 없습니다." }, { status: 400 });
     }
 
