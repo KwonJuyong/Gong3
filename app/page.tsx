@@ -235,6 +235,7 @@ export default function Page() {
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const n = q.get("next");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNext(n ?? "");
     setExpired(q.get("expired") === "1");
     // 세션 만료로 돌아온 사람은 바로 로그인 화면으로 보냄
@@ -243,11 +244,14 @@ export default function Page() {
 
   // 가입·이메일 등록에 성공하면 안내 화면으로 넘어감
   // 의존성을 success 불리언으로 두면 두 번째 성공(true → true)에서 효과가 돌지 않으므로 상태 객체를 씀
+  // setMode 가 주소창 기록도 바꿔 렌더 중 처리 불가
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (registerState?.success) setMode("registered");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registerState]);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (migrateState?.success) setMode("migrated");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [migrateState]);

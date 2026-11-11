@@ -100,6 +100,8 @@ export default function EvalForm({
 
   useEffect(() => {
     const d = readDraft(key);
+    // 임시 저장은 기기 저장소에만 있어 서버 렌더에서 읽을 수 없음
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft(d);
     if (d) setValues({ ...prevAnswers, ...d });
     setLoaded(true);

@@ -160,6 +160,8 @@ export default function FloatingHub({
 
   // 위젯 열면(또는 목록 뷰) 목록 최신화
   useEffect(() => {
+    // 상태 갱신은 조회 응답 이후라 동기 갱신 아님
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open && view === "list") refreshRooms();
   }, [open, view, refreshRooms]);
 

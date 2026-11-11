@@ -302,6 +302,8 @@ export default function DashboardView({
   const [calMode, setCalMode] = useState<"list" | "calendar">("list");
   useEffect(() => {
     try {
+      // 기기 저장값은 서버 렌더에서 읽을 수 없어 마운트 후 반영
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (localStorage.getItem("dash-cal-mode") === "calendar") setCalMode("calendar");
     } catch {}
   }, []);
@@ -313,7 +315,7 @@ export default function DashboardView({
   };
   const [splitUrl, setSplitUrl] = useState<string | null>(null);
   const [splitRatio, setSplitRatio] = useState(50); // 좌측 패널 %
-  const isDragging = useRef(false);
+  const [dragging, setDragging] = useState(false);
 
   // 비용 부담. 자동·수동 생성 폼이 함께 씀
   const [funding, setFunding] = useState("COMPANY");
@@ -348,9 +350,12 @@ export default function DashboardView({
     enrollmentDeadlineTime: "23:59",
   });
 
-  useEffect(() => {
-    if (view === "edit" && selected) {
-      const qs = (selected.questions || []) as Question[];
+  const editSource = view === "edit" ? selected : null;
+  const [editSynced, setEditSynced] = useState<typeof selected>(null);
+  if (editSource !== editSynced) {
+    setEditSynced(editSource);
+    if (editSource) {
+      const qs = (editSource.questions || []) as Question[];
       setEditDraftQs(
         qs.map((q) => ({
           label: q.label,
@@ -360,17 +365,23 @@ export default function DashboardView({
         }))
       );
     }
-  }, [view, selected]);
+  }
 
   // 뷰 변경 시 분할 상태 초기화
-  useEffect(() => {
+  const splitKey = `${view}:${selectedId}`;
+  const [splitFor, setSplitFor] = useState(splitKey);
+  if (splitKey !== splitFor) {
+    setSplitFor(splitKey);
     setSplitUrl(null);
     setSplitRatio(50);
-  }, [view, selectedId]);
+    setDragging(false);
+  }
 
   // 생성 뷰 진입 시 마법사를 처음부터. 빈 날짜 모달에서 넘어온 d/t 파라미터를 반영함
   useEffect(() => {
     if (view !== "create") return;
+    // 오늘 날짜·시각은 기기 시간대 기준이라 서버 렌더가 아닌 마운트 후 채움
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCreateStep(1);
     setCreateError("");
     setCreateForm((prev) => ({
@@ -625,18 +636,14 @@ export default function DashboardView({
           className="fixed inset-0 z-50 flex bg-white"
           style={{ top: "56px" }}
           onMouseMove={(e) => {
-            if (!isDragging.current) return;
+            if (!dragging) return;
             const container = e.currentTarget;
             const rect = container.getBoundingClientRect();
             const pct = ((e.clientX - rect.left) / rect.width) * 100;
             setSplitRatio(Math.min(80, Math.max(20, pct)));
           }}
-          onMouseUp={() => {
-            isDragging.current = false;
-          }}
-          onMouseLeave={() => {
-            isDragging.current = false;
-          }}
+          onMouseUp={() => setDragging(false)}
+          onMouseLeave={() => setDragging(false)}
         >
           <div className="overflow-y-auto px-5 sm:px-8 py-6" style={{ width: `${splitRatio}%` }}>
             <div className="max-w-[700px] mx-auto">
@@ -651,7 +658,7 @@ export default function DashboardView({
             className="w-1.5 bg-[var(--gray-200)] hover:bg-[var(--accent)] cursor-col-resize shrink-0 transition-colors flex items-center justify-center"
             onMouseDown={(e) => {
               e.preventDefault();
-              isDragging.current = true;
+              setDragging(true);
             }}
           >
             <div className="w-0.5 h-8 bg-[var(--gray-400)] rounded-full" />
@@ -669,7 +676,7 @@ export default function DashboardView({
               className="w-full h-full border-0 pt-7"
               title="평가할 서비스"
               sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-              style={{ pointerEvents: isDragging.current ? "none" : "auto" }}
+              style={{ pointerEvents: dragging ? "none" : "auto" }}
             />
           </div>
         </div>
