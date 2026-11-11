@@ -1,4 +1,3 @@
-# PR 마다 타입·린트·자체 점검을 돌린다. 배포는 하지 않는다 — 운영 배포는 본 저장소에서만 한다.
 name: CI
 
 on:
@@ -6,18 +5,26 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://selftest:selftest@127.0.0.1:5432/selftest
+      SESSION_SECRET: ci-only-session-secret-not-for-deployment
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npx prisma generate
-      - run: npx tsc --noEmit
-      - run: npm run lint
-      - run: npm run test:session
-      - run: npm run test:query
+      - run: npm run verify
+      - run: npm run build

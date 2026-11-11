@@ -54,7 +54,7 @@ AI 평가단은 이 과정을 하나의 흐름으로 묶습니다. 서비스를 
 ### 평가 의뢰와 정산
 
 - **평가 의뢰·견적서**: 인원과 보상을 입력하면 견적서(PDF)와 의뢰를 한 번에
-- **전자세금계산서**: 입금 확인 후 발행
+- **전자세금계산서**: 공급시기 기준 발행, 입금 여부에 따라 영수·청구 구분
 - **참여 보상 지급**: 원천징수를 반영한 지급과 원장 기반 정산 기록
 
 ### 운영
@@ -112,10 +112,10 @@ scripts/              자체 점검(세션·조회·사용량 한도·표기 규
 
 ## 로컬 실행
 
-필요: Node.js 20 이상, Docker(개발 DB)
+필요: Node.js 24 LTS, Docker(개발 DB)
 
 ```bash
-npm install
+npm ci
 docker compose -f docker-compose.dev.yml up -d      # PostgreSQL 15 (localhost:5433)
 cp .env.example .env
 ```
@@ -138,7 +138,29 @@ DEMO_SEED=1 node --conditions=react-server -r ts-node/register prisma/seedDemoOr
 npm run dev                                          # http://localhost:3000
 ```
 
-테스트 계정·비밀번호는 로그인 화면 오른쪽에 표시.
+테스트 계정·비밀번호는 로그인 화면 오른쪽에 표시. 실제 개인정보·운영 DB·운영 API 키 사용 금지.
+
+Windows PowerShell에서는 `npm.cmd`·`npx.cmd` 사용. 시연 데이터 명령의 `DEMO_SEED=1` 대신 다음과 같이 실행:
+
+```powershell
+$env:DEMO_SEED = "1"
+node --conditions=react-server -r ts-node/register prisma/seedDemoOrder.ts --ensure
+Remove-Item Env:DEMO_SEED
+```
+
+검증 명령:
+
+```bash
+npx prisma generate
+npm run verify
+npm run build
+```
+
+- `verify`: 타입·린트·표기 규칙·세션·조회 권한·사용량·업로드 및 주소 검사
+- `build`: 배포용 번들 및 라우트 생성 확인
+- DB는 `127.0.0.1:5433`에만 개방
+- 민감 첨부 기능 사용 시 로컬 전용 `RRN_SECRET` 설정 필요
+- 검증도구 문항 시드와 국세청 엑셀 원본 양식은 배포 대상에서 제외. 해당 기능은 공개 저장소만으로 전체 재현 불가
 
 ## 작업 방법
 

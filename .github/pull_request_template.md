@@ -12,6 +12,6 @@
 
 ## 확인
 
-- [ ] `npx tsc --noEmit` · `npm run lint` 통과
+- [ ] `npm run verify` · `npm run build` 통과
 - [ ] 로컬에서 해당 화면을 직접 열어 봤다
 - [ ] 인증·권한·돈 계산(`app/api/`, `*actions.ts`, `app/lib/`, `middleware.ts`, `prisma/`)을 건드렸다면 이유를 위에 적었다
