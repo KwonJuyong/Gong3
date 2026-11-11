@@ -32,7 +32,3 @@ next-env.d.ts
 /public/uploads
 private-uploads/
 postgres_data/
-
-# Claude Code 개인 설정
-.claude/settings.local.json
-.claude/worktrees/
