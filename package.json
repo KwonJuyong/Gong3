@@ -19,16 +19,16 @@
     "check:metadata": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-hooks.mjs scripts/query-selftest.mjs"
   },
   "dependencies": {
-    "@prisma/client": "^6.2.1",
+    "@prisma/client": "^6.19.3",
     "@react-pdf/renderer": "^4.5.1",
     "archiver": "^8.0.0",
     "bcrypt": "^6.0.0",
     "fast-xml-parser": "^5.10.1",
     "fflate": "^0.8.3",
     "next": "16.4.2",
-    "openai": "^4.77.0",
+    "openai": "^7.55.0",
     "popbill": "^1.64.2",
-    "prisma": "^6.2.1",
+    "prisma": "^6.19.3",
     "react": "19.2.9",
     "react-dom": "19.2.9",
     "server-only": "^0.0.1",
@@ -51,5 +51,12 @@
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+  },
+  "overrides": {
+    "@prisma/config": {
+      "deepmerge-ts": "^8.0.2"
+    },
+    "minimatch": "^11.0.1",
+    "image-size": "^2.1.0"
   }
 }
