@@ -1,6 +1,5 @@
 "use client";
 
-
 import SubmitButton from "@/app/components/SubmitButton";
 import { useActionState, useMemo, useState } from "react";
 import { confirmSubmit } from "@/app/components/feedback";
@@ -14,10 +13,10 @@ import {
 } from "./actions";
 
 // 모집 단계(RECRUITING) 평가의 신청자 선발 화면.
-// 신청은 정원을 넘어서도 받으므로, 여기서 생성자가 신청자를 보고 고른다.
+// 신청은 정원을 넘어서도 받으므로, 여기서 생성자가 신청자를 보고 고름
 //
-// 필터에 걸러진 행은 언마운트하지 않고 CSS 로 숨긴다. 체크박스는 렌더된 것만 전송되므로
-// 언마운트하면 선택한 사람이 비선발로 처리된다.
+// 필터에 걸러진 행은 언마운트하지 않고 CSS 로 숨김. 체크박스는 렌더된 것만 전송되므로
+// 언마운트하면 선택한 사람이 비선발로 처리됨
 
 type Enrollment = {
   id: string;
@@ -41,7 +40,7 @@ type Project = {
   enrollments: Enrollment[];
 };
 
-// 학번 앞 4자리 = 입학연도. 비관리자에게는 마스킹되지만 앞 4자리는 남는다.
+// 학번 앞 4자리 = 입학연도. 비관리자에게는 마스킹되지만 앞 4자리는 남음
 function admissionYear(studentId: string): string {
   const m = studentId.match(/^(\d{4})/);
   return m ? m[1] : "";
@@ -56,7 +55,7 @@ export default function RecruitPanel({
   onBack: () => void;
   isAdmin: boolean;
 }) {
-  // 진행 중에는 선발 대신 참여자 관리 화면을 보여준다(선발은 모집 중에만 가능).
+  // 진행 중에는 선발 대신 참여자 관리 화면을 보여줌(선발은 모집 중에만 가능).
   if (project.status === "ACTIVE") {
     return <ParticipantManager project={project} onBack={onBack} isAdmin={isAdmin} />;
   }
@@ -72,7 +71,7 @@ function RecruitSelector({
 }) {
   const enrollments = project.enrollments;
 
-  // 이미 선발된 사람이 있으면 그 선택을 이어받고, 없으면 빈 상태에서 시작한다
+  // 이미 선발된 사람이 있으면 그 선택을 이어받고, 없으면 빈 상태에서 시작함
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(enrollments.filter((e) => e.status === "ACCEPTED").map((e) => e.userId))
   );
@@ -110,7 +109,7 @@ function RecruitSelector({
       return next;
     });
 
-  // 전체 선택/해제는 "현재 필터에 걸린 사람"에게만 적용한다
+  // 전체 선택/해제는 "현재 필터에 걸린 사람"에게만 적용함
   const selectAllVisible = () =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -133,10 +132,9 @@ function RecruitSelector({
         &larr; 뒤로
       </button>
 
-      <h2 className="text-xl font-bold text-[var(--foreground)] mb-1">참여자 선발</h2>
+      <h2 className="text-xl font-bold text-[var(--foreground)] mb-1">평가자 선발</h2>
       <p className="text-sm text-[var(--muted)] mb-6">{project.title}</p>
 
-      {/* 요약 */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="rounded-[var(--radius-md)] bg-[var(--surface)] p-4 text-center">
           <p className="text-2xl font-bold text-[var(--foreground)]">{enrollments.length}</p>
@@ -171,9 +169,9 @@ function RecruitSelector({
           action={selectParticipantsAction}
           className="space-y-4"
           onSubmit={(ev) => {
-            // 안쪽 복구 폼의 submit 이벤트가 버블링되므로 이 폼의 제출만 처리한다.
+            // 안쪽 복구 폼의 submit 이벤트가 버블링되므로 이 폼의 제출만 처리함
             if (ev.target !== ev.currentTarget) return;
-            // 누른 버튼에 따라 확인 문구를 고른다. 「평가 시작」은 결과 알림이 바로 나간다.
+            // 누른 버튼에 따라 확인 문구를 고름. 「평가 시작」은 결과 알림이 바로 나감
             const submitter = (ev.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
             const starting = submitter?.name === "start";
             const others = enrollments.length - count;
@@ -191,7 +189,6 @@ function RecruitSelector({
         >
           <input type="hidden" name="projectId" value={project.id} />
 
-          {/* 필터 */}
           <div className="flex flex-wrap gap-2">
             <select
               value={major}
@@ -250,10 +247,9 @@ function RecruitSelector({
             </div>
           </div>
 
-          {/* 취소된 신청 복구. 마감 후에는 학생이 다시 신청할 수 없어 한 건씩 되살린다. */}
+          {/* 취소된 신청 복구. 마감 후에는 학생이 다시 신청할 수 없어 한 건씩 되살림 */}
           <RestoreEnrollment projectId={project.id} />
 
-          {/* 신청자 목록 */}
           <div className="border border-[var(--gray-200)] rounded-[var(--radius-lg)] divide-y divide-[var(--gray-100)] max-h-[420px] overflow-y-auto custom-scrollbar">
             {visible.length === 0 && (
               <p className="text-sm text-[var(--gray-500)] text-center py-8">
@@ -298,7 +294,6 @@ function RecruitSelector({
             })}
           </div>
 
-          {/* 경고 */}
           {overCapacity && (
             <p className="text-xs text-[var(--danger)]">
               정원({project.maxParticipants}명)보다 {count - project.maxParticipants}명 많이 선택했습니다.
@@ -310,7 +305,6 @@ function RecruitSelector({
             </p>
           )}
 
-          {/* 액션 */}
           <div className="flex flex-col sm:flex-row gap-2 pt-2">
             <SubmitButton
               type="submit"
@@ -338,8 +332,7 @@ function RecruitSelector({
   );
 }
 
-
-/** 취소된 신청을 학번으로 되살린다. 복구된 신청은 PENDING 이고 선발 때 정원이 적용된다. */
+/** 취소된 신청을 학번으로 되살림. 복구된 신청은 PENDING 이고 선발 때 정원이 적용됨 */
 function RestoreEnrollment({ projectId }: { projectId: string }) {
   const [state, formAction, pending] = useActionState<RestoreState | null, FormData>(
     restoreEnrollmentAction,
@@ -402,7 +395,7 @@ function RestoreEnrollment({ projectId }: { projectId: string }) {
 }
 
 /**
- * 진행 중(ACTIVE) 평가의 참여자 관리. 제외·추가는 ADMIN 만 할 수 있고 개설자는 명단만 본다.
+ * 진행 중(ACTIVE) 평가의 참여자 관리. 제외·추가는 ADMIN 만 할 수 있고 개설자는 명단만 봄
  */
 function ParticipantManager({
   project,
@@ -427,13 +420,13 @@ function ParticipantManager({
         &larr; 뒤로
       </button>
 
-      <h2 className="text-xl font-bold text-[var(--foreground)] mb-1">참여자 관리</h2>
+      <h2 className="text-xl font-bold text-[var(--foreground)] mb-1">평가자 관리</h2>
       <p className="text-sm text-[var(--muted)] mb-6">{project.title}</p>
 
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="rounded-[var(--radius-md)] bg-[var(--accent-light)] p-4 text-center">
           <p className="text-2xl font-bold text-[var(--accent)]">{accepted.length}</p>
-          <p className="text-xs text-[var(--muted)] mt-0.5">참여자</p>
+          <p className="text-xs text-[var(--muted)] mt-0.5">평가자</p>
         </div>
         <div className="rounded-[var(--radius-md)] bg-[var(--surface)] p-4 text-center">
           <p className="text-2xl font-bold text-[var(--foreground)]">{respondedCount}</p>
@@ -447,7 +440,7 @@ function ParticipantManager({
 
       {!isAdmin && (
         <p className="text-xs text-[var(--muted)] mb-4">
-          참여자 제외·추가는 관리자만 할 수 있습니다. 필요하면 관리자에게 요청해 주세요.
+          평가자 제외·추가는 관리자만 할 수 있습니다. 필요하면 관리자에게 요청해 주세요.
         </p>
       )}
 
@@ -455,7 +448,7 @@ function ParticipantManager({
 
       <div className="border border-[var(--gray-200)] rounded-[var(--radius-lg)] divide-y divide-[var(--gray-100)] max-h-[420px] overflow-y-auto custom-scrollbar">
         {accepted.length === 0 && (
-          <p className="text-sm text-[var(--gray-500)] text-center py-8">참여자가 없습니다.</p>
+          <p className="text-sm text-[var(--gray-500)] text-center py-8">평가자가 없습니다.</p>
         )}
         {accepted.map((e) => (
           <ParticipantRow
@@ -488,7 +481,7 @@ function ParticipantManager({
           </div>
           {isAdmin && (
             <p className="text-xs text-[var(--muted)] mt-1.5">
-              다시 넣으려면 위 「참여자 추가」에 학번을 입력하세요.
+              다시 넣으려면 위 「평가자 추가」에 학번을 입력하세요.
             </p>
           )}
         </div>
@@ -535,7 +528,7 @@ function ParticipantRow({
             미응답
           </span>
         )}
-        {/* 응답한 사람은 보상이 있어 제외할 수 없다. */}
+        {/* 응답한 사람은 보상이 있어 제외할 수 없음 */}
         {isAdmin && !responded && !open && (
           <button
             type="button"
@@ -557,7 +550,7 @@ function ParticipantRow({
               `${enrollment.userName}(${enrollment.userStudentId})님을 이 평가에서 제외합니다.\n\n` +
               `· 즉시 응답할 수 없게 되고, 본인에게 제외 알림이 갑니다${reason ? " (사유 포함)" : ""}.\n` +
               `· 기록은 지워지지 않고 「제외됨」으로 남으며, 관리자 조작 기록에도 남습니다.\n` +
-              `· 되돌리려면 「참여자 추가」로 다시 넣어야 합니다.\n\n` +
+              `· 되돌리려면 「평가자 추가」로 다시 넣어야 합니다.\n\n` +
               `제외할까요?`;
             confirmSubmit(ev, { message: msg, confirmLabel: "제외", danger: true });
           }}
@@ -599,14 +592,14 @@ function AddParticipant({ projectId }: { projectId: string }) {
 
   return (
     <div className="p-3 mb-4 rounded-[var(--radius-md)] bg-[var(--surface)] border border-[var(--gray-200)] space-y-2">
-      <p className="text-xs font-semibold text-[var(--gray-600)]">참여자 추가</p>
+      <p className="text-xs font-semibold text-[var(--gray-600)]">평가자 추가</p>
       <form
         action={formAction}
         className="flex gap-2"
         onSubmit={(ev) => {
           const id = (new FormData(ev.currentTarget).get("loginId") as string)?.trim();
           const msg =
-            `${id} 회원을 이 평가의 참여자로 바로 추가합니다.\n\n` +
+            `${id} 회원을 이 평가의 평가자로 바로 추가합니다.\n\n` +
             `· 선발 절차 없이 즉시 응답할 수 있게 되고, 본인에게 알림이 갑니다.\n` +
             `· 정원이 차 있으면 추가되지 않습니다(먼저 제외가 필요합니다).\n` +
             `· 관리자 조작 기록에 남습니다.\n\n` +

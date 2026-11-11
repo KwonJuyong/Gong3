@@ -5,9 +5,9 @@ import ResetForm from "./ResetForm";
 export const metadata = { title: "비밀번호 재설정" };
 
 /**
- * 메일 링크로 들어오는 비밀번호 재설정 화면(/reset?token=...). 로그인 없이 쓴다.
+ * 메일 링크로 들어오는 비밀번호 재설정 화면(/reset?token=...). 로그인 없이 씀
  * 만료된 링크를 미리 알리려고 화면 진입 때 토큰을 확인하고, 실제 검증은 제출 때
- * consumeResetToken 이 한다.
+ * consumeResetToken 이 함
  */
 export default async function ResetPage({
   searchParams,

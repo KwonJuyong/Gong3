@@ -6,9 +6,9 @@ import { sendMail, siteUrl, esc } from "./mail";
 /**
  * 비밀번호 재설정 토큰 발급·검증·소비(메일 링크 방식).
  *
- * - 원본 토큰은 저장하지 않고 sha256 해시만 남긴다.
- * - 유효기간 30분, 1회용. 사용하면 그 사용자의 남은 토큰도 모두 지운다.
- * - 계정 존재 여부와 무관하게 같은 응답을 준다.
+ * - 원본 토큰은 저장하지 않고 sha256 해시만 남김
+ * - 유효기간 30분, 1회용. 사용하면 그 사용자의 남은 토큰도 모두 지움
+ * - 계정 존재 여부와 무관하게 같은 응답을 줌
  */
 
 const TTL_MS = 30 * 60 * 1000; // 30분
@@ -19,8 +19,8 @@ const hash = (raw: string) => createHash("sha256").update(raw).digest("hex");
  * 재설정 링크 발송.
  *
  * @param identifier 로그인 ID(학번·사번·이메일) 또는 가입 이메일
- * @returns 실제 발송 여부. 계정 존재 여부가 드러나므로 화면에 그대로 보여주지 않는다.
- *   발송 설정이 없을 때만 configError 로 알린다.
+ * @returns 실제 발송 여부. 계정 존재 여부가 드러나므로 화면에 그대로 보여주지 않음
+ *   발송 설정이 없을 때만 configError 로 알림
  */
 export async function requestPasswordReset(
   identifier: string,
@@ -28,18 +28,18 @@ export async function requestPasswordReset(
   const key = identifier.trim();
   if (!key) return { sent: false };
 
-  // 이메일은 대소문자를 무시하고 찾는다. 결과와 무관하게 같은 응답을 주므로 못 찾아도 드러나지 않는다.
+  // 이메일은 대소문자를 무시하고 찾음. 결과와 무관하게 같은 응답을 주므로 못 찾아도 드러나지 않음
   const user = await prisma.user.findFirst({
     where: { OR: [{ studentId: key }, { email: { equals: key, mode: "insensitive" } }] },
     select: { id: true, name: true, email: true, studentId: true },
   });
 
-  // 계정이 없어도 호출부는 같은 메시지를 보여준다.
+  // 계정이 없어도 호출부는 같은 메시지를 보여줌
   if (!user?.email) return { sent: false };
 
   const raw = randomBytes(32).toString("base64url");
 
-  // 새로 요청하면 이전 링크는 무효로 한다.
+  // 새로 요청하면 이전 링크는 무효로 함
   await prisma.$transaction([
     prisma.passwordResetToken.deleteMany({ where: { userId: user.id } }),
     prisma.passwordResetToken.create({
@@ -59,9 +59,9 @@ export async function requestPasswordReset(
   });
 
   if (!r.ok) {
-    // 발송에 실패했으면 토큰도 지운다.
+    // 발송에 실패했으면 토큰도 지움
     await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
-    // 설정 문제(키·발신 도메인)는 사용자에게 알린다.
+    // 설정 문제(키·발신 도메인)는 사용자에게 알림
     return { sent: false, configError: r.error };
   }
   return { sent: true };
@@ -71,7 +71,7 @@ export type ResetCheck =
   | { ok: true; userId: string }
   | { ok: false; reason: "invalid" | "expired" | "used" };
 
-/** 링크의 토큰이 아직 유효한지. 화면 진입 시와 제출 시 모두 부른다. */
+/** 링크의 토큰이 아직 유효한지. 화면 진입 시와 제출 시 모두 부름 */
 export async function checkResetToken(raw: string): Promise<ResetCheck> {
   const token = (raw || "").trim();
   if (!token) return { ok: false, reason: "invalid" };
@@ -87,25 +87,34 @@ export async function checkResetToken(raw: string): Promise<ResetCheck> {
   return { ok: true, userId: row.userId };
 }
 
-/** 토큰을 소비하고 비밀번호를 바꾼다. 기존 로그인 세션도 모두 끊는다. */
+/** 토큰을 소비하고 비밀번호를 바꿈. 기존 로그인 세션도 모두 끊음 */
 export async function consumeResetToken(raw: string, passwordHash: string): Promise<ResetCheck> {
   const check = await checkResetToken(raw);
   if (!check.ok) return check;
 
-  await prisma.$transaction([
-    prisma.user.update({
+  const tokenHash = hash(raw.trim());
+  const consumed = await prisma.$transaction(async (tx) => {
+    // 조건부로 사용 처리해 같은 링크의 동시 제출 중 하나만 통과시킴
+    // 행은 지우지 않고 usedAt 을 남겨 다시 열었을 때 「이미 사용된 링크」로 안내함
+    const swap = await tx.passwordResetToken.updateMany({
+      where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
+    });
+    if (swap.count !== 1) return false;
+    await tx.user.update({
       where: { id: check.userId },
       data: {
         password: passwordHash,
-        // 세션 세대를 올려 기존 세션을 모두 무효화한다.
+        // 세션 세대를 올려 기존 세션을 모두 무효화함
         sessionEpoch: { increment: 1 },
       },
-    }),
-    // 사용한 토큰뿐 아니라 그 사용자의 토큰을 모두 지운다.
-    prisma.passwordResetToken.deleteMany({ where: { userId: check.userId } }),
-  ]);
+    });
+    // 같은 사용자의 다른 미사용 링크는 지움
+    await tx.passwordResetToken.deleteMany({ where: { userId: check.userId, usedAt: null } });
+    return true;
+  });
 
-  return check;
+  return consumed ? check : { ok: false, reason: "used" };
 }
 
 function resetEmailHtml(name: string, loginId: string, link: string): string {

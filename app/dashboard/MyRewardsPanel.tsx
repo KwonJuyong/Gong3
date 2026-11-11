@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { won } from "../lib/money";
 
 /**
  * 대시보드의 "내 보상" 패널(서버 컴포넌트).
  *
- * 보상이 생기기 전에 계좌를 미리 입력할 수 있도록 항상 보여준다.
- * 입력은 프로필의 정산 정보 탭에서 하고, 여기서는 요약과 계좌 미등록 경고만 보여준다.
- * summary 가 null 이면 아직 보상이 없는 상태다.
+ * 보상이 생기기 전에 계좌를 미리 입력할 수 있도록 항상 보여줌
+ * 입력은 프로필의 정산 정보 탭에서 하고, 여기서는 요약과 계좌 미등록 경고만 보여줌
+ * summary 가 null 이면 아직 보상이 없는 상태임
  */
 
 export interface RewardBucket {
@@ -28,7 +29,7 @@ export interface MyRewardSummary {
 export interface ProfileProps {
   bankName: string;
   accountNumber: string;
-  /** 예금주. 비어 있으면 본인 이름으로 이체한다. */
+  /** 예금주. 비어 있으면 본인 이름으로 이체함 */
   holderName: string;
   hasRrn: boolean;
   payoutReady: boolean;
@@ -36,34 +37,14 @@ export interface ProfileProps {
   byAdmin: boolean;
 }
 
-const won = (n: number) => "₩" + n.toLocaleString("ko-KR");
 
 const SETTLEMENT_HREF = "/dashboard/profile?tab=settlement";
-
-const Icon = ({ d }: { d: string }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="w-3.5 h-3.5 shrink-0"
-    aria-hidden="true"
-  >
-    <path d={d} />
-  </svg>
-);
-
-const I_EDIT =
-  "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z";
-const I_CARD = "M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7ZM2 10h20M6 15h4";
 
 export default function MyRewardsPanel({
   summary,
   profile,
 }: {
-  /** null 이면 아직 보상이 없고 계좌 안내만 보인다. */
+  /** null 이면 아직 보상이 없고 계좌 안내만 보임 */
   summary: MyRewardSummary | null;
   profile: ProfileProps;
 }) {
@@ -71,7 +52,7 @@ export default function MyRewardsPanel({
     ? summary.reviewing.count + summary.upcoming.count + summary.paid.count
     : 0;
 
-  // 세금·영수증 안내는 접어 두고, 계좌 상태는 항상 보인다.
+  // 세금·영수증 안내는 접어 두고, 계좌 상태는 항상 보임
   return (
     <section className="bg-white rounded-[var(--radius-xl)] p-5">
       <div className="flex items-baseline justify-between mb-2">
@@ -90,7 +71,6 @@ export default function MyRewardsPanel({
         <p className="text-sm text-[var(--muted)]">보상이 있는 평가에 참여하면 여기에 쌓여요.</p>
       )}
 
-      {/* 계좌 상태 */}
       <div className="mt-3 pt-3 border-t border-[var(--gray-100)]">
         {!profile.payoutReady ? (
           <Link
@@ -130,14 +110,14 @@ export default function MyRewardsPanel({
           <summary className="text-[13px] text-[var(--gray-600)] cursor-pointer">세금·영수증 안내</summary>
           <div className="text-[13px] text-[var(--muted)] mt-2 space-y-1.5 leading-relaxed">
             {summary.taxTotal > 0 && <p>원천징수 누계 {won(summary.taxTotal)} — 받은 금액은 세금을 뺀 금액입니다.</p>}
-            {/* 원천징수영수증은 지급명세서 제출 후 학생이 홈택스에서 직접 출력한다. */}
+            {/* 원천징수영수증은 지급명세서 제출 후 학생이 홈택스에서 직접 출력함 */}
             {summary.paid.count > 0 && (
               <p>
                 원천징수영수증은{" "}
                 <a href="https://www.hometax.go.kr" target="_blank" rel="noopener noreferrer" className="underline">
                   홈택스
                 </a>
-                에서 발급합니다 — 나의 홈택스 &gt; 소득·연말정산 &gt; 지급명세서·원천징수영수증 내역.
+                에서 발급합니다. 나의 홈택스 &gt; 소득·연말정산 &gt; 지급명세서·원천징수영수증 내역.
               </p>
             )}
           </div>
@@ -162,7 +142,7 @@ function Row({ label, value, tone }: { label: string; value: string; tone: keyof
   );
 }
 
-/** 계좌번호 뒤 4자리만 보여준다 */
+/** 계좌번호 뒤 4자리만 보여줌 */
 function maskAccount(v: string): string {
   const s = (v || "").replace(/[^0-9]/g, "");
   if (s.length <= 4) return s;

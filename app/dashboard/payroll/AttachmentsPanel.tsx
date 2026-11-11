@@ -5,8 +5,8 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 /**
- * 신분증·통장사본 첨부(노무비 서류용). 평가 보상에는 필요 없어 노무비 화면에만 둔다.
- * 파일은 public/ 밖에 저장되고 /api/attachments/[id] 로만 열린다.
+ * 신분증·통장사본 첨부(노무비 서류용). 평가 보상에는 필요 없어 노무비 화면에만 둠
+ * 파일은 public/ 밖에 저장되고 /api/attachments/[id] 로만 열림
  */
 
 export interface AttachmentView {
@@ -34,7 +34,14 @@ function fmtSize(n: number): string {
   return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)}MB` : `${Math.ceil(n / 1024)}KB`;
 }
 
-export default function AttachmentsPanel({ initial }: { initial: AttachmentView[] }) {
+/** `ownerId` 를 주면 관리자 대리 업로드(서버가 ADMIN 만 허용, 감사 로그 기록). */
+export default function AttachmentsPanel({
+  initial,
+  ownerId,
+}: {
+  initial: AttachmentView[];
+  ownerId?: string;
+}) {
   const router = useRouter();
   const [items, setItems] = useState<AttachmentView[]>(initial);
   const [busy, setBusy] = useState<string | null>(null);
@@ -48,13 +55,14 @@ export default function AttachmentsPanel({ initial }: { initial: AttachmentView[
       const fd = new FormData();
       fd.append("file", file);
       fd.append("kind", kind);
+      if (ownerId) fd.append("ownerId", ownerId);
       const res = await fetch("/api/attachments", { method: "POST", body: fd });
       const json = await res.json();
       if (!res.ok) {
         setError(json.error ?? "업로드에 실패했습니다.");
         return;
       }
-      // 같은 종류는 한 벌만 두고 교체한다.
+      // 같은 종류는 한 벌만 두고 교체함
       setItems((prev) => [...prev.filter((a) => a.kind !== kind), json.attachment]);
       router.refresh();
     } catch {
@@ -87,7 +95,8 @@ export default function AttachmentsPanel({ initial }: { initial: AttachmentView[
     <section className="bg-white rounded-[var(--radius-xl)] p-5">
       <h3 className="text-sm font-semibold text-[var(--foreground)]">서류 첨부</h3>
       <p className="text-xs text-[var(--muted)] mt-1 leading-relaxed">
-        노무비 청구에 함께 제출하는 서류입니다. 이미지(PNG·JPG·WebP) 또는 PDF, 10MB 이하.
+        {ownerId ? "학생 대신 올리는 서류입니다." : "노무비 청구에 함께 제출하는 서류입니다."}{" "}
+        이미지(PNG·JPG·WebP) 또는 PDF, 10MB 이하.
       </p>
 
       <div className="mt-4 space-y-2">
@@ -163,6 +172,7 @@ export default function AttachmentsPanel({ initial }: { initial: AttachmentView[
 
       <p className="text-xs text-[var(--gray-500)] mt-3 leading-relaxed">
         본인과 관리자만 열람할 수 있습니다. 링크만으로는 열리지 않습니다.
+        {ownerId && " 대신 올리거나 삭제한 기록은 감사 로그에 남습니다."}
         <br />
         같은 종류를 다시 올리면 이전 파일은 <strong>교체·삭제</strong>됩니다.
       </p>

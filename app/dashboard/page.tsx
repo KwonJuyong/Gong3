@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { prisma } from "../db";
 import { maskStudentId } from "../lib/privacy";
-import DashboardView, { type LinkableOrder } from "./DashboardView";
+import DashboardView, { type DashboardProject, type LinkableOrder } from "./DashboardView";
 import MyRewardsPanel, { type MyRewardSummary } from "./MyRewardsPanel";
 import { getSettlementProfile } from "../lib/settlementProfile";
 import { visibleProjectWhere, capacityOf, rewardPerPersonOf, isPayerUs } from "../lib/approvals";
@@ -12,24 +13,35 @@ export const metadata = { title: "대시보드" };
 
 /**
  * 대시보드 첫 화면. 맨 위에 「지금 할 일」(응답할 평가, 선발 대기, 운영할 평가)을 두고
- * 평가 일정은 그 아래에 보여준다.
+ * 평가 일정은 그 아래에 보여줌
  */
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; p?: string }>;
 }) {
-  // 「지금 할 일」과 좌측 목록은 목록·상세 화면에서만 보인다.
-  const { view } = await searchParams;
+  // 「지금 할 일」과 좌측 목록은 목록·상세 화면에서만 보임
+  const { view, p: selectedId } = await searchParams;
+  // 저장해 둔 옛 주소
+  if (view === "create-choose") redirect("/dashboard/services");
   const focus = !!view && view !== "list" && view !== "detail";
   const userId = await getSessionUserId();
   if (!userId) redirectToLogin();
 
   const userRaw = await prisma.user.findUnique({
     where: { id: userId },
-    include: {
+    select: {
+      id: true,
+      studentId: true,
+      name: true,
+      role: true,
+      userType: true,
+      major: true,
+      phone: true,
+      email: true,
+      profileImage: true,
       responses: {
-        include: { project: { select: { id: true, title: true, status: true, startTime: true } } },
+        select: { project: { select: { id: true, title: true, status: true, startTime: true } } },
         orderBy: { createdAt: "desc" },
       },
     },
@@ -68,40 +80,68 @@ export default async function DashboardPage({
   // 비관리자에게는 다른 사용자 학번을 앞 4자리까지만 노출
   const isAdmin = safeUser.role === "ADMIN";
 
-  // 문항·신청자 명단까지 클라이언트로 나가므로 공개되지 않은 평가는 서버 쿼리에서 거른다.
-  // 개설자는 자기 평가를 승인 전에도 볼 수 있다.
-  const projectsRaw = await prisma.project.findMany({
-    where: isAdmin ? {} : { OR: [visibleProjectWhere, { creatorId: safeUser.id }] },
+  // 공개되지 않은 평가는 서버 쿼리에서 거름. 개설자는 자기 평가를 승인 전에도 볼 수 있음
+  const projectWhere = isAdmin ? {} : { OR: [visibleProjectWhere, { creatorId: safeUser.id }] };
+  const responseInclude = {
+    include: { user: { select: { id: true, name: true, studentId: true } } },
+    orderBy: { createdAt: "asc" as const },
+  };
+  const enrollmentInclude = {
     include: {
-      responses: {
-        include: { user: { select: { id: true, name: true, studentId: true } } },
-        orderBy: { createdAt: "asc" },
-      },
-      creator: {
-        select: { id: true, name: true, studentId: true, major: true, userType: true, role: true },
-      },
-      // 발주가 있으면 정원·보상 단가는 발주 값을 쓴다(capacityOf 와 같은 기준).
-      order: { select: { panelSize: true, rewardPerPerson: true } },
-      enrollments: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              studentId: true,
-              major: true,
-              // 과거 참여 횟수(선발 참고용)
-              _count: { select: { responses: true } },
-            },
-          },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          studentId: true,
+          major: true,
+          // 과거 참여 횟수(선발 참고용)
+          _count: { select: { responses: true } },
         },
-        orderBy: { createdAt: "asc" },
       },
     },
-    orderBy: { startTime: "desc" },
-  });
+    orderBy: { createdAt: "asc" as const },
+  };
 
-  const safeProjects = projectsRaw.map((p) => ({
+  // 목록에는 요약과 본인 행만 실음. 문항·명단·응답 내용은 연 평가 1건만 아래에서 읽음
+  const [projectsRaw, acceptedRows, opened] = await Promise.all([
+    prisma.project.findMany({
+      where: projectWhere,
+      omit: { questions: true },
+      include: {
+        responses: { ...responseInclude, where: { userId: safeUser.id } },
+        enrollments: { ...enrollmentInclude, where: { userId: safeUser.id } },
+        creator: {
+          select: { id: true, name: true, studentId: true, major: true, userType: true, role: true },
+        },
+        // 발주가 있으면 정원·보상 단가는 발주 값을 씀(capacityOf 와 같은 기준).
+        order: { select: { panelSize: true, rewardPerPerson: true } },
+        _count: { select: { responses: true, enrollments: true } },
+      },
+      orderBy: { startTime: "desc" },
+    }),
+    prisma.enrollment.groupBy({ by: ["projectId"], where: { status: "ACCEPTED" }, _count: { _all: true } }),
+    selectedId
+      ? prisma.project.findFirst({
+          where: { id: selectedId, ...projectWhere },
+          select: {
+            id: true,
+            creatorId: true,
+            questions: true,
+            responses: responseInclude,
+            enrollments: enrollmentInclude,
+          },
+        })
+      : null,
+  ]);
+  const acceptedBy = new Map(acceptedRows.map((r) => [r.projectId, r._count._all]));
+
+  const safeProjects = projectsRaw.map((p): DashboardProject => {
+    // 다른 학생의 응답·신청 명단은 개설자와 ADMIN 에게만 보냄. 나머지는 본인 것과 인원 수만.
+    const isOpened = opened?.id === p.id;
+    const full = isOpened && (isAdmin || p.creatorId === safeUser.id);
+    const responses = full ? opened.responses : p.responses;
+    const enrollments = full ? opened.enrollments : p.enrollments;
+    return {
     id: p.id,
     title: p.title,
     description: p.description,
@@ -109,30 +149,31 @@ export default async function DashboardPage({
     status: p.status,
     startTime: p.startTime.toISOString(),
     endTime: p.endTime?.toISOString() || null,
-    questions: p.questions,
+    questions: (isOpened ? opened.questions : []) as unknown as DashboardProject["questions"],
     link: p.link,
     creatorId: p.creatorId,
     creatorName: p.creator?.name || null,
     creatorMajor: p.creator?.major || null,
     creatorUserType: p.creator?.userType || null,
-    creatorStudentId: p.creator?.studentId || null,
     minParticipants: p.minParticipants,
     maxParticipants: p.maxParticipants,
     capacity: capacityOf(p),
-    // 보상액은 플랫폼이 지급하는 건에만 표시한다(surveys/page.tsx 와 같은 규칙).
+    // 보상액은 플랫폼이 지급하는 건에만 표시함(surveys/page.tsx 와 같은 규칙).
     rewardPerPerson: isPayerUs(p.fundingType) ? rewardPerPersonOf(p) : 0,
-    // 반려 건은 개설자·관리자에게만 내려온다(where).
+    // 반려 건은 개설자·관리자에게만 내려옴(where).
     rejectReason: p.status === "REJECTED" ? p.rejectReason : null,
     enrollmentDeadline: p.enrollmentDeadline?.toISOString() || null,
-    responseCount: p.responses.length,
-    responses: p.responses.map((r) => ({
+    responseCount: p._count.responses,
+    enrollmentCount: p._count.enrollments,
+    acceptedCount: acceptedBy.get(p.id) ?? 0,
+    responses: responses.map((r) => ({
       id: r.id,
       userId: r.userId,
       userName: r.user?.name || null,
       userStudentId: maskStudentId(r.user?.studentId, isAdmin),
-      answers: r.answers,
+      answers: r.answers as DashboardProject["responses"][number]["answers"],
     })),
-    enrollments: p.enrollments.map((e) => ({
+    enrollments: enrollments.map((e) => ({
       id: e.id,
       userId: e.userId,
       userName: e.user.name,
@@ -142,10 +183,11 @@ export default async function DashboardPage({
       status: e.status,
       createdAt: e.createdAt.toISOString(),
     })),
-  }));
+    };
+  });
 
-  // 내 보상. 유료 평가에 응답하면 Reward 가 생긴다.
-  // 계좌를 미리 입력할 수 있도록 보상이 없어도 패널은 보여준다.
+  // 내 보상. 유료 평가에 응답하면 Reward 가 생김
+  // 계좌를 미리 입력할 수 있도록 보상이 없어도 패널은 보여줌
   const myRewards = await prisma.reward.findMany({
     where: { userId: safeUser.id },
     select: { status: true, grossAmount: true, netAmount: true, taxAmount: true },
@@ -156,13 +198,13 @@ export default async function DashboardPage({
     return { count: rows.length, amount: rows.reduce((s, r) => s + amount(r), 0) };
   };
 
-  // 보상이 없으면 요약은 null 이다.
+  // 보상이 없으면 요약은 null 임
   const myRewardSummary: MyRewardSummary | null =
     myRewards.length === 0
       ? null
       : {
           reviewing: bucket((s) => s === "PENDING", (r) => r.grossAmount),
-          // FAILED(이체 실패)도 아직 받을 돈이라 지급 예정에 함께 넣는다.
+          // FAILED(이체 실패)도 아직 받을 돈이라 지급 예정에 함께 넣음
           upcoming: bucket((s) => s === "APPROVED" || s === "FAILED", (r) => r.netAmount),
           paid: bucket((s) => s === "PAID", (r) => r.netAmount),
           rejected: myRewards.filter((r) => r.status === "REJECTED").length,
@@ -172,7 +214,7 @@ export default async function DashboardPage({
         };
 
   const myProfile = await getSettlementProfile(safeUser.id);
-  // 문의 전화번호는 코드에 두지 않고 조직 설정(연락처)에서 읽는다.
+  // 문의 전화번호는 코드에 두지 않고 조직 설정(연락처)에서 읽음
   const { contact } = await getQuoteSupplier();
 
   // DEVELOPER/ADMIN: 자동 생성용 확정 설문 서비스 목록
@@ -239,7 +281,7 @@ export default async function DashboardPage({
   const mine = safeProjects.filter((p) => isAdmin || p.creatorId === safeUser.id);
   const myPending = mine.filter((p) => p.status === "PENDING_APPROVAL" && (!isAdmin || p.creatorId === safeUser.id));
   const myRejected = mine.filter((p) => p.status === "REJECTED" && p.creatorId === safeUser.id);
-  const toSelect = mine.filter((p) => p.status === "RECRUITING" && p.enrollments.length > 0);
+  const toSelect = mine.filter((p) => p.status === "RECRUITING" && p.enrollmentCount > 0);
   const upcomingReward = (myRewardSummary?.upcoming.amount ?? 0) + (myRewardSummary?.reviewing.amount ?? 0);
 
   type Task = { key: string; tone: "primary" | "warn" | "info" | "danger"; title: string; desc: string; href: string; cta: string };
@@ -264,7 +306,7 @@ export default async function DashboardPage({
       key: `s-${p.id}`,
       tone: "warn" as const,
       title: p.title,
-      desc: `신청 ${p.enrollments.length}명 · 정원 ${p.capacity}명`,
+      desc: `신청 ${p.enrollmentCount}명 · 정원 ${p.capacity}명`,
       href: `/dashboard?view=recruit&p=${p.id}`,
       cta: "선발하기",
     })),
@@ -287,7 +329,7 @@ export default async function DashboardPage({
   ];
   const TASK_PREVIEW = 4;
 
-  // 오른쪽에는 모집 중인 평가만 둔다(진행 중·종료는 일정 목록에 있다).
+  // 오른쪽에는 모집 중인 평가만 둠(진행 중·종료는 일정 목록에 있음).
   const recruitingProjects = safeProjects.filter((p) => p.status === "RECRUITING");
   const RECRUIT_PREVIEW = 5;
   const myChip = (p: (typeof safeProjects)[number]): string | null => {
@@ -302,7 +344,7 @@ export default async function DashboardPage({
       p.enrollmentDeadline
         ? `${new Date(p.enrollmentDeadline).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", timeZone: "Asia/Seoul" })} 마감`
         : null,
-      `${p.enrollments.length}/${p.capacity}명 신청`,
+      `${p.enrollmentCount}/${p.capacity}명 신청`,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -314,7 +356,6 @@ export default async function DashboardPage({
 
   return (
     <div className="bg-[var(--surface)] flex flex-col min-h-full">
-      {/* 상단 띠: 내 숫자 요약 */}
       {!focus && (
         <section className="relative overflow-hidden bg-[var(--accent)] text-white">
           <svg className="absolute inset-0 w-full h-full opacity-[0.07]" aria-hidden="true">
@@ -335,13 +376,15 @@ export default async function DashboardPage({
             <dl className="flex items-center gap-5 sm:gap-7">
               {[
                 { label: "응답 대기", value: `${toRespond.length}건` },
-                { label: "참여한 평가", value: `${participatedProjects.length}건` },
+                { label: "참여한 평가", value: `${participatedProjects.length}건`, href: "/dashboard/surveys#participated" },
                 { label: "받을 보상", value: `${upcomingReward.toLocaleString("ko-KR")}원` },
               ].map((st, i) => (
-                // 숫자를 위에 크게 보이되 마크업은 dt → dd 순서를 지킨다(flex-col-reverse)
+                // 숫자를 위에 크게 보이되 마크업은 dt → dd 순서를 지킴(flex-col-reverse)
                 <div key={st.label} className={`flex flex-col-reverse ${i > 0 ? "pl-5 sm:pl-7 border-l border-white/15" : ""}`}>
                   <dt className="text-[13px] text-white/70 mt-0.5">{st.label}</dt>
-                  <dd className="text-xl sm:text-2xl font-bold tabular-nums">{st.value}</dd>
+                  <dd className="text-xl sm:text-2xl font-bold tabular-nums">
+                    {st.href ? <Link href={st.href} className="hover:underline underline-offset-4">{st.value}</Link> : st.value}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -402,7 +445,7 @@ export default async function DashboardPage({
 
           {!focus && (
             <aside className="space-y-4">
-              {/* 계좌 미등록을 알 수 있도록 항상 보여준다 */}
+              {/* 계좌 미등록을 알 수 있도록 항상 보여줌 */}
               <MyRewardsPanel
                 summary={myRewardSummary}
                 profile={{
@@ -470,7 +513,7 @@ export default async function DashboardPage({
   );
 }
 
-/** 할 일 한 줄. 응답처럼 바로 할 일만 강조 버튼을 쓴다. */
+/** 할 일 한 줄. 응답처럼 바로 할 일만 강조 버튼을 씀 */
 function TaskRow({ t }: { t: { title: string; desc: string; href: string; cta: string; tone: string } }) {
   const descTone = t.tone === "danger" ? "text-[var(--danger)]" : "text-[var(--muted)]";
   return (

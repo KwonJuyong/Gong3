@@ -1,15 +1,15 @@
 /**
  * 스테이징 시연용 마켓플레이스 데이터: 기업 계정·사업자정보·서비스와 완결된 발주 1건
- * (학생 응답·보상·지급·원장). deploy-staging.sh 가 --ensure 로 매 배포마다 부른다.
+ * (학생 응답·보상·지급·원장). deploy-staging.sh 가 --ensure 로 매 배포마다 부름
  *
  *   docker exec -e DEMO_SEED=1 ai-eval-staging-app \
  *     node --conditions=react-server -r ts-node/register prisma/seedDemoOrder.ts [--ensure|--clean]
  *
- * - app/lib/ledger.ts 가 server-only 를 import 하므로 --conditions=react-server 가 필요하다.
- * - 인자 없이 부르면 기존 시연 데이터를 지우고 새로 만든다. --ensure 는 있으면 건너뛴다.
- * - 원장에 가짜 수납·지급을 쌓으므로 운영 DB 에서 돌리지 않는다(DEMO_SEED=1 필수).
- *   --clean 은 이 스크립트가 만든 demo- 행만 지운다.
- * - 계좌번호는 명백한 가짜 값이고 주민등록번호는 넣지 않는다.
+ * - app/lib/ledger.ts 가 server-only 를 import 하므로 --conditions=react-server 가 필요함
+ * - 인자 없이 부르면 기존 시연 데이터를 지우고 새로 만듦. --ensure 는 있으면 건너뜀
+ * - 원장에 가짜 수납·지급을 쌓으므로 운영 DB 에서 돌리지 않음(DEMO_SEED=1 필수).
+ *   --clean 은 이 스크립트가 만든 demo- 행만 지움
+ * - 계좌번호는 명백한 가짜 값이고 주민등록번호는 넣지 않음
  */
 
 import { PrismaClient, Prisma, type User, type Response } from "@prisma/client";
@@ -26,7 +26,7 @@ import {
 
 const prisma = new PrismaClient();
 
-// 계정·비밀번호는 app/lib/stagingAccounts.ts 에서 가져온다(로그인 화면 안내와 같은 값).
+// 계정·비밀번호는 app/lib/stagingAccounts.ts 에서 가져옴(로그인 화면 안내와 같은 값).
 const PW = DEMO_PASSWORD;
 /** 체크섬을 통과하는 가짜 사업자번호 */
 const DEMO_BIZ_NO = "1234567891";
@@ -53,7 +53,7 @@ function guard() {
 }
 
 async function clean() {
-  console.log("🧹 시연 데이터 삭제...");
+  console.log("시연 데이터 삭제...");
 
   const order = await prisma.order.findUnique({
     where: { orderNo: DEMO_ORDER_NO },
@@ -61,7 +61,7 @@ async function clean() {
   });
 
   if (order) {
-    // 원장 → 지급 → 보상 → 결제 → 발주 순. FK 역순이다.
+    // 원장 → 지급 → 보상 → 결제 → 발주 순. FK 역순임
     await prisma.ledgerEntry.deleteMany({ where: { orderId: order.id } });
     await prisma.payout.deleteMany({
       where: { rewardId: { in: order.rewards.map((r) => r.id) } },
@@ -94,16 +94,15 @@ async function clean() {
 
 async function seed() {
   if (!isValidBizNo(DEMO_BIZ_NO)) {
-    // 상수를 손으로 고쳤을 때 조용히 통과하지 않도록 여기서 끊는다.
+    // 상수를 손으로 고쳤을 때 조용히 통과하지 않도록 여기서 끊음
     throw new Error(`DEMO_BIZ_NO(${DEMO_BIZ_NO}) 가 체크섬을 통과하지 못한다.`);
   }
 
-  console.log("🌱 시연 데이터 생성...");
+  console.log("시연 데이터 생성...");
   const hash = await bcrypt.hash(PW, 10);
   const now = new Date();
 
-  /* ── 1. 기업(발주자) ─────────────────────────────────────── */
-  // 로그인 ID 가 이메일이므로 studentId 에 이메일을 넣고 emailVerifiedAt 을 채운다.
+  // 로그인 ID 가 이메일이므로 studentId 에 이메일을 넣고 emailVerifiedAt 을 채움
   const buyer = await prisma.user.upsert({
     where: { studentId: BUYER_EMAIL },
     update: {},
@@ -130,12 +129,11 @@ async function seed() {
       bizAddr: "강원특별자치도 춘천시 한림대학길 1",
       bizEmail: BUYER_EMAIL,
       attestedAt: now,
-      // 팝빌을 부르지 않으므로 확인하지 않은 상태(null)로 둔다.
+      // 팝빌을 부르지 않으므로 확인하지 않은 상태(null)로 둠
       bizState: null,
     },
   });
 
-  /* ── 2. 평가단 학생 ──────────────────────────────────────── */
   const students: User[] = [];
   for (let i = 0; i < STUDENT_EMAILS.length; i++) {
     const email = STUDENT_EMAILS[i];
@@ -163,13 +161,12 @@ async function seed() {
         accountNumber: `000-00-${String(100000 + i)}`,
         holderName: `시연평가자${i + 1}`,
         consentAt: now,
-        // rrnEnc 는 비워둔다. 시연에 불필요하고, 넣으면 이 파일이 민감정보가 된다.
+        // rrnEnc 는 비워둠. 시연에 불필요하고, 넣으면 이 파일이 민감정보가 됨
       },
     });
     students.push(u);
   }
 
-  /* ── 3. 서비스 · 평가(Project) ───────────────────────────── */
   const service = await prisma.service.create({
     data: {
       name: "[시연] 개인화 학습 챗봇",
@@ -195,7 +192,7 @@ async function seed() {
       maxParticipants: PANEL_SIZE,
       approvedAt: new Date(now.getTime() - 8 * 864e5),
       questions: [
-        // 문항 문구 필드는 label 이다(app/lib/projectQuestions.ts).
+        // 문항 문구 필드는 label 임(app/lib/projectQuestions.ts).
         { type: "likert5", label: "챗봇의 답변이 이해하기 쉬웠다." },
         { type: "likert5", label: "원하는 정보를 빠르게 찾을 수 있었다." },
         { type: "text", label: "개선이 필요하다고 느낀 점을 자유롭게 적어주세요." },
@@ -222,9 +219,8 @@ async function seed() {
     responses.push(r);
   }
 
-  /* ── 4. 발주 · 수납 ─────────────────────────────────────── */
   const subtotal = PANEL_SIZE * REWARD_PER_PERSON;
-  // 수수료율은 8.8% 로 둔다(코드 기본값은 20%).
+  // 수수료율은 8.8% 로 둠(코드 기본값은 20%).
   const amounts = computeAmountsFromSubtotal(subtotal, 880);
 
   const order = await prisma.order.create({
@@ -265,8 +261,7 @@ async function seed() {
     },
   });
 
-  /* ── 5. 보상 · 지급 · 원장 ──────────────────────────────── */
-  // 원장 기록은 상태 변경과 같은 트랜잭션에서 한다.
+  // 원장 기록은 상태 변경과 같은 트랜잭션에서 함
   await prisma.$transaction(async (tx) => {
     await ledger.record(tx, {
       kind: "PAYMENT_IN",
@@ -298,7 +293,7 @@ async function seed() {
           taxAmount: wh.taxAmount,
           taxExempt: wh.exempt,
           netAmount: wh.netAmount,
-          // 정산 화면에서 승인을 시연할 수 있도록 마지막 두 명은 검수 대기로 둔다.
+          // 정산 화면에서 승인을 시연할 수 있도록 마지막 두 명은 검수 대기로 둠
           status: i < 4 ? "PAID" : "PENDING",
           reviewedAt: i < 4 ? now : null,
         },
@@ -348,9 +343,9 @@ async function main() {
   }
 
   /**
-   * --ensure: 시연 계정이 없을 때만 만든다(deploy-staging.sh 가 쓰는 모드).
+   * --ensure: 시연 계정이 없을 때만 만듦(deploy-staging.sh 가 쓰는 모드).
    * 기본 모드는 지우고 다시 만들므로 준비해 둔 상태가 사라지고, 다른 평가가 시연 학생을
-   * 참조하면 FK 때문에 실패한다.
+   * 참조하면 FK 때문에 실패함
    */
   if (process.argv.includes("--ensure")) {
     const exists = await prisma.user.findUnique({
@@ -358,7 +353,7 @@ async function main() {
       select: { id: true },
     });
     if (exists) {
-      // 이전 형식(text)으로 저장된 시연 평가 문항만 label 로 고친다.
+      // 이전 형식(text)으로 저장된 시연 평가 문항만 label 로 고침
       const demo = await prisma.project.findMany({ where: { title: { startsWith: "[시연]" } }, select: { id: true, questions: true } });
       for (const p of demo) {
         const qs = (p.questions as unknown as Record<string, unknown>[]) || [];
@@ -372,7 +367,7 @@ async function main() {
     }
   }
 
-  await clean(); // 재실행 안전: 이전 시연 데이터를 먼저 걷어낸다
+  await clean(); // 재실행 안전: 이전 시연 데이터를 먼저 걷어냄
   await seed();
 }
 

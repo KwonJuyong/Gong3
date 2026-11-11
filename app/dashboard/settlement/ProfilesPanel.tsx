@@ -1,13 +1,12 @@
 "use client";
 
-
 import SubmitButton from "@/app/components/SubmitButton";
 import { Fragment, useMemo, useState } from "react";
 import { saveSettlementProfileForUserAction } from "../settlementProfileActions";
 
 /**
- * [ADMIN] 평가단 정산 정보 현황. 계좌가 없어 지급에서 빠질 사람을 확인하고 입력을 요청한다.
- * 대리입력도 가능하지만 예외용이다.
+ * 평가단 정산 정보 현황. 계좌가 없어 지급에서 빠질 사람을 확인하고 입력을 요청함
+ * 대리입력도 가능하지만 예외용임
  */
 
 export interface ProfileRow {
@@ -16,7 +15,7 @@ export interface ProfileRow {
   studentId: string;
   bankName: string;
   accountNumber: string;
-  /** 예금주. 비면 본인 이름으로 이체한다. */
+  /** 예금주. 비면 본인 이름으로 이체함 */
   holderName: string;
   address: string;
   hasRrn: boolean;
@@ -119,14 +118,13 @@ export default function ProfilesPanel({ rows }: { rows: ProfileRow[] }) {
       <div className="px-5 py-4 border-b border-[var(--gray-100)]">
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">평가단 정산정보</h3>
+            <h3 className="text-sm font-semibold text-[var(--foreground)]">평가자 정산 정보</h3>
             <p className="text-xs text-[var(--muted)] mt-0.5">
               계좌가 없으면 지급 생성에서 제외됩니다. 주민번호는 지급명세서용이라 이체는 됩니다.
             </p>
           </div>
         </div>
 
-        {/* 상태 요약 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
           <Stat label="대상 인원" value={`${stat.total}명`} sub={`보상 발생 ${stat.withRewards}명`} />
           <Stat
@@ -149,7 +147,6 @@ export default function ProfilesPanel({ rows }: { rows: ProfileRow[] }) {
         </div>
       </div>
 
-      {/* 검색·필터 */}
       <div className="px-5 py-3 border-b border-[var(--gray-100)] flex items-center gap-2 flex-wrap bg-[var(--gray-50)]">
         <div className="relative flex-1 min-w-[180px] max-w-[280px]">
           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--gray-500)]">
@@ -198,7 +195,7 @@ export default function ProfilesPanel({ rows }: { rows: ProfileRow[] }) {
 
       {rows.length === 0 ? (
         <p className="text-sm text-[var(--gray-500)] text-center py-10">
-          평가단원이 아직 없습니다.
+          학생 평가자가 아직 없습니다.
         </p>
       ) : shown.length === 0 ? (
         <p className="text-sm text-[var(--gray-500)] text-center py-10">조건에 맞는 인원이 없습니다.</p>
@@ -231,7 +228,6 @@ export default function ProfilesPanel({ rows }: { rows: ProfileRow[] }) {
                           <span className="text-[var(--muted)]">
                             {r.bankName} {r.accountNumber}
                           </span>
-                          {/* 예금주가 본인 이름과 다르면 표시 */}
                           {r.holderName && r.holderName !== r.name && (
                             <div className="text-xs text-[var(--warning)]">
                               예금주 {r.holderName}
@@ -300,7 +296,7 @@ export default function ProfilesPanel({ rows }: { rows: ProfileRow[] }) {
                           </dl>
                           {r.hasRrn && (
                             <p className="text-xs text-[var(--gray-500)] mt-1.5">
-                              주민번호 전체는 화면에 표시하지 않습니다. 신고용 전체 값은 발주별
+                              주민번호 전체는 화면에 표시하지 않습니다. 신고용 전체 값은 의뢰별
                               &quot;원천징수 명세&quot; 내려받기로 확인하세요.
                             </p>
                           )}

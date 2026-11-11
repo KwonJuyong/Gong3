@@ -9,7 +9,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 
-// 한글 폰트 등록 (public/fonts) — 모듈 로드 시 1회
+// 한글 폰트 등록 (public/fonts): 모듈 로드 시 1회
 Font.register({
   family: "NanumGothic",
   fonts: [
@@ -105,7 +105,7 @@ function won(n: number): string {
 }
 
 function chk(v: boolean): string {
-  // NanumGothic에 ☑ 글리프가 없어 채워진 박스(■)로 체크 표시
+  // NanumGothic 에 체크박스 글리프가 없어 채워진 박스로 표시
   return v ? "(동의함 ■  동의하지 않음 □)" : "(동의함 □  동의하지 않음 ■)";
 }
 
@@ -149,7 +149,6 @@ export default function LaborClaimPdf({ data }: { data: ClaimPdfData }) {
       <Page size="A4" style={s.page}>
         <Text style={s.title}>일일 근무 현황 및 일일노무비 청구 확인서</Text>
 
-        {/* 인적사항 표 */}
         <View style={[s.tableTop]}>
           <View style={[s.row, s.rowBorder]}>
             <InfoCell label="소속" value={data.affiliation} labelW={40} valueW={120} />
@@ -164,7 +163,6 @@ export default function LaborClaimPdf({ data }: { data: ClaimPdfData }) {
           </View>
         </View>
 
-        {/* 근무내역 표 헤더 */}
         <View style={[s.row, { marginTop: 0 }]}>
           <View style={[s.headCell, s.rowBorder, { width: col.date }]}>
             <Text>근무일자</Text>
@@ -186,7 +184,6 @@ export default function LaborClaimPdf({ data }: { data: ClaimPdfData }) {
           </View>
         </View>
 
-        {/* 근무내역 행 */}
         {rows.map((e, i) => (
           <View style={[s.row]} key={i}>
             <View style={[s.cell, { borderBottomWidth: 0.7, borderLeftWidth: 0.7, borderColor: BORDER, width: col.date }]}>
@@ -218,7 +215,6 @@ export default function LaborClaimPdf({ data }: { data: ClaimPdfData }) {
           </View>
         ))}
 
-        {/* 합계 */}
         <View style={[s.row]}>
           <View
             style={[
@@ -237,7 +233,6 @@ export default function LaborClaimPdf({ data }: { data: ClaimPdfData }) {
           </View>
         </View>
 
-        {/* 개인정보 동의 */}
         <View style={s.consentBox}>
           <Text style={s.consentTitle}>{"<개인정보 수집·이용에 관한 동의서>"}</Text>
           <Text style={s.small}>
@@ -245,7 +240,6 @@ export default function LaborClaimPdf({ data }: { data: ClaimPdfData }) {
             관하여 동의 여부를 요청 드립니다.
           </Text>
 
-          {/* 1. 개인정보의 수집·이용 */}
           <View style={s.subBox}>
             <Text style={s.subHead}>□ 개인정보의 수집·이용 및 목적에 대한 내용</Text>
             <Text style={s.sectMark}>§ 개인정보의 수집 및 이용 목적</Text>
@@ -258,7 +252,6 @@ export default function LaborClaimPdf({ data }: { data: ClaimPdfData }) {
           </View>
           <Text style={s.agreeLine}>개인정보의 수집·이용 및 목적에 대한 내용에 동의합니다. {chk(data.consent?.personal)}</Text>
 
-          {/* 2. 고유식별정보의 수집·이용 */}
           <View style={s.subBox}>
             <Text style={s.subHead}>□ 고유식별정보의 수집·이용 및 목적에 대한 내용</Text>
             <Text style={s.sectMark}>§ 고유식별정보의 수집 및 이용 목적</Text>
@@ -271,7 +264,6 @@ export default function LaborClaimPdf({ data }: { data: ClaimPdfData }) {
           </View>
           <Text style={s.agreeLine}>고유식별정보의 수집·이용 및 목적에 대한 내용에 동의합니다. {chk(data.consent?.unique)}</Text>
 
-          {/* 3. 개인정보의 제3자 제공 */}
           <View style={s.subBox}>
             <Text style={s.subHead}>□ 개인정보의 제3자 제공 동의서</Text>
             <Text style={s.sectMark}>§ 제3자 개인정보를 제공받는 기관</Text>

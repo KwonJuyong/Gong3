@@ -1,6 +1,5 @@
 "use client";
 
-
 import SubmitButton from "@/app/components/SubmitButton";
 import { useState, useTransition } from "react";
 import { lookupBizAction } from "../orders/actions";
@@ -8,8 +7,8 @@ import { saveMyBizProfileAction } from "./actions";
 import { Card, Field, Note, Badge, INPUT, BTN_PRIMARY, BTN_GHOST } from "./ui";
 
 /**
- * 기업 정보. 발주 폼·견적서·세금계산서의 공급받는자 정보를 여기 값으로 채운다.
- * 사업자번호 조회에 실패하면 직접 입력한다(이메일은 항상 직접 입력).
+ * 기업 정보. 발주 폼·견적서·세금계산서의 공급받는자 정보를 여기 값으로 채움
+ * 사업자번호 조회에 실패하면 직접 입력함(이메일은 항상 직접 입력).
  */
 export default function BizSection({
   initial,
@@ -21,9 +20,9 @@ export default function BizSection({
     bizAddr: string;
     bizEmail: string;
     invoiceReady: boolean;
-    /** 발주 권한 확인 시각(체크는 저장할 때마다 다시 받는다) */
+    /** 발주 권한 확인 시각(체크는 저장할 때마다 다시 받음) */
     attestedAt: string | null;
-    /** 사업자 상태 조회 결과. null 은 아직 확인하지 못한 것(미등록과 다르다). */
+    /** 사업자 상태 조회 결과. null 은 아직 확인하지 못한 것(미등록과 다름). */
     bizState: string | null;
   };
 }) {
@@ -53,10 +52,10 @@ export default function BizSection({
     <form action={saveMyBizProfileAction} className="space-y-5">
       <Card
         title="기업 정보"
-        desc="평가 발주 시 견적서와 전자세금계산서에 그대로 쓰입니다. 여기에 저장해두면 발주할 때마다 다시 입력하지 않아도 됩니다."
+        desc="평가 의뢰 시 견적서와 전자세금계산서에 그대로 쓰입니다. 여기에 저장해두면 의뢰할 때마다 다시 입력하지 않아도 됩니다."
         aside={
           initial.invoiceReady ? (
-            <Badge tone="success">발주 가능</Badge>
+            <Badge tone="success">의뢰 가능</Badge>
           ) : (
             <Badge tone="warning">미완성</Badge>
           )
@@ -65,11 +64,11 @@ export default function BizSection({
         <div className="space-y-4">
           {!initial.invoiceReady && (
             <Note tone="warning">
-              사업자등록번호·상호·세금계산서 수신 이메일이 모두 있어야 발주할 수 있습니다.
+              사업자등록번호·상호·세금계산서 수신 이메일이 모두 있어야 의뢰할 수 있습니다.
             </Note>
           )}
 
-          {/* 사업자 상태 조회 결과(정상·휴업·미확인). 미등록·폐업은 저장 단계에서 막힌다. */}
+          {/* 사업자 상태 조회 결과(정상·휴업·미확인). 미등록·폐업은 저장 단계에서 막힘 */}
           {initial.bizNo &&
             (initial.bizState ? (
               <Note tone={initial.bizState === "정상" ? "success" : "warning"}>
@@ -77,8 +76,8 @@ export default function BizSection({
               </Note>
             ) : (
               <Note tone="muted">
-                국세청 조회를 아직 못 했습니다(조회 서비스 미설정 또는 일시 오류). 발주는
-                가능하지만, 발주 시점에 다시 확인합니다.
+                국세청 조회를 아직 못 했습니다(조회 서비스 미설정 또는 일시 오류). 의뢰는
+                가능하지만, 의뢰 시점에 다시 확인합니다.
               </Note>
             ))}
 
@@ -151,7 +150,7 @@ export default function BizSection({
           {msg && <Note tone={msg.ok ? "success" : "warning"}>{msg.text}</Note>}
 
           {/* 발주 권한 확인. 권한 판정에는 쓰지 않는 기록용 동의이며, 확인 대상이 현재 번호라
-              저장할 때마다 다시 받는다. */}
+              저장할 때마다 다시 받음 */}
           <label className="flex items-start gap-2.5 p-3 rounded-[var(--radius-md)] border border-[var(--gray-200)] bg-[var(--gray-50)] cursor-pointer">
             <input
               type="checkbox"
@@ -162,7 +161,7 @@ export default function BizSection({
             />
             <span className="text-xs text-[var(--gray-700)] leading-relaxed">
               본인은 위 사업자등록번호의 사업자에 <strong>소속되어 있으며, 해당 명의로 평가를
-              발주할 권한이 있음</strong>을 확인합니다. 허위로 기재한 경우 발주와 세금계산서가
+              의뢰할 권한이 있음</strong>을 확인합니다. 허위로 기재한 경우 의뢰와 세금계산서가
               취소될 수 있습니다.
               {initial.attestedAt && (
                 <span className="block mt-1 text-[var(--gray-500)]">
@@ -173,7 +172,7 @@ export default function BizSection({
           </label>
 
           <Note tone="muted">
-            이미 발행된 세금계산서는 <strong>발주 시점의 정보</strong>로 남습니다. 여기를 고쳐도
+            이미 발행된 세금계산서는 <strong>의뢰 시점의 정보</strong>로 남습니다. 여기를 고쳐도
             지난 계산서의 상호는 바뀌지 않습니다.
           </Note>
 

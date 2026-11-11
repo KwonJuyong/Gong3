@@ -1,6 +1,6 @@
 /**
  * 소요시간별 평가단 보상 최저단가(견적서용).
- * 법정 기준이 아니라 운영상 정한 하한이다. 이보다 낮출 수 없고 올리는 것은 자유다.
+ * 법정 기준이 아니라 운영상 정한 하한임. 이보다 낮출 수 없고 올리는 것은 자유임
  */
 
 export interface TimeTier {
@@ -23,7 +23,7 @@ export function tierOf(key: string): TimeTier {
   return TIME_TIERS.find((t) => t.key === key) ?? DEFAULT_TIER;
 }
 
-/** 단가가 하한보다 낮으면 하한으로 올린다(화면과 서버 공용). */
+/** 단가가 하한보다 낮으면 하한으로 올림(화면과 서버 공용). */
 export function enforceFloor(tierKey: string, unitPrice: number): number {
   return Math.max(tierOf(tierKey).floor, Math.floor(unitPrice) || 0);
 }

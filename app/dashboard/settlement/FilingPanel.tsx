@@ -1,6 +1,5 @@
 "use client";
 
-
 import SubmitButton from "@/app/components/SubmitButton";
 import ConfirmButton from "@/app/components/ConfirmButton";
 import { useState } from "react";
@@ -8,7 +7,7 @@ import { recordTaxFilingAction, deleteTaxFilingAction } from "./actions";
 
 /**
  * 세무 신고 기록(그 달에 무엇을 신고했는가).
- * 수정신고가 있어 기록은 고칠 수 있다. 현재 집계와 다르면 표시만 하고 자동으로 덮어쓰지 않는다.
+ * 수정신고가 있어 기록은 고칠 수 있음. 현재 집계와 다르면 표시만 하고 자동으로 덮어쓰지 않음
  */
 
 export interface FilingRowView {
@@ -46,7 +45,7 @@ export interface FilingPanelProps {
   rows: FilingRowView[];
 }
 
-const won = (n: number) => "₩" + n.toLocaleString("ko-KR");
+import { won } from "../../lib/money";
 const dstr = (iso: string) =>
   new Intl.DateTimeFormat("ko-KR", {
     month: "2-digit",
@@ -64,7 +63,7 @@ export default function FilingPanel({ year, month, current, rows }: FilingPanelP
     <section className="bg-white rounded-[var(--radius-xl)] p-5">
       <div className="flex items-baseline justify-between flex-wrap gap-2">
         <h3 className="text-sm font-semibold text-[var(--foreground)]">
-          세무 신고 기록 — {year}년 {month}월 지급분
+          세무 신고 기록: {year}년 {month}월 지급분
         </h3>
         <span className="text-xs text-[var(--muted)]">
           현재 집계 {current.headcount}명 · {current.entryCount}건 · {won(current.grossAmount)}
@@ -138,13 +137,12 @@ export default function FilingPanel({ year, month, current, rows }: FilingPanelP
                 </div>
               </div>
 
-              {/* 기록한 값과 현재 집계가 다름 */}
               {r.drift && (
                 <p className="mt-2 text-xs text-[var(--warning)] bg-[var(--warning-light)] px-2.5 py-2 rounded-[var(--radius-md)] leading-relaxed">
                   <strong>신고 후 이 달 지급이 바뀌었습니다.</strong> {r.drift}
                   <br />
                   홈택스에서 <strong>수정신고</strong>한 뒤 아래 「수정」으로 값을 맞추세요.
-                  고치지 않았다면 그대로 두세요 — 기록은 <strong>실제로 낸 값</strong>이어야 합니다.
+                  고치지 않았다면 그대로 두세요. 기록은 <strong>실제로 낸 값</strong>이어야 합니다.
                 </p>
               )}
 
@@ -221,10 +219,10 @@ export default function FilingPanel({ year, month, current, rows }: FilingPanelP
       </div>
 
       <p className="text-xs text-[var(--gray-500)] mt-3 leading-relaxed">
-        ⚠ <strong>세액이 0원이어도 신고·제출 대상</strong>입니다. 평가 보상은 일시적 인적용역
+        <strong>세액이 0원이어도 신고·제출 대상</strong>입니다. 평가 보상은 일시적 인적용역
         (소득세법 제21조 제1항 제19호)이라 과세최저한 제출면제의 예외입니다.
-        <br />⚠ 원천세(홈택스)와 지방소득세(위택스)는 <strong>별개 신고</strong>라 따로
-        기록합니다 — 홈택스만 내고 위택스를 잊는 게 가장 흔한 사고입니다.
+        <br />원천세(홈택스)와 지방소득세(위택스)는 <strong>별개 신고</strong>라 따로
+        기록합니다. 홈택스만 내고 위택스를 잊는 게 가장 흔한 사고입니다.
       </p>
     </section>
   );

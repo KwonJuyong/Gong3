@@ -14,7 +14,7 @@ export default function ResetForm({ token }: { token: string }) {
     null,
   );
 
-  // 성공하면 로그인 링크만 보여준다. 새 비밀번호로 직접 로그인해 보게 하려고 자동 로그인은 하지 않는다.
+  // 성공하면 로그인 링크만 보여줌. 새 비밀번호로 직접 로그인해 보게 하려고 자동 로그인은 하지 않음
   if (state?.success) {
     return (
       <div className="space-y-4">

@@ -1,8 +1,8 @@
 /**
  * 조회 계층 자체 점검. 실행: npm run test:query
  *
- * 테스트 러너 없이 .ts 원본을 import 해서 검사한다. 정책 표는 복제하지 않고 원본을 쓴다.
- * 권한 판정·정제·마스킹·메타데이터 정합성만 보고, 실제 질의 실행은 query-benchmark.mjs 가 한다.
+ * 테스트 러너 없이 .ts 원본을 import 해서 검사함. 정책 표는 복제하지 않고 원본을 씀
+ * 권한 판정·정제·마스킹·메타데이터 정합성만 보고, 실제 질의 실행은 query-benchmark.mjs 가 함
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -38,7 +38,6 @@ const fieldsOf = (role, model) => {
   return a.ok ? [...a.fields.keys()] : null;
 };
 
-// ---------------------------------------------------------------------------
 section("QRY-01  스키마 메타데이터 계층");
 
 // 메타데이터의 모든 필드가 실제 prisma 스키마에 존재하는가.
@@ -79,7 +78,7 @@ t("QRY-01", "비관리자 설명에 ADMIN 전용 모델이 없다",
 t("QRY-01", "관리자 설명에는 ADMIN 전용 모델이 있다",
   descAdmin.includes("claimBatch") && descAdmin.includes("laborClaim"));
 
-// 자리표시자가 실제로 치환되는가. 안 되면 LLM 이 "%%SCHEMA%%" 를 스키마로 받아 모든 조회가 실패한다.
+// 자리표시자가 실제로 치환되는가. 안 되면 LLM 이 "%%SCHEMA%%" 를 스키마로 받아 모든 조회가 실패함
 {
   const { toolsForRole, SCHEMA_PLACEHOLDER } = await import("../app/lib/chatTools.ts");
   for (const role of ["USER", "ADMIN"]) {
@@ -95,7 +94,6 @@ t("QRY-01", "관리자 설명에는 ADMIN 전용 모델이 있다",
   t("QRY-01", "관리자 도구 설명에는 ADMIN 전용 모델이 있다", admin.description.includes("laborClaim"));
 }
 
-// ---------------------------------------------------------------------------
 section("SEC-01  역할별 접근 범위가 정책으로 외부화");
 
 t("SEC-01", "USER/DEVELOPER/ADMIN 모두 판정된다",
@@ -113,7 +111,6 @@ t("SEC-01", "USER 는 user.phone/email 을 못 본다",
 t("SEC-01", "DEVELOPER 는 현재 USER 와 동일 (의도된 동작)",
   JSON.stringify(fieldsOf("DEVELOPER", "user")) === JSON.stringify(fieldsOf("USER", "user")));
 
-// ---------------------------------------------------------------------------
 section("SEC-02  질의 실행 이전 단계에서 차단");
 
 const denied = resolveAccess("USER", "claimBatch");
@@ -123,7 +120,6 @@ t("SEC-02", "차단 결과에 fields 가 아예 없다 (질의를 만들 수 없
 t("SEC-02", "알 수 없는 모델도 차단", resolveAccess("ADMIN", "정체불명").ok === false);
 t("SEC-02", "빈 모델명도 차단", resolveAccess("ADMIN", "").ok === false);
 
-// ---------------------------------------------------------------------------
 section("SEC-03  민감 컬럼 원천 차단 (ADMIN 포함)");
 
 const SENSITIVE = ["rrnEnc", "password", "accountNumber", "bankName", "holderName", "passwordHash", "rrn"];
@@ -145,7 +141,7 @@ for (const role of ROLES) {
 }
 t("SEC-03", "전 역할 × 전 모델에서 민감 컬럼 노출 0건", leaked.length === 0, leaked.join(", "));
 
-// where 조건으로도 못 쓰는가(참/거짓 질의로 값을 한 자리씩 알아낼 수 있다)
+// where 조건으로도 못 쓰는가(참/거짓 질의로 값을 한 자리씩 알아낼 수 있음)
 const adminUser = resolveAccess("ADMIN", "user");
 const wSens = sanitizeWhere(adminUser.fields, new Set(), {
   accountNumber: { contains: "110" },
@@ -165,7 +161,7 @@ t("SEC-03", "중첩 OR/NOT 안에서도 민감 컬럼 제거",
   !nestedJson.includes("accountNumber") && !nestedJson.includes("rrnEnc"), nestedJson);
 
 // resolveAccess 가 메타데이터와 독립적으로 동작하는가.
-// 메타데이터에 민감 컬럼이 실수로 들어가도 걸러내야 한다.
+// 메타데이터에 민감 컬럼이 실수로 들어가도 걸러내야 함
 {
   const original = { ...MODELS.user.fields };
   MODELS.user.fields.accountNumber = { type: "string", label: "계좌번호(함정)" };
@@ -179,11 +175,10 @@ t("SEC-03", "중첩 OR/NOT 안에서도 민감 컬럼 제거",
   t("SEC-03", "메타데이터가 오염돼도 원천 차단층이 걷어낸다 (방어 독립성)", stripped);
 }
 
-// 위 검사는 DENIED_COLUMNS 와 resolveAccess 의 정합성만 본다.
-// 새 민감 컬럼이 생기면 DENIED_COLUMNS 에 직접 추가해야 한다.
+// 위 검사는 DENIED_COLUMNS 와 resolveAccess 의 정합성만 봄
+// 새 민감 컬럼이 생기면 DENIED_COLUMNS 에 직접 추가해야 함
 t("SEC-03", "차단 목록이 비어 있지 않다 (설정 사고 감지)", DENIED_COLUMNS.size >= 10, String(DENIED_COLUMNS.size));
 
-// ---------------------------------------------------------------------------
 section("SEC-04  본인/타인 접근 범위 구분");
 
 const projUser = resolveAccess("USER", "project");
@@ -192,8 +187,8 @@ t("SEC-04", "비관리자 평가 조회에 행 필터가 붙는다", !!projUser.
 t("SEC-04", "관리자에게는 행 필터가 없다", projAdmin.rowFilter === undefined);
 t("SEC-04", "DEVELOPER 에게도 행 필터가 붙는다", !!resolveAccess("DEVELOPER", "project").rowFilter);
 t("SEC-04", "사용자 where 로 행 필터를 덮을 수 없다 (AND 결합)",
-  // runQuery 가 { AND: [rowFilter, sanitized] } 로 묶는다. 정제된 where 에는 status 만 남고
-  // rowFilter 는 별도 항목으로 유지되어야 한다.
+  // runQuery 가 { AND: [rowFilter, sanitized] } 로 묶음. 정제된 where 에는 status 만 남고
+  // rowFilter 는 별도 항목으로 유지되어야 함
   (() => {
     const s = sanitizeWhere(projUser.fields, new Set(), { status: "PENDING" });
     const combined = { AND: [projUser.rowFilter, s] };
@@ -208,7 +203,6 @@ t("SEC-04", "비관리자에게 학번 마스킹 적용",
 t("SEC-04", "관리자에게는 학번 원본",
   maskValue("ADMIN", studentIdMeta, "20241234") === "20241234");
 
-// ---------------------------------------------------------------------------
 section("SEC-05  역할별 권한 시나리오");
 
 const SCENARIOS = [
@@ -222,6 +216,14 @@ const SCENARIOS = [
   ["학생이 응답 조회", "USER", "response", true, ["projectId"], []],
   ["개발사가 서비스 조회", "DEVELOPER", "service", true, ["name", "modality"], []],
 ];
+// 서비스는 본인 소유만(다른 기업의 의뢰 서비스 비공개)
+{
+  const own = resolveAccess("DEVELOPER", "service", "u1");
+  t("SEC-05", "개발사 서비스 조회에 소유자 필터", own.ok && own.rowFilter?.ownerId === "u1", JSON.stringify(own.rowFilter));
+  const noId = resolveAccess("USER", "surveyVersion");
+  t("SEC-05", "조회자 id 없으면 설문 버전 필터가 빈 id", noId.ok && noId.rowFilter?.service?.ownerId === "", JSON.stringify(noId.rowFilter));
+  t("SEC-05", "관리자 서비스 조회는 필터 없음", resolveAccess("ADMIN", "service", "u1").rowFilter === undefined);
+}
 for (const [label, role, model, shouldAllow, mustHave, mustNot] of SCENARIOS) {
   const a = resolveAccess(role, model);
   if (a.ok !== shouldAllow) {
@@ -240,7 +242,6 @@ for (const [label, role, model, shouldAllow, mustHave, mustNot] of SCENARIOS) {
       .filter(Boolean).join(" / "));
 }
 
-// ---------------------------------------------------------------------------
 section("LOG-03  민감정보 원문 미저장");
 
 const REDACT = [
@@ -260,17 +261,16 @@ const keep = "빅데이터 전공 학생 2026년 3회차 응답 20건";
 t("LOG-03", "정상 질문은 그대로 보존", redactQuery(keep) === keep, redactQuery(keep));
 t("LOG-03", "질의 원문 길이 상한", redactQuery("가".repeat(5000)).length <= 2000);
 
-// ---------------------------------------------------------------------------
 section("SAF-01  읽기 전용 강제");
 
-// 엔진 소스에 쓰기 호출이 아예 없어야 한다.
+// 엔진 소스에 쓰기 호출이 아예 없어야 함
 const engineSrc = fs.readFileSync("app/lib/queryEngine.ts", "utf8");
 const WRITE_OPS = [
   "$executeRaw", "$queryRaw", "$executeRawUnsafe", "$queryRawUnsafe",
   ".create(", ".createMany(", ".update(", ".updateMany(", ".upsert(",
   ".delete(", ".deleteMany(", "$transaction",
 ];
-// 주석은 빼고 실행 코드만 본다.
+// 주석은 빼고 실행 코드만 봄
 const engineCode = engineSrc
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
@@ -282,13 +282,11 @@ t("SAF-01", "델리게이트를 읽기 4종으로만 감싼다",
   /groupBy:\s*d\.groupBy\.bind/.test(engineCode) &&
   /aggregate:\s*d\.aggregate\.bind/.test(engineCode));
 
-// ---------------------------------------------------------------------------
 section("SAF-03  결과 건수 상한");
 
 t("SAF-03", "목록 상한이 정의돼 있다", Number.isInteger(MAX_ROWS) && MAX_ROWS > 0 && MAX_ROWS <= 1000, String(MAX_ROWS));
 t("SAF-03", "스캔 상한이 정의돼 있다", Number.isInteger(MAX_SCAN_ROWS) && MAX_SCAN_ROWS > MAX_ROWS, String(MAX_SCAN_ROWS));
 
-// ---------------------------------------------------------------------------
 section("SAF-04  프롬프트 인젝션 방어");
 
 const ATTACKS = [
@@ -316,7 +314,6 @@ const BENIGN = [
 for (const b of BENIGN) t("SAF-04", `통과: "${b.slice(0, 26)}…"`, detectInjection(b).blocked === false);
 t("SAF-04", "차단 시 라벨이 붙는다 (감사 로그용)", typeof detectInjection(ATTACKS[0]).label === "string");
 
-// ---------------------------------------------------------------------------
 section("ANL-05  내보내기 형식");
 
 const cols = ["이름", "건수"];
@@ -328,7 +325,6 @@ const xlsx = buildXlsx(cols, rows, "테스트");
 t("ANL-05", "xlsx 가 zip 시그니처로 시작", xlsx[0] === 0x50 && xlsx[1] === 0x4b);
 t("ANL-05", "xlsx 크기가 0 이 아니다", xlsx.length > 500, String(xlsx.length));
 
-// ---------------------------------------------------------------------------
 console.log("\n" + "=".repeat(66));
 console.log(`결과: ${pass} passed, ${fail} failed`);
 if (fail) {

@@ -4,10 +4,10 @@
 // - 약점 진단: 점수 오름차순 정렬 + 구성개념별 서술형 의견 수집
 
 import { aggregateConstruct, type RaterResponse } from "./anchoring";
+import { scaleRange } from "./projectQuestions";
 import {
   type SurveyBlock,
   adaptiveKey,
-  vignetteKey,
 } from "./surveyBlocks";
 
 export type RaterRaw = {
@@ -40,6 +40,15 @@ export type SurveyReport = {
 function likert5To100(mean: number): number {
   return ((mean - 1) / 4) * 100;
 }
+
+/**
+ * UEQ 외 검증도구의 구성개념 점수 규칙. 점수는 높을수록 좋은 방향(0~100)으로 맞춤
+ * 인지 부하는 설명·안내가 만든 외재 부하만 서비스 품질로 보고 방향을 뒤집음
+ * (내재 부하는 학습 내용의 난이도라 서비스 탓이 아님).
+ */
+const INSTRUMENT_RULE: Record<string, { dims?: string[]; invert?: boolean }> = {
+  CLS8: { dims: ["EXTRANEOUS"], invert: true },
+};
 
 const UEQ_DIM_LABEL: Record<string, string> = {
   ATTRACTIVENESS: "매력도",
@@ -155,6 +164,38 @@ export function scoreSurvey(blocks: SurveyBlock[], raters: RaterRaw[]): SurveyRe
       score: ((allMean + 3) / 6) * 100,
       rawScore: null,
       n: raters.length,
+      dropped: 0,
+      comments: [],
+    });
+  }
+
+  // UEQ 외 검증도구: 역문항을 반전해 문항 평균을 0~100 으로 환산
+  for (const b of blocks) {
+    if (b.kind !== "INSTRUMENT" || b.instrument === "UEQ") continue;
+    const { min, max } = scaleRange(b.scaleType);
+    const rule = INSTRUMENT_RULE[b.instrument] ?? {};
+    const items = rule.dims ? b.items.filter((it) => rule.dims!.includes(it.dimension || "")) : b.items;
+    let sum = 0;
+    let count = 0;
+    const respondents = new Set<string>();
+    for (const it of items) {
+      for (const r of raters) {
+        const raw = r.scores[it.itemKey];
+        if (typeof raw !== "number") continue;
+        sum += it.reverse ? min + max - raw : raw;
+        count++;
+        respondents.add(r.userId);
+      }
+    }
+    if (count === 0) continue;
+    const pct = ((sum / count - min) / (max - min)) * 100;
+    reports.push({
+      constructId: b.constructId,
+      constructName: b.constructName,
+      method: "instrument",
+      score: rule.invert ? 100 - pct : pct,
+      rawScore: null,
+      n: respondents.size,
       dropped: 0,
       comments: [],
     });

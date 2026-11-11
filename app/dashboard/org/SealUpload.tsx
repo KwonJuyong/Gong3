@@ -4,8 +4,8 @@ import { uploadSensitiveImage } from "@/app/lib/uploadSensitive";
 import { useRef, useState } from "react";
 
 /**
- * 직인 이미지 업로드(견적서에 찍힌다). URL 은 부모 폼의 hidden input 으로 함께 저장된다.
- * 흰 배경이 찍히지 않도록 배경이 투명한 PNG 를 권한다.
+ * 직인 이미지 업로드(견적서에 찍힘). URL 은 부모 폼의 hidden input 으로 함께 저장됨
+ * 흰 배경이 찍히지 않도록 배경이 투명한 PNG 를 권함
  */
 export default function SealUpload({ initialUrl }: { initialUrl: string }) {
   const [url, setUrl] = useState(initialUrl);
@@ -17,7 +17,7 @@ export default function SealUpload({ initialUrl }: { initialUrl: string }) {
     setUploading(true);
     setError(null);
     try {
-      // 직인도 민감 첨부 저장소에 올린다.
+      // 직인도 민감 첨부 저장소에 올림
       const r = await uploadSensitiveImage(file, "SEAL");
       if (!r.ok) setError(r.error);
       else setUrl(r.url);

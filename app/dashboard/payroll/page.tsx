@@ -42,7 +42,7 @@ export default async function PayrollPage({
           <h1 className="text-xl font-bold text-[var(--foreground)]">노무비 청구</h1>
           <p className="text-sm text-[var(--muted)] mt-1">
             {isAdmin
-              ? "회차별로 참여자 노무비 청구 확인서를 자동 생성·관리합니다."
+              ? "회차별로 평가자 노무비 청구 확인서를 자동 생성·관리합니다."
               : "노무비 청구 확인서 작성에 필요한 정산 정보를 입력합니다."}
           </p>
         </div>
@@ -58,7 +58,7 @@ export default async function PayrollPage({
   );
 }
 
-/** 정산 정보 요약. 편집은 /dashboard/profile?tab=settlement 에서 한다. */
+/** 정산 정보 요약. 편집은 /dashboard/profile?tab=settlement 에서 함 */
 async function PayrollProfileSection({ userId }: { userId: string }) {
   const p = await getSettlementProfile(userId);
   const missing: string[] = [];
@@ -99,7 +99,7 @@ async function PayrollProfileSection({ userId }: { userId: string }) {
   );
 }
 
-/** 내 서류 첨부. 메타데이터만 내려보내고 storedName 은 클라이언트에 보내지 않는다. */
+/** 내 서류 첨부. 메타데이터만 내려보내고 storedName 은 클라이언트에 보내지 않음 */
 async function MyAttachmentsSection({ userId }: { userId: string }) {
   const rows = await prisma.attachment.findMany({
     where: { ownerId: userId },
@@ -158,7 +158,7 @@ async function AdminBatchSection({
       include: { _count: { select: { claims: true } } },
     }),
     getDirectorSignUrl(),
-    // 노무비는 연구비 건만 대상이다. 업체·학교 건은 플랫폼이 보상으로 지급하므로 섞으면 이중 지급이 된다.
+    // 노무비는 연구비 건만 대상임. 업체·학교 건은 플랫폼이 보상으로 지급하므로 섞으면 이중 지급이 됨
     prisma.project.findMany({
       where: { status: "FINISHED", fundingType: "RESEARCH_FUND" },
       select: { id: true, title: true, startTime: true, endTime: true },
@@ -196,7 +196,7 @@ async function AdminBatchSection({
                     b.status === "OPEN" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
                   }`}
                 >
-                  {b.status === "OPEN" ? "진행중" : "마감"}
+                  {b.status === "OPEN" ? "진행 중" : "마감"}
                 </span>
               </div>
               <p className="text-xs text-[var(--muted)] mt-1">

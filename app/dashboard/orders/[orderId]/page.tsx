@@ -1,5 +1,6 @@
 import ClearQueryParams from "@/app/components/ClearQueryParams";
 import ConfirmButton from "@/app/components/ConfirmButton";
+import ReauthField from "@/app/components/ReauthField";
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -94,7 +95,7 @@ export default async function OrderDetailPage({
       <main className="max-w-[900px] mx-auto px-4 sm:px-6 py-8 space-y-6">
         <ClearQueryParams keys={["error"]} />
         <Link href="/dashboard/orders" className="inline-flex items-center gap-1 text-sm text-[var(--muted)] hover:text-[var(--foreground)] mb-4">
-          ← 발주 목록
+          ← 의뢰 목록
         </Link>
         <div>
           <h1 className="text-xl font-bold mt-2 text-[var(--foreground)]">{order.service.name} 평가</h1>
@@ -108,16 +109,15 @@ export default async function OrderDetailPage({
           </p>
         )}
 
-        {/* 금액 내역 */}
         <section className="bg-white rounded-[var(--radius-xl)] p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">발주 내역</h3>
+            <h3 className="text-sm font-semibold text-[var(--foreground)]">의뢰 내역</h3>
             <span className={`text-xs px-2 py-0.5 rounded-full ${label.cls}`}>{label.text}</span>
           </div>
           <dl className="text-sm space-y-2">
             <div className="flex justify-between">
               <dt className="text-[var(--muted)]">
-                평가단 보상 ({order.panelSize}명 × {won(order.rewardPerPerson)})
+                참여 보상 ({order.panelSize}명 × {won(order.rewardPerPerson)})
               </dt>
               <dd className="text-[var(--foreground)]">{won(order.subtotal)}</dd>
             </div>
@@ -136,7 +136,6 @@ export default async function OrderDetailPage({
           </dl>
         </section>
 
-        {/* 세금계산서 공급받는자 */}
         {order.bizName && (
           <section className="bg-white rounded-[var(--radius-xl)] p-5">
             <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">세금계산서 정보</h3>
@@ -162,25 +161,25 @@ export default async function OrderDetailPage({
         )}
 
         {/* 발주자 확인 상태(관리자 전용). 위의 세금계산서 정보는 발주 시점 값이고 이것은 현재 값이라
-            따로 보여주고 확인 시각을 함께 표시한다. attestedAt 은 기록용이며 권한 판정에 쓰지 않는다. */}
+            따로 보여주고 확인 시각을 함께 표시함. attestedAt 은 기록용이며 권한 판정에 쓰지 않음 */}
         {me.role === "ADMIN" && (
           <section className="bg-white rounded-[var(--radius-xl)] p-5">
             <h3 className="text-sm font-semibold text-[var(--foreground)]">
-              발주자 확인 상태
+              의뢰자 확인 상태
               <span className="ml-1.5 text-xs font-normal px-1.5 py-0.5 rounded-full bg-[var(--gray-100)] text-[var(--muted)]">
                 관리자
               </span>
             </h3>
             <p className="text-xs text-[var(--gray-500)] mt-1 leading-relaxed">
-              ⚠ <strong>지금 값</strong>입니다. 위 「세금계산서 정보」는 발행 시점 스냅샷이라
-              서로 다를 수 있습니다 — 발주일({seoul(order.createdAt)})과 아래 시각을 비교하세요.
+              <strong>지금 값</strong>입니다. 위 「세금계산서 정보」는 발행 시점 스냅샷이라
+              서로 다를 수 있습니다. 의뢰일({seoul(order.createdAt)})과 아래 시각을 비교하세요.
             </p>
             {(() => {
               const bp = order.buyer?.bizProfile;
               if (!bp) {
                 return (
                   <p className="text-xs text-[var(--muted)] mt-3">
-                    등록된 기업 정보가 없습니다. (이 발주는 폼에 직접 입력해 만든 건입니다)
+                    등록된 기업 정보가 없습니다. (이 의뢰는 폼에 직접 입력해 만든 건입니다)
                   </p>
                 );
               }
@@ -194,7 +193,7 @@ export default async function OrderDetailPage({
                         {bp.bizName || "-"} ({bp.bizNo || "-"})
                         {numberChanged && (
                           <span className="block text-xs text-[var(--warning)]">
-                            발주 시점({order.bizNo})과 다릅니다
+                            의뢰 시점({order.bizNo})과 다릅니다
                           </span>
                         )}
                       </dd>
@@ -211,7 +210,7 @@ export default async function OrderDetailPage({
                       </dd>
                     </div>
                     <div className="flex justify-between gap-3">
-                      <dt className="text-[var(--muted)]">발주 권한 확인</dt>
+                      <dt className="text-[var(--muted)]">의뢰 권한 확인</dt>
                       <dd className="text-right text-[var(--foreground)]">
                         {bp.attestedAt ? "확인함" : "기록 없음"}
                         {bp.attestedAt && (
@@ -225,7 +224,7 @@ export default async function OrderDetailPage({
                   {!bp.attestedAt && (
                     <p className="text-xs text-[var(--muted)] mt-2 leading-relaxed">
                       확인 기록이 없는 건 <strong>이 컬럼이 생기기 전에 등록한 기업</strong>일
-                      수 있습니다(소급 입력하지 않았습니다). 발주를 막는 조건은 아닙니다.
+                      수 있습니다(소급 입력하지 않았습니다). 의뢰를 막는 조건은 아닙니다.
                     </p>
                   )}
                 </>
@@ -242,7 +241,7 @@ export default async function OrderDetailPage({
               <>
                 <p className="text-xs text-[var(--muted)] mt-1">
                   아래 계좌로 <strong>{won(order.totalAmount)}</strong> 를 입금해 주세요. 입금이
-                  확인되면 평가단 모집이 시작됩니다. 세금계산서는 별도 발행됩니다.
+                  확인되면 평가자 모집이 시작됩니다. 세금계산서는 별도 발행됩니다.
                 </p>
                 <div className="mt-4 p-4 bg-[var(--gray-50)] rounded-[var(--radius-md)] space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -267,7 +266,7 @@ export default async function OrderDetailPage({
                   </div>
                 </div>
                 <p className="text-xs text-[var(--muted)] mt-3">
-                  입금 시 발주번호 <strong>{order.orderNo}</strong> 를 남겨주시면 확인이 빠릅니다.
+                  입금 시 의뢰 번호 <strong>{order.orderNo}</strong> 를 남겨주시면 확인이 빠릅니다.
                 </p>
               </>
             ) : (
@@ -278,19 +277,18 @@ export default async function OrderDetailPage({
           </section>
         )}
 
-        {/* 입금 완료 */}
         {paid && (
           <section className="bg-white rounded-[var(--radius-xl)] p-5">
             <h3 className="text-sm font-semibold text-[var(--success)]">입금이 확인되었습니다</h3>
             <p className="text-xs text-[var(--muted)] mt-1">
               {payment?.paidAt && `${seoul(payment.paidAt)} 확인 · `}
-              평가단 모집을 시작할 수 있습니다. 참여자 {order.rewards.length}명이 응답했습니다.
+              평가자 모집을 시작할 수 있습니다. 평가자 {order.rewards.length}명이 응답했습니다.
             </p>
-            {/* 발행(300)과 국세청 전송 결과(304/305)를 구분해 보여준다. */}
+            {/* 발행(300)과 국세청 전송 결과(304/305)를 구분해 보여줌 */}
             {payment?.taxInvoiceIssued ? (
               payment.taxInvoiceNtsState === NTS_STATE.SEND_FAILED ? (
                 <p className="text-xs text-[var(--danger)] mt-2">
-                  ⚠ 세금계산서 국세청 전송 실패 — 확인이 필요합니다
+                  세금계산서 국세청 전송 실패: 확인이 필요합니다
                   {payment.taxInvoiceNtsNum && ` (승인 ${payment.taxInvoiceNtsNum})`}
                 </p>
               ) : (
@@ -301,13 +299,12 @@ export default async function OrderDetailPage({
               )
             ) : (
               <p className="text-xs text-[var(--warning)] mt-2">
-                세금계산서 발행 대기{payment?.taxInvoiceError && ` — ${payment.taxInvoiceError}`}
+                세금계산서 발행 대기{payment?.taxInvoiceError && `: ${payment.taxInvoiceError}`}
               </p>
             )}
           </section>
         )}
 
-        {/* 관리자 전용 */}
         {admin && payment && (
           <section className="bg-white rounded-[var(--radius-xl)] border border-[var(--gray-300)] p-5 space-y-5">
             <h3 className="text-sm font-semibold text-[var(--foreground)]">관리자</h3>
@@ -329,18 +326,19 @@ export default async function OrderDetailPage({
                     placeholder="메모 (선택)"
                     className="px-3 py-2 text-sm border border-[var(--gray-200)] rounded-[var(--radius-md)]"
                   />
+                  <ReauthField className="sm:col-span-2" />
                 </div>
                 <ConfirmButton
-                  message={`통장에서 ${won(order.totalAmount)} 입금(입금자명: {depositorName})을 확인했습니까?\n\n· 원장에 입금으로 기록되고 되돌릴 수 없습니다.\n· 발주가 확정되고, 세금계산서가 아직 없으면 자동 발행됩니다(국세청 신고).\n· 실제로 통장에 들어온 것을 본 뒤에만 누르세요.\n\n정말 입금 확인으로 처리하시겠습니까?`}
+                  message={`통장에서 ${won(order.totalAmount)} 입금(입금자명: {depositorName})을 확인했습니까?\n\n· 원장에 입금으로 기록되고 되돌릴 수 없습니다.\n· 의뢰가 확정되고, 세금계산서가 아직 없으면 자동 발행됩니다(국세청 신고).\n· 실제로 통장에 들어온 것을 본 뒤에만 누르세요.\n\n정말 입금 확인으로 처리하시겠습니까?`}
                   className="px-4 py-2 text-sm font-semibold bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)]"
                 >
-                  입금 확인 → 발주 확정
+                  입금 확인 → 의뢰 확정
                 </ConfirmButton>
               </form>
             )}
 
-            {/* 세금계산서. 발급 시기는 입금이 아니라 공급시기(용역 완료)라 입금 전에도 발행할 수 있다.
-                나중에 입금을 확인해도 taxInvoiceIssued 로 이중 발행을 막는다. */}
+            {/* 세금계산서. 발급 시기는 입금이 아니라 공급시기(용역 완료)라 입금 전에도 발행할 수 있음
+                나중에 입금을 확인해도 taxInvoiceIssued 로 이중 발행을 막음 */}
             {!payment.taxInvoiceIssued && payment.status !== "CANCELLED" && (
               <form action={retryInvoiceAction} className="space-y-2">
                 <input type="hidden" name="paymentId" value={payment.id} />
@@ -356,6 +354,7 @@ export default async function OrderDetailPage({
                     가산세가 붙습니다. 발행해도 입금 확인은 별도로 진행됩니다.
                   </p>
                 )}
+                <ReauthField className="block w-full sm:w-64" />
                 <ConfirmButton
                   message={`${order.orderNo} 세금계산서를 발행합니다(${paid ? "영수" : "청구"}).\n\n· 운영 환경에서는 실제 국세청 신고로 이어집니다.\n· 발행 후에는 취소할 수 없고, 틀렸으면 수정세금계산서를 따로 발행해야 합니다.\n· 공급받는자 상호·사업자번호가 맞는지 먼저 확인하세요.\n\n정말 발행하시겠습니까?`}
                   className="px-3 py-2 text-xs font-medium border border-[var(--gray-300)] rounded-[var(--radius-md)] hover:bg-[var(--gray-50)]"
@@ -365,7 +364,6 @@ export default async function OrderDetailPage({
               </form>
             )}
 
-            {/* 취소 */}
             {payment.status !== "CANCELLED" && (
               <form action={cancelPaymentAction}>
                 <input type="hidden" name="paymentId" value={payment.id} />
@@ -374,16 +372,16 @@ export default async function OrderDetailPage({
                   message={
                     paid
                       ? `${order.orderNo} 수납을 취소하고 환불을 확정합니다.\n\n· 되돌릴 수 없습니다.\n· 기업 계좌로 환불을 송금한 뒤 [환불 송금 완료]를 따로 눌러야 원장에 반영됩니다.\n· 세금계산서가 발행됐다면 수정세금계산서 발행이 필요합니다.\n\n정말 수납을 취소하시겠습니까?`
-                      : `${order.orderNo} 발주를 취소합니다.\n\n· 되돌릴 수 없습니다.\n\n정말 발주를 취소하시겠습니까?`
+                      : `${order.orderNo} 의뢰를 취소합니다.\n\n· 되돌릴 수 없습니다.\n\n정말 의뢰를 취소하시겠습니까?`
                   }
                   className="px-3 py-1.5 text-xs text-[var(--danger)] border border-[var(--danger)] rounded-[var(--radius-md)] hover:bg-[var(--danger-light)]"
                 >
-                  {paid ? "수납 취소 (환불 확정)" : "발주 취소"}
+                  {paid ? "수납 취소 (환불 확정)" : "의뢰 취소"}
                 </ConfirmButton>
               </form>
             )}
 
-            {/* 입금 후 취소한 건은 환불 송금 후 이 버튼으로 원장에 기록한다. */}
+            {/* 입금 후 취소한 건은 환불 송금 후 이 버튼으로 원장에 기록함 */}
             {payment.status === "CANCELLED" && payment.paidAt && !payment.refundSentAt && (
               <form action={confirmPaymentRefundSentAction} className="space-y-2">
                 <input type="hidden" name="paymentId" value={payment.id} />
@@ -403,12 +401,12 @@ export default async function OrderDetailPage({
               <p className="text-xs text-[var(--muted)]">환불 송금 완료 · 원장 반영됨</p>
             )}
 
-            {/* 발행 후 환불했으면 수정세금계산서가 필요하다. 발행은 팝빌·홈택스에서 직접 하고 여기서 완료만 기록한다. */}
+            {/* 발행 후 환불했으면 수정세금계산서가 필요함. 발행은 팝빌·홈택스에서 직접 하고 여기서 완료만 기록함 */}
             {needsTaxInvoiceAmendment(payment, order) && (
               <form action={markTaxInvoiceAmendedAction} className="space-y-2">
                 <input type="hidden" name="paymentId" value={payment.id} />
                 <p className="text-xs text-[var(--danger)]">
-                  ⚠ 환불이 발생했으나 <strong>수정세금계산서가 발행되지 않았습니다.</strong>{" "}
+                  환불이 발생했으나 <strong>수정세금계산서가 발행되지 않았습니다.</strong>{" "}
                   발행된 계산서를 그대로 두면 매출·매출세액이 과대 신고됩니다. 팝빌 또는
                   홈택스에서 수정세금계산서를 발행한 후 아래를 누르세요.
                 </p>

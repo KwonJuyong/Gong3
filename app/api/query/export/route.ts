@@ -1,11 +1,12 @@
 /**
  * 조회 결과 내보내기.
  *
- * 클라이언트가 보낸 행은 쓰지 않는다. 질의 명세(QuerySpec)만 받아 세션 사용자의 역할로
- * 다시 실행하므로, 요청 본문을 조작해도 권한 밖의 데이터가 파일에 들어가지 않는다.
- * 내보내기도 감사 로그에 남는다.
+ * 클라이언트가 보낸 행은 쓰지 않음. 질의 명세(QuerySpec)만 받아 세션 사용자의 역할로
+ * 다시 실행하므로, 요청 본문을 조작해도 권한 밖의 데이터가 파일에 들어가지 않음
+ * 내보내기도 감사 로그에 남음
  */
 import { type NextRequest, NextResponse } from "next/server";
+import { checkLimit } from "@/app/lib/limits";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { getSessionUserId } from "@/app/session-server";
 import { prisma } from "@/app/db";
@@ -28,6 +29,8 @@ export async function POST(req: NextRequest) {
   });
   if (!me || me.status !== "ACTIVE")
     return NextResponse.json({ error: "이용할 수 없는 계정입니다." }, { status: 403 });
+  const rl = checkLimit("queryExport", me.id);
+  if (rl) return NextResponse.json({ error: rl }, { status: 429 });
 
   let body: Body;
   try {
@@ -47,8 +50,8 @@ export async function POST(req: NextRequest) {
   const question = String(body.question || "").slice(0, 500);
   const started = Date.now();
 
-  // 세션 사용자의 역할로 다시 실행한다.
-  const out = await runQuery(me.role, spec);
+  // 세션 사용자의 역할로 다시 실행함
+  const out = await runQuery(me.role, spec, me.id);
 
   if (!out.ok) {
     await recordQueryAudit({

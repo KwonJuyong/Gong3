@@ -2,8 +2,9 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { csvCell } from "@/app/lib/csv";
 
-/** 감사 로그 목록. 차단 건은 색과 함께 "차단" 라벨로도 구분한다. */
+/** 감사 로그 목록. 차단 건은 색과 함께 "차단" 라벨로도 구분함 */
 
 export type AuditRow = {
   id: string;
@@ -59,15 +60,11 @@ export default function AuditTable({
 
   const exportCsv = () => {
     const head = ["시각", "요청자", "역할", "질의", "도구", "접근대상", "정책", "결과", "사유", "건수", "소요(ms)"];
-    const esc = (v: unknown) => {
-      const s = String(v ?? "");
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
     const body = rows.map((r) =>
       [r.at, r.actor, r.actorRole, r.question, r.tool, r.target, r.policy,
-       OUTCOME[r.outcome]?.label ?? r.outcome, r.reason, r.rowCount, r.durationMs].map(esc).join(","),
+       OUTCOME[r.outcome]?.label ?? r.outcome, r.reason, r.rowCount, r.durationMs].map(csvCell).join(","),
     );
-    // BOM 을 붙여야 엑셀에서 한글이 안 깨진다.
+    // BOM 을 붙여야 엑셀에서 한글이 안 깨짐
     const blob = new Blob(["﻿" + [head.join(","), ...body].join("\r\n")], {
       type: "text/csv;charset=utf-8",
     });

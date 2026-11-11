@@ -5,8 +5,8 @@ import ResendForm from "./ResendForm";
 export const metadata = { title: "이메일 인증" };
 
 /**
- * 가입 이메일 인증 링크(/verify?token=...). 로그인 없이 쓴다.
- * 들어오면 바로 토큰을 소비한다. 메일 클라이언트가 링크를 미리 열어도 결과는 인증 완료라 문제가 없다.
+ * 가입 이메일 인증 링크(/verify?token=...). 로그인 없이 씀
+ * 들어오면 바로 토큰을 소비함. 메일 클라이언트가 링크를 미리 열어도 결과는 인증 완료라 문제가 없음
  */
 export default async function VerifyPage({
   searchParams,

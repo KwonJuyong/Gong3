@@ -9,11 +9,11 @@ import { Card, Field, Note, Badge, INPUT, BTN_PRIMARY } from "./ui";
 
 /**
  * 정산 정보 편집 폼(계좌·예금주·주소·주민번호·동의·전자서명).
- * 계좌만 있으면 이체할 수 있고 주민번호는 신고용이라, 두 항목의 경고 수준을 다르게 보여준다.
+ * 계좌만 있으면 이체할 수 있고 주민번호는 신고용이라, 두 항목의 경고 수준을 다르게 보여줌
  */
 
-// 은행 이름 제안 목록. 입력은 자유 텍스트라 목록에 없는 은행도 적을 수 있다.
-// (팝빌 BANK_CODES 는 서버 전용 모듈이라 쓰지 않는다)
+// 은행 이름 제안 목록. 입력은 자유 텍스트라 목록에 없는 은행도 적을 수 있음
+// (팝빌 BANK_CODES 는 서버 전용 모듈이라 쓰지 않음)
 const BANKS = [
   "국민은행", "신한은행", "우리은행", "하나은행", "농협은행", "기업은행",
   "카카오뱅크", "토스뱅크", "케이뱅크", "새마을금고", "신협", "우체국",
@@ -49,7 +49,7 @@ export default function SettlementSection({ profile }: { profile: SettlementSect
   const fileRef = useRef<HTMLInputElement>(null);
 
   const rrnDigits = rrn.replace(/[^0-9]/g, "");
-  // 서버는 13자리일 때만 저장하므로 일부만 입력했으면 제출을 막고 알려준다.
+  // 서버는 13자리일 때만 저장하므로 일부만 입력했으면 제출을 막고 알려줌
   const rrnIncomplete = rrnDigits.length > 0 && rrnDigits.length !== 13;
 
   // 동의가 필요한 경우: 주민번호를 새로 입력하거나, 등록돼 있지만 본인 동의 기록이 없을 때
@@ -67,7 +67,7 @@ export default function SettlementSection({ profile }: { profile: SettlementSect
     setUploading(true);
     setUploadError(null);
     try {
-      // 서명은 민감 첨부 저장소에 올린다.
+      // 서명은 민감 첨부 저장소에 올림
       const r = await uploadSensitiveImage(file, "SIGNATURE");
       if (!r.ok) setUploadError(r.error);
       else setSignatureUrl(r.url);
@@ -210,7 +210,7 @@ export default function SettlementSection({ profile }: { profile: SettlementSect
               />
               <span>
                 {profile.hasRrn ? (
-                  // 등록돼 있지만 본인 동의 기록이 없는 경우(관리자 대리입력 등). 확인만 받는다.
+                  // 등록돼 있지만 본인 동의 기록이 없는 경우(관리자 대리입력 등). 확인만 받음
                   <>
                     등록된 계좌·<strong>주민등록번호</strong>가 본인 정보가 맞으며, 보상 지급과
                     원천징수 신고에 이용하는 데 동의합니다.
@@ -232,7 +232,7 @@ export default function SettlementSection({ profile }: { profile: SettlementSect
         title="전자서명 (선택)"
         desc="연구비 노무비 청구 확인서에 들어갑니다. 평가 보상 지급에는 쓰이지 않습니다."
       >
-        {/* 서명은 이 폼에서만 보낸다(관리자 대리입력 폼은 보내지 않아 기존 서명이 유지된다). */}
+        {/* 서명은 이 폼에서만 보냄(관리자 대리입력 폼은 보내지 않아 기존 서명이 유지됨). */}
         <input type="hidden" name="signatureUrl" value={signatureUrl} />
         <div className="flex items-center gap-4">
           {signatureUrl ? (
@@ -280,7 +280,7 @@ export default function SettlementSection({ profile }: { profile: SettlementSect
         />
       </Card>
 
-      {/* 원천징수영수증은 지급명세서 제출 후 학생이 홈택스에서 직접 출력한다. */}
+      {/* 원천징수영수증은 지급명세서 제출 후 학생이 홈택스에서 직접 출력함 */}
       {profile.hasPaidRewards && (
         <Note tone="muted">
           원천징수영수증은{" "}
@@ -292,7 +292,7 @@ export default function SettlementSection({ profile }: { profile: SettlementSect
           >
             홈택스
           </a>
-          에서 발급합니다 — 나의 홈택스 &gt; 소득·연말정산 &gt; 지급명세서·원천징수영수증 내역.
+          에서 발급합니다. 나의 홈택스 &gt; 소득·연말정산 &gt; 지급명세서·원천징수영수증 내역.
           지급명세서 제출 후 조회할 수 있습니다.
         </Note>
       )}

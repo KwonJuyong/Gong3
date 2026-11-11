@@ -20,6 +20,12 @@ const nextConfig: NextConfig = {
            * preload 는 쓰지 않는다.
            */
           { key: "Strict-Transport-Security", value: "max-age=300" },
+          /**
+           * 스크립트·스타일 제한 없이 넣을 수 있는 지시어만 둔다. script-src 는 Next 인라인 스크립트와
+           * 외부 위젯(TradingView) 때문에 nonce 구성과 실제 화면 확인 후에 추가한다.
+           * object-src 는 Chrome 에서 PDF 미리보기를 막을 수 있어 넣지 않는다.
+           */
+          { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self'; frame-ancestors 'none'" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-XSS-Protection", value: "1; mode=block" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

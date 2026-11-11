@@ -1,12 +1,12 @@
 /**
- * 국세청 일괄등록 양식(.xlsx)의 첫 시트에 데이터를 채운다.
+ * 국세청 일괄등록 양식(.xlsx)의 첫 시트에 데이터를 채움
  *
- * 양식에 데이터 유효성·인쇄 설정 등이 있어 새로 만들지 않고 원본의 sheetData 만 바꾼다.
- * xlsx 는 zip 이므로 fflate 로 직접 다룬다.
- * 문자열은 inlineStr 로 써서 귀속월(07)이나 주민등록번호가 숫자로 바뀌지 않게 한다.
+ * 양식에 데이터 유효성·인쇄 설정 등이 있어 새로 만들지 않고 원본의 sheetData 만 바꿈
+ * xlsx 는 zip 이므로 fflate 로 직접 다룸
+ * 문자열은 inlineStr 로 써서 귀속월(07)이나 주민등록번호가 숫자로 바뀌지 않게 함
  *
- * 템플릿은 런타임에 디스크에서 읽는다. next.config 를 output: "standalone" 으로 바꾸면
- * 이 파일이 이미지에 포함되지 않으니 함께 처리해야 한다.
+ * 템플릿은 런타임에 디스크에서 읽음. next.config 를 output: "standalone" 으로 바꾸면
+ * 이 파일이 이미지에 포함되지 않으니 함께 처리해야 함
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -17,7 +17,7 @@ export type CellValue = string | number;
 
 /**
  * 템플릿 행 2 에서 그대로 가져온 열별 스타일 인덱스.
- * 원본의 서식(테두리·정렬·숫자표시)을 유지하려고 쓴다.
+ * 원본의 서식(테두리·정렬·숫자표시)을 유지하려고 씀
  */
 const COLUMN_STYLE = [2, 2, 4, 4, 3, 3, 4, 5, 5, 5, 5, 4, 5, 5];
 
@@ -38,13 +38,13 @@ function cellXml(colIndex: number, rowNum: number, value: CellValue): string {
   if (typeof value === "number") {
     return `<c r="${ref}" s="${s}"><v>${value}</v></c>`;
   }
-  // 빈 문자열은 값 없는 셀로 둔다(양식 요구사항).
+  // 빈 문자열은 값 없는 셀로 둠(양식 요구사항).
   if (value === "") return `<c r="${ref}" s="${s}"/>`;
   return `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
 }
 
 /**
- * 템플릿의 `Sheet1` 에 데이터 행을 채워 넣은 xlsx 바이트를 만든다.
+ * 템플릿의 `Sheet1` 에 데이터 행을 채워 넣은 xlsx 바이트를 만듦
  *
  * @param templatePath 원본 양식 경로 (repo 기준 상대 경로)
  * @param rows 2행부터 넣을 값들. 각 행은 A~N 순서의 14개 값.
@@ -56,7 +56,7 @@ export function fillTemplateSheet1(templatePath: string, rows: CellValue[][]): U
   const sheetKey = "xl/worksheets/sheet1.xml";
   const sheetXml = strFromU8(files[sheetKey]);
 
-  // 헤더(1행)는 sharedStrings 를 참조하므로 원본 그대로 둔다.
+  // 헤더(1행)는 sharedStrings 를 참조하므로 원본 그대로 둠
   const headerMatch = sheetXml.match(/<row r="1"[\s\S]*?<\/row>/);
   if (!headerMatch) {
     throw new Error("양식의 헤더 행(1행)을 찾지 못했습니다. 템플릿이 바뀌었는지 확인하세요.");

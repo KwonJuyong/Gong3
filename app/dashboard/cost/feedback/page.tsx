@@ -44,9 +44,9 @@ export default async function FeedbackAnalysisPage() {
 
       <main className="max-w-[1100px] mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div>
-          <h1 className="text-xl font-bold text-[var(--foreground)]">LLM 피드백 분석</h1>
+          <h1 className="text-xl font-bold text-[var(--foreground)]">AI 피드백 분석</h1>
           <p className="text-sm text-[var(--muted)] mt-1">
-            평가 서술형 응답을 LLM이 자동 분류합니다. (카테고리·심각도 분류는 LLM 모듈 연결 후 활성화)
+            평가 서술형 응답을 AI가 자동 분류합니다. (카테고리·심각도 분류는 AI 기능 연결 후 활성화)
           </p>
         </div>
 
@@ -55,20 +55,19 @@ export default async function FeedbackAnalysisPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-[var(--foreground)]">카테고리 · 심각도 분포</h3>
             <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--warning-light)] text-[var(--warning)]">
-              LLM 분류 대기
+              AI 분류 대기
             </span>
           </div>
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <p className="text-3xl font-bold text-[var(--foreground)]">{feedbacks.length}건</p>
             <p className="text-sm text-[var(--muted)] mt-1">수집된 서술형 응답</p>
             <p className="text-xs text-[var(--gray-500)] mt-3 max-w-md">
-              LLM 자동 분류 모듈(루브릭 기반 채점·카테고리 분류)이 연결되면 카테고리별 분포와
+              AI 자동 분류 기능(루브릭 기반 채점·카테고리 분류)이 연결되면 카테고리별 분포와
               심각도 요약이 여기에 표시됩니다.
             </p>
           </div>
         </section>
 
-        {/* 피드백 원문 표 */}
         <section className="bg-white rounded-[var(--radius-xl)] overflow-hidden">
           <div className="px-5 py-4 border-b border-[var(--gray-100)] flex items-center justify-between">
             <div>

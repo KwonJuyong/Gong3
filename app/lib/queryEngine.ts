@@ -11,14 +11,14 @@ import {
 } from "./queryPolicy";
 
 /**
- * 동적 질의 엔진. LLM 이 만든 QuerySpec 을 검증하고 실행한다.
- * 메타데이터에 있는 모델·필드라면 코드 수정 없이 새 질의를 처리할 수 있다.
+ * 동적 질의 엔진. LLM 이 만든 QuerySpec 을 검증하고 실행함
+ * 메타데이터에 있는 모델·필드라면 코드 수정 없이 새 질의를 처리할 수 있음
  *
- * 읽기 전용은 구조로 보장한다. Prisma delegate 의 count·groupBy·findMany·aggregate 만
- * 바인딩하고 raw 질의나 쓰기 메서드는 이 모듈에 두지 않는다.
+ * 읽기 전용은 구조로 보장함. Prisma delegate 의 count·groupBy·findMany·aggregate 만
+ * 바인딩하고 raw 질의나 쓰기 메서드는 이 모듈에 두지 않음
  */
 
-// 읽기 전용 델리게이트. 이 네 메서드 외에는 타입상으로도 접근할 수 없다.
+// 읽기 전용 델리게이트. 이 네 메서드 외에는 타입상으로도 접근할 수 없음
 type ReadDelegate = {
   count: (a: unknown) => Promise<number>;
   groupBy: (a: unknown) => Promise<Array<Record<string, unknown>>>;
@@ -37,18 +37,14 @@ function readDelegate(modelKey: string): ReadDelegate | null {
   };
 }
 
-// ---------------------------------------------------------------------------
 // 결과 건수 상한
-// ---------------------------------------------------------------------------
 
-/** 목록 조회 1회 상한. 초과하면 자르고 안내를 함께 돌려준다. */
+/** 목록 조회 1회 상한. 초과하면 자르고 안내를 함께 돌려줌 */
 export const MAX_ROWS = 100;
-/** 추이 집계를 위해 읽어올 수 있는 최대 행 수. 여기서 잘리면 결과에 표시한다. */
+/** 추이 집계를 위해 읽어올 수 있는 최대 행 수. 여기서 잘리면 결과에 표시함 */
 export const MAX_SCAN_ROWS = 20000;
 
-// ---------------------------------------------------------------------------
-// where 정제: 화이트리스트 밖의 조건은 버린다
-// ---------------------------------------------------------------------------
+// where 정제: 화이트리스트 밖의 조건은 버림
 
 function opsFor(type: FType): Set<string> {
   if (type === "string")
@@ -110,8 +106,8 @@ function buildFieldCond(type: FType, val: unknown): unknown {
 }
 
 /**
- * where 절을 화이트리스트로 정제한다.
- * DB 없이 테스트하려고 export 한다(scripts/query-selftest.mjs). 앱 코드는 runQuery 를 쓴다.
+ * where 절을 화이트리스트로 정제함
+ * DB 없이 테스트하려고 export 함(scripts/query-selftest.mjs). 앱 코드는 runQuery 를 씀
  */
 export function sanitizeWhere(
   fields: Map<string, FieldMeta>,
@@ -135,7 +131,7 @@ export function sanitizeWhere(
       if (Object.keys(sub).length) out[k] = sub;
       continue;
     }
-    // 차단 컬럼은 조건으로도 쓸 수 없다(where 로 한 자리씩 추측할 수 있으므로).
+    // 차단 컬럼은 조건으로도 쓸 수 없음(where 로 한 자리씩 추측할 수 있으므로).
     if (isDeniedColumn(k)) continue;
     const f = fields.get(k);
     if (f) {
@@ -153,9 +149,7 @@ export function sanitizeWhere(
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // 질의 명세
-// ---------------------------------------------------------------------------
 
 export type QueryMode = "count" | "list" | "groupBy" | "crosstab" | "trend" | "aggregate";
 export type MetricFn = "count" | "sum" | "avg" | "min" | "max";
@@ -232,20 +226,18 @@ function asObj(v: unknown): unknown {
   return v;
 }
 
-// ---------------------------------------------------------------------------
 // 실행
-// ---------------------------------------------------------------------------
 
 /**
- * 질의를 검증하고 실행한다.
+ * 질의를 검증하고 실행함
  *
- * 권한 판정(resolveAccess)은 Prisma 호출 전에 끝나므로 거부되면 DB 에 닿지 않는다.
+ * 권한 판정(resolveAccess)은 Prisma 호출 전에 끝나므로 거부되면 DB 에 닿지 않음
  */
-export async function runQuery(roleRaw: string, spec: QuerySpec): Promise<QueryOutput> {
+export async function runQuery(roleRaw: string, spec: QuerySpec, userId?: string): Promise<QueryOutput> {
   const role: Role = normalizeRole(roleRaw);
   const modelKey = String(spec.model || "");
 
-  const access = resolveAccess(role, modelKey);
+  const access = resolveAccess(role, modelKey, userId);
   if (!access.ok) return { ok: false, policy: access.policyId, reason: access.reason };
 
   const delegate = readDelegate(modelKey);
@@ -256,7 +248,7 @@ export async function runQuery(roleRaw: string, spec: QuerySpec): Promise<QueryO
   const relations = new Set(Object.keys(meta.relations ?? {}));
   const notes: string[] = [];
 
-  // 비관리자 행 필터는 사용자 where 와 AND 로 묶는다(spread 로 합치면 덮어쓸 수 있다).
+  // 비관리자 행 필터는 사용자 where 와 AND 로 묶음(spread 로 합치면 덮어쓸 수 있음).
   const sanitized = sanitizeWhere(fields, relations, asObj(spec.where));
   const where = rowFilter ? { AND: [rowFilter, sanitized] } : sanitized;
   const mode: QueryMode = (spec.mode as QueryMode) || "list";
@@ -320,7 +312,7 @@ export async function runQuery(roleRaw: string, spec: QuerySpec): Promise<QueryO
       return { ok: false, policy: policyId, reason: "마스킹 대상 필드로는 교차분석을 할 수 없습니다." };
 
     const raw = await delegate.groupBy({ by: [f1n, f2n], where, _count: { _all: true } });
-    // 두 번째 기준의 값들을 열로 편다.
+    // 두 번째 기준의 값들을 열로 폄
     const colVals = [...new Set(raw.map((r) => String(fmtKst(r[f2n]) ?? "(없음)")))].sort();
     const byRow = new Map<string, Record<string, unknown>>();
     for (const r of raw) {
@@ -353,7 +345,7 @@ export async function runQuery(roleRaw: string, spec: QuerySpec): Promise<QueryO
       return { ok: false, policy: policyId, reason: `기간 추이에 쓸 날짜 필드가 없습니다: ${dateFieldName || "(지정 안 됨)"}` };
 
     // Prisma groupBy 로는 날짜 절단을 할 수 없고 raw SQL 은 쓰지 않으므로,
-    // 날짜 컬럼만 읽어 JS 에서 묶는다. 읽는 행 수에 상한을 두고 잘리면 알린다.
+    // 날짜 컬럼만 읽어 JS 에서 묶음. 읽는 행 수에 상한을 두고 잘리면 알림
     const scan = await delegate.findMany({
       where,
       select: { [dateFieldName]: true },
@@ -395,7 +387,7 @@ export async function runQuery(roleRaw: string, spec: QuerySpec): Promise<QueryO
   if (ob && fields.has(String(ob.field)))
     orderBy = { [String(ob.field)]: ob.direction === "asc" ? "asc" : "desc" };
 
-  // 상한 초과 여부를 알기 위해 한 건 더 읽는다.
+  // 상한 초과 여부를 알기 위해 한 건 더 읽음
   const raw = await delegate.findMany({ where, select, take: take + 1, orderBy });
   const truncated = raw.length > take;
   if (truncated) notes.push(`결과가 ${take}건을 넘어 잘라서 보여줍니다. 조건을 좁히면 전체를 볼 수 있습니다.`);

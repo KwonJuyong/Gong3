@@ -6,8 +6,8 @@ import AuditTable, { type AuditRow } from "./AuditTable";
 export const metadata = { title: "조회 감사 로그" };
 
 /**
- * AI 도우미 질의 감사 로그(ADMIN 전용). 누가 무엇을 조회했는지 확인한다.
- * 질의 원문은 저장 전에 redactQuery() 로 민감정보를 지우므로 화면에서 다시 가리지 않는다.
+ * AI 도우미 질의 감사 로그(ADMIN 전용). 누가 무엇을 조회했는지 확인함
+ * 질의 원문은 저장 전에 redactQuery() 로 민감정보를 지우므로 화면에서 다시 가리지 않음
  */
 export default async function AuditPage({
   searchParams,
@@ -45,7 +45,7 @@ export default async function AuditPage({
   }
   if (sp.outcome && ["SUCCESS", "BLOCKED", "ERROR"].includes(sp.outcome)) where.outcome = sp.outcome;
 
-  // 요청자는 이름·학번으로 검색해 id 로 바꾼다.
+  // 요청자는 이름·학번으로 검색해 id 로 바꿈
   const actorQuery = (sp.actor || "").trim();
   if (actorQuery) {
     const matched = await prisma.user.findMany({
@@ -58,7 +58,7 @@ export default async function AuditPage({
       select: { id: true },
       take: 200,
     });
-    // 일치하는 사람이 없으면 빈 결과가 나오게 한다(조건을 빼면 전체가 나온다).
+    // 일치하는 사람이 없으면 빈 결과가 나오게 함(조건을 빼면 전체가 나옴).
     where.actorId = { in: matched.map((m) => m.id) };
   }
 

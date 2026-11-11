@@ -1,13 +1,13 @@
 /**
  * 세무 신고 기록(무엇을, 언제, 얼마로 신고했는가).
  *
- * 수정신고가 있으므로 기록한 금액은 고칠 수 있다. 화면은 현재 집계와 다르면 표시만 하고,
- * 실제로 신고를 고쳤는지는 사람만 알기 때문에 자동으로 덮어쓰지 않는다.
+ * 수정신고가 있으므로 기록한 금액은 고칠 수 있음. 화면은 현재 집계와 다르면 표시만 하고,
+ * 실제로 신고를 고쳤는지는 사람만 알기 때문에 자동으로 덮어쓰지 않음
  */
 import { prisma } from "@/app/db";
 import { simpleStatementRows } from "./simpleStatement";
 
-/** 신고 종류. 한 달에 종류마다 한 건이다. */
+/** 신고 종류. 한 달에 종류마다 한 건임 */
 export const FILING_KINDS = {
   WITHHOLDING: { label: "원천세", where: "홈택스", dueDay: 10 },
   LOCAL_TAX: { label: "지방소득세", where: "위택스", dueDay: 10 },
@@ -22,10 +22,10 @@ export function isFilingKind(v: string): v is FilingKind {
   return Object.prototype.hasOwnProperty.call(FILING_KINDS, v);
 }
 
-/** 그 달 지급분의 신고 기한(KST 날짜 문자열). `dueDay 0` 은 다음 달 말일이다. */
+/** 그 달 지급분의 신고 기한(KST 날짜 문자열). `dueDay 0` 은 다음 달 말일임 */
 export function dueDateOf(kind: FilingKind, year: number, month: number): Date {
   const d = FILING_KINDS[kind].dueDay;
-  // 지급월 다음 달의 dueDay. 말일은 다음다음 달 0일로 잡으면 자동으로 계산된다.
+  // 지급월 다음 달의 dueDay. 말일은 다음다음 달 0일로 잡으면 자동으로 계산됨
   return d === 0
     ? new Date(Date.UTC(year, month + 1, 0) - 9 * 3600_000 + 86400_000 - 1)
     : new Date(Date.UTC(year, month, d) - 9 * 3600_000 + 86400_000 - 1);
@@ -51,7 +51,7 @@ export interface FilingRow {
     filedAt: Date;
     amendedAt: Date | null;
   } | null;
-  /** 기록된 값과 현재 집계가 다른 사유. 신고 후 지급이 바뀐 경우로, 수정신고가 필요할 수 있다. */
+  /** 기록된 값과 현재 집계가 다른 사유. 신고 후 지급이 바뀐 경우로, 수정신고가 필요할 수 있음 */
   drift: string | null;
 }
 
@@ -69,9 +69,9 @@ export interface MonthFilingStatus {
   rows: FilingRow[];
 }
 
-const won = (n: number) => n.toLocaleString("ko-KR") + "원";
+import { wonText as won } from "./money";
 
-/** 그 달의 신고 현황. 기록(TaxFiling)과 현재 집계를 비교해 다른 곳을 표시한다. */
+/** 그 달의 신고 현황. 기록(TaxFiling)과 현재 집계를 비교해 다른 곳을 표시함 */
 export async function monthFilingStatus(
   year: number,
   month: number,
@@ -98,7 +98,7 @@ export async function monthFilingStatus(
       if (f.grossAmount !== current.grossAmount) {
         diffs.push(`지급액 ${won(f.grossAmount)} → ${won(current.grossAmount)}`);
       }
-      // 지방소득세 신고에는 소득세 차이를 보이지 않는다.
+      // 지방소득세 신고에는 소득세 차이를 보이지 않음
       if (kind !== "LOCAL_TAX" && f.incomeTax !== current.incomeTax) {
         diffs.push(`소득세 ${won(f.incomeTax)} → ${won(current.incomeTax)}`);
       }
@@ -137,8 +137,8 @@ export async function monthFilingStatus(
 }
 
 /**
- * 지정한 신고가 그 달에 모두 기록됐는지. 리마인더가 알림을 건너뛸지 정하는 데 쓴다.
- * 원천세(홈택스)와 지방소득세(위택스)는 따로 신고하므로 각각 확인한다.
+ * 지정한 신고가 그 달에 모두 기록됐는지. 리마인더가 알림을 건너뛸지 정하는 데 씀
+ * 원천세(홈택스)와 지방소득세(위택스)는 따로 신고하므로 각각 확인함
  */
 export async function isMonthFiled(
   year: number,

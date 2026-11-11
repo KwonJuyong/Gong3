@@ -8,6 +8,7 @@ import { prisma } from "../../db";
 import { type SurveyBlock } from "../../lib/surveyBlocks";
 import { createRewardForSurveyResponse } from "../../lib/rewards";
 import { legacySurveyWhere } from "../../lib/approvals";
+import { scaleRange } from "../../lib/projectQuestions";
 
 const SURVEYS_PATH = "/dashboard/surveys";
 
@@ -17,14 +18,15 @@ async function getMe() {
   return prisma.user.findUnique({ where: { id: userId } });
 }
 
-function parseScore(raw: FormDataEntryValue | null): number | null {
-  if (raw == null) return null;
+/** 척도 범위 안의 정수만 점수로 받음. 범위 밖 값은 리포트 평균을 흔듦 */
+function parseScore(raw: FormDataEntryValue | null, scaleType: string, uiMax?: number): number | null {
+  if (typeof raw !== "string" || !/^-?\d+$/.test(raw.trim())) return null;
   const n = Number(raw);
-  if (!Number.isFinite(n)) return null;
-  return n;
+  const { min, max } = scaleRange(scaleType);
+  return n >= Math.min(min, 1) && n <= Math.max(max, uiMax ?? max) ? n : null;
 }
 
-/** [평가단 응답 제출] 동결된 설문에 1인 1회 응답 */
+/** 동결된 설문에 1인 1회 응답 */
 export async function submitResponseAction(formData: FormData) {
   const me = await getMe();
   if (!me) return;
@@ -32,7 +34,7 @@ export async function submitResponseAction(formData: FormData) {
   const versionId = ((formData.get("versionId") as string) || "").trim();
   if (!versionId) return;
 
-  // 목록·상세와 같은 공개 조건을 서버에서도 확인한다.
+  // 목록·상세와 같은 공개 조건을 서버에서도 확인함
   const version = await prisma.surveyVersion.findFirst({
     where: { id: versionId, ...legacySurveyWhere },
   });
@@ -56,8 +58,8 @@ export async function submitResponseAction(formData: FormData) {
   for (const b of blocks) {
     if (b.kind === "LLM_ADAPTIVE") {
       expected++;
-      const score = parseScore(formData.get(b.itemKey));
-      const text = ((formData.get(`text:${b.itemKey}`) as string) || "").trim() || null;
+      const score = parseScore(formData.get(b.itemKey), b.scaleType);
+      const text = ((formData.get(`text:${b.itemKey}`) as string) || "").trim().slice(0, 5000) || null;
       if (score != null) {
         items.push({
           blockType: "LLM_ADAPTIVE",
@@ -70,7 +72,8 @@ export async function submitResponseAction(formData: FormData) {
     } else if (b.kind === "INSTRUMENT") {
       for (const it of b.items) {
         expected++;
-        const score = parseScore(formData.get(it.itemKey));
+        // 응답 화면이 검증도구를 척도와 무관하게 1~7 칸으로 그림
+        const score = parseScore(formData.get(it.itemKey), b.scaleType, 7);
         if (score != null) {
           items.push({
             blockType: "INSTRUMENT",
@@ -84,7 +87,7 @@ export async function submitResponseAction(formData: FormData) {
     } else if (b.kind === "VIGNETTE") {
       for (const it of b.items) {
         expected++;
-        const score = parseScore(formData.get(it.itemKey));
+        const score = parseScore(formData.get(it.itemKey), b.scaleType);
         if (score != null) {
           items.push({
             blockType: "VIGNETTE",
@@ -116,7 +119,7 @@ export async function submitResponseAction(formData: FormData) {
     redirect(`${SURVEYS_PATH}?error=duplicate`);
   }
 
-  // 유료 평가면 보상(Reward)을 만든다.
+  // 유료 평가면 보상(Reward)을 만듦
   await createRewardForSurveyResponse(responseId);
 
   revalidatePath(SURVEYS_PATH);

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { saveCertReadinessAction } from "./actions";
 import type { CertAnswer } from "@/app/lib/certChecklist";
 
-// 조건부 문항(when)은 함수라 넘길 수 없어서 서버가 걸러낸 데이터만 받는다.
+// 조건부 문항(when)은 함수라 넘길 수 없어서 서버가 걸러낸 데이터만 받음
 export type PlainItem = { id: string; q: string; why: string; basis: string };
 export type PlainGroup = { id: string; title: string; note: string; items: PlainItem[] };
 
@@ -32,11 +32,11 @@ export default function ChecklistForm({
   const [pending, startTransition] = useTransition();
 
   const items = useMemo(() => groups.flatMap((g) => g.items), [groups]);
-  // 점수 대신 미비·미응답 개수만 센다.
+  // 점수 대신 미비·미응답 개수만 셈
   const gaps = items.filter((it) => answers[it.id] === "no");
   const answered = items.filter((it) => answers[it.id]).length;
 
-  // 저장하지 않은 답이 있을 때만 페이지를 떠나기 전에 확인한다.
+  // 저장하지 않은 답이 있을 때만 페이지를 떠나기 전에 확인함
   useEffect(() => {
     if (!dirty) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -60,7 +60,7 @@ export default function ChecklistForm({
 
   return (
     <>
-      {/* 진행 표시. 하단 고정 버튼들과 겹치지 않도록 머리글 아래에 붙인다. */}
+      {/* 진행 표시. 하단 고정 버튼들과 겹치지 않도록 머리글 아래에 붙임 */}
       <div className="sticky top-14 z-30 -mx-6 px-6 py-2.5 bg-[var(--surface)]/95 backdrop-blur border-b border-[var(--gray-200)] flex items-center justify-between gap-3">
         <p className="text-xs text-[var(--muted)] tabular-nums">
           문항 {items.length}개 중 <b className="text-[var(--foreground)]">{answered}개</b> 응답
@@ -140,7 +140,6 @@ export default function ChecklistForm({
           </section>
         ))}
 
-        {/* 결과: 미비 항목 목록 */}
         <section className="bg-white rounded-[var(--radius-xl)] p-6">
           <div className="mb-5">
             <h3 className="text-base font-semibold text-[var(--foreground)]">점검 결과</h3>

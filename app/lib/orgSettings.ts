@@ -1,16 +1,15 @@
 /**
- * 조직 설정(플랫폼 정보). AppSetting 에 키-값으로 저장한다.
- * 편집 화면은 /dashboard/profile?tab=org(ADMIN)이다.
- * 조회·저장만 하고 권한 검사는 서버 액션(app/dashboard/profile/actions.ts)이 한다.
+ * 조직 설정(플랫폼 정보). AppSetting 에 키-값으로 저장함
+ * 편집 화면은 /dashboard/org(ADMIN)임
+ * 조회·저장만 하고 권한 검사는 서버 액션(app/dashboard/profile/actions.ts)이 함
  */
 
 import { prisma } from "../db";
 
-// ─────────────────────────── 견적서 공급자(우리) 정보 ───────────────────────────
 
 /**
- * 견적서의 공급자 정보. 세금계산서는 팝빌에 등록된 회사정보를 쓰지만 견적서는 직접 그린다.
- * 비어 있으면 "-" 로 표시한다.
+ * 견적서의 공급자 정보. 세금계산서는 팝빌에 등록된 회사정보를 쓰지만 견적서는 직접 그림
+ * 비어 있으면 "-" 로 표시함
  */
 const SUPPLIER_KEYS = {
   name: "supplier_name",
@@ -18,7 +17,7 @@ const SUPPLIER_KEYS = {
   ceo: "supplier_ceo",
   addr: "supplier_addr",
   contact: "supplier_contact",
-  /** 직인 이미지 URL. 없으면 직인 없이 발급된다. */
+  /** 직인 이미지 URL. 없으면 직인 없이 발급됨 */
   sealUrl: "supplier_seal_url",
 } as const;
 
@@ -52,7 +51,6 @@ export async function saveQuoteSupplier(input: QuoteSupplier): Promise<void> {
   await writeAll(pairs);
 }
 
-// ─────────────────────────── 플랫폼 입금계좌 ───────────────────────────
 
 const BANK_KEY = "platform_bank";
 const BANK_CODE_KEY = "platform_bank_code"; // 팝빌 계좌조회용 은행코드 (예: 국민 0004)

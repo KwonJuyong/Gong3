@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/app/prisma";
 import { getSessionUserId } from "@/app/session-server";
 
-// 싱글톤은 순환 import 를 피하려고 app/prisma.ts 에 두고 여기서는 재export 한다.
+// 싱글톤은 순환 import 를 피하려고 app/prisma.ts 에 두고 여기서는 재export 함
 export { prisma };
 
 export type ActionState = { error: string | null; success: boolean } | null;

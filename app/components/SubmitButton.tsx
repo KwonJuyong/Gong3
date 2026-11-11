@@ -5,7 +5,7 @@ import { useFormStatus } from "react-dom";
 
 /**
  * 제출 중에는 비활성화하고 「처리 중…」을 보여주는 submit 버튼.
- * 서버 컴포넌트 페이지의 <form action> 안에 그대로 넣을 수 있다.
+ * 서버 컴포넌트 페이지의 <form action> 안에 그대로 넣을 수 있음
  */
 export default function SubmitButton({
   children,

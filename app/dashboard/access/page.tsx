@@ -19,11 +19,11 @@ import type { Prisma } from "@prisma/client";
 export const metadata = { title: "접속 기록" };
 
 /**
- * 접속 현황·접속기록·월 점검(ADMIN). 기록은 app/lib/accessLog.ts 가 남긴다.
+ * 접속 현황·접속기록·월 점검(ADMIN). 기록은 app/lib/accessLog.ts 가 남김
  *
- * 위·변조 방지를 위해 수정·삭제 기능은 두지 않는다(파기는 월 점검 때 자동).
- * 접속기록도 개인정보이므로 이 화면을 연 것도 기록한다.
- * 「최근 활동」은 User.lastSeenAt(5분 간격 갱신)을 기준으로 한 추정값이다.
+ * 위·변조 방지를 위해 수정·삭제 기능은 두지 않음(파기는 월 점검 때 자동).
+ * 접속기록도 개인정보이므로 이 화면을 연 것도 기록함
+ * 「최근 활동」은 User.lastSeenAt(5분 간격 갱신)을 기준으로 한 추정값임
  */
 
 const PER = 50;
@@ -59,7 +59,7 @@ function ago(d: Date | null | undefined): string {
   return `${Math.floor(h / 24)}일 전`;
 }
 
-const ROLE_LABEL: Record<string, string> = { ADMIN: "관리자", DEVELOPER: "개설자", USER: "평가단원" };
+const ROLE_LABEL: Record<string, string> = { ADMIN: "관리자", DEVELOPER: "개설자", USER: "학생 평가자" };
 
 export default async function AccessPage({ searchParams }: { searchParams: Promise<Q> }) {
   const q = await searchParams;
@@ -70,7 +70,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
 
   const tab: "activity" | "log" | "review" = q.tab === "log" || q.tab === "review" ? q.tab : "activity";
 
-  // 접속기록 열람 자체를 남긴다(필터를 같이 적어 무엇을 봤는지 남긴다)
+  // 접속기록 열람 자체를 남김(필터를 같이 적어 무엇을 봤는지 남김)
   await logAccess({
     userId: me.id,
     account: me.email || me.studentId,
@@ -117,7 +117,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
 
         <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: `최근 ${ACTIVE_MIN}분 활동`, value: `${activeUsers}명`, sub: "추정 — 5분 단위로 갱신" },
+            { label: `최근 ${ACTIVE_MIN}분 활동`, value: `${activeUsers}명`, sub: "추정: 5분 단위로 갱신" },
             { label: "오늘 로그인", value: `${todayLogin}회`, sub: "성공" },
             { label: "오늘 로그인 실패", value: `${todayFail}회`, sub: "없는 계정 포함", warn: todayFail >= 20 },
             { label: "오늘 개인정보 처리", value: `${todayPersonal}건`, sub: "남의 정보 조회·출력" },
@@ -158,10 +158,10 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
   );
 }
 
-/* ───────────────────────── 최근 활동 ───────────────────────── */
+const minutesAgo = (mins: number) => new Date(Date.now() - mins * 60000);
 
 async function ActivityTab() {
-  const since = new Date(Date.now() - 24 * 3600e3);
+  const since = minutesAgo(24 * 60);
   const users = await prisma.user.findMany({
     where: { lastSeenAt: { gte: since } },
     orderBy: { lastSeenAt: "desc" },
@@ -176,7 +176,7 @@ async function ActivityTab() {
     select: { userId: true, userAgent: true, createdAt: true, ip: true },
   });
   const loginOf = new Map(lastLogins.map((l) => [l.userId, l]));
-  const activeCut = Date.now() - ACTIVE_MIN * 60000;
+  const activeCut = minutesAgo(ACTIVE_MIN).getTime();
 
   return (
     <section className="bg-white rounded-[var(--radius-xl)] overflow-hidden">
@@ -251,8 +251,6 @@ async function ActivityTab() {
   );
 }
 
-/* ───────────────────────── 접속 기록 ───────────────────────── */
-
 async function LogTab({ q }: { q: Q }) {
   const page = Math.max(1, parseInt(q.page || "1", 10) || 1);
   const where: Prisma.AccessLogWhereInput = {};
@@ -269,7 +267,7 @@ async function LogTab({ q }: { q: Q }) {
     prisma.accessLog.count({ where }),
     prisma.accessLog.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * PER, take: PER }),
   ]);
-  // 대상(정보주체) 이름 — 이 페이지 행에 나온 것만
+  // 대상(정보주체) 이름: 이 페이지 행에 나온 것만
   const subjectIds = [...new Set(rows.map((r) => r.subjectId).filter((v): v is string => !!v))];
   const subjects = subjectIds.length
     ? await prisma.user.findMany({ where: { id: { in: subjectIds } }, select: { id: true, name: true } })
@@ -423,10 +421,8 @@ async function LogTab({ q }: { q: Q }) {
   );
 }
 
-/* ───────────────────────── 월 점검 ───────────────────────── */
-
 async function ReviewTab({ q }: { q: Q }) {
-  // 기본은 지난달(끝난 달을 점검한다)
+  // 기본은 지난달(끝난 달을 점검함)
   const month = q.month && monthRange(q.month) ? q.month : kstMonth(-1);
   const range = monthRange(month)!;
   const [findings, review, recent] = await Promise.all([
@@ -472,8 +468,7 @@ async function ReviewTab({ q }: { q: Q }) {
         </h2>
         <p className="text-xs text-[var(--muted)] mt-1 leading-relaxed">
           자동으로 추린 항목입니다. 판정 기준: 같은 IP 로그인 실패 10회 이상 · 관리자 계정의 처음 보는 IP 로그인 ·
-          하루 5회 이상 개인정보 파일 출력 · 0~6시 개인정보 조회·출력. 없다고 해서 이상이 없다는 뜻은 아닙니다 —
-          「접속 기록」 탭에서 직접 훑어보세요.
+          하루 5회 이상 개인정보 파일 출력 · 0~6시 개인정보 조회·출력. 없다고 해서 이상이 없다는 뜻은 아닙니다. 「접속 기록」 탭에서 직접 훑어보세요.
         </p>
 
         {findings.length === 0 ? (
@@ -528,7 +523,7 @@ async function ReviewTab({ q }: { q: Q }) {
               <textarea
                 name="note"
                 rows={3}
-                placeholder="예) 9/14 심야 출력 3건 — 원천세 신고 마감 작업, 본인 확인함"
+                placeholder="예) 9/14 심야 출력 3건: 원천세 신고 마감 작업, 본인 확인함"
                 className="w-full px-3 py-2 text-sm bg-white border border-[var(--gray-300)] rounded-[var(--radius-md)] outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
               />
             </label>

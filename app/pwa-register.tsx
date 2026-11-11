@@ -5,8 +5,8 @@ import { useCanInstall, promptInstall } from "./pwa-install";
 
 // 서비스워커 등록 + 설치 안내.
 // Android/데스크톱: 설치 프롬프트가 잡히면 좌하단 "앱 설치" 버튼.
-// iOS: 설치 이벤트가 없어(애플 제약) Safari 수동 설치 안내 배너를 띄운다.
-// 프롬프트 이벤트 자체는 pwa-install 스토어가 들고 있다 — NavRail 설치 모달과 공유해야 해서.
+// iOS: 설치 이벤트가 없어(애플 제약) Safari 수동 설치 안내 배너를 띄움
+// 프롬프트 이벤트 자체는 pwa-install 스토어가 들고 있음: NavRail 설치 모달과 공유해야 해서.
 
 export default function PWARegister() {
   const canInstall = useCanInstall();
@@ -32,7 +32,7 @@ export default function PWARegister() {
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-    // 사이트 데이터를 막은 브라우저에선 읽기만으로 예외가 난다 — 루트 레이아웃이라 앱 전체가 죽는다.
+    // 사이트 데이터를 막은 브라우저에선 읽기만으로 예외가 남: 루트 레이아웃이라 앱 전체가 죽음
     let dismissed = false;
     try {
       dismissed = localStorage.getItem("pwa-ios-hint") === "1";

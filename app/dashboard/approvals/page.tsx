@@ -23,12 +23,12 @@ import {
 export const metadata = { title: "평가 승인" };
 
 /**
- * 평가 승인 화면(ADMIN). 문항을 펼쳐 보고 승인·반려한다.
+ * 평가 승인 화면(ADMIN). 문항을 펼쳐 보고 승인·반려함
  *
  * 1. 승인 대기
  * 2. 발주 미연결: 공개됐지만 보상이 생기지 않는 업체·학교 평가(연구비 건 제외)
  *
- * 자금 상태는 판단용으로 표시만 하고 승인을 막지 않는다.
+ * 자금 상태는 판단용으로 표시만 하고 승인을 막지 않음
  */
 
 function seoul(d: Date) {
@@ -41,13 +41,13 @@ function seoul(d: Date) {
 
 const NOTE: Record<string, { text: string; tone: "ok" | "warn" | "mute" }> = {
   approved: { text: "승인했습니다. 학생에게 공개되고 모집 알림이 발송되었습니다.", tone: "ok" },
-  rejected: { text: "반려했습니다. 사유가 생성자에게 전달되었습니다.", tone: "mute" },
-  linked: { text: "발주를 연결했습니다. 기존 응답에 대한 보상은 소급 생성됩니다.", tone: "ok" },
+  rejected: { text: "반려했습니다. 사유가 개설자에게 전달되었습니다.", tone: "mute" },
+  linked: { text: "의뢰를 연결했습니다. 기존 응답에 대한 보상은 소급 생성됩니다.", tone: "ok" },
   funded: { text: "계약 확인을 기록했습니다. (공개 여부와는 무관한 장부 기록입니다)", tone: "ok" },
   already: { text: "이미 처리된 건입니다. 중복 알림은 발송되지 않았습니다.", tone: "warn" },
-  taken: { text: "그 발주는 이미 다른 평가에 연결되어 있습니다.", tone: "warn" },
+  taken: { text: "그 의뢰는 이미 다른 평가에 연결되어 있습니다.", tone: "warn" },
   company: {
-    text: "계약 확인 기록은 학교 건에만 씁니다 — 업체는 발주 화면에서 입금을 확인하고(원장에 함께 기록됩니다), 연구비는 평가 종료 후 노무비로 청구합니다.",
+    text: "계약 확인 기록은 교육기관 건에만 씁니다. 기업은 의뢰 화면에서 입금을 확인하고(원장에 함께 기록됩니다), 연구비는 평가 종료 후 노무비로 청구합니다.",
     tone: "warn",
   },
 };
@@ -152,14 +152,14 @@ export default async function ApprovalsPage({
           </p>
           {p.order ? (
             <p className="text-[var(--muted)]">
-              발주 {p.order.orderNo} · {fundReady ? "입금 확인됨" : "입금 대기"} ·{" "}
+              의뢰 {p.order.orderNo} · {fundReady ? "입금 확인됨" : "입금 대기"} ·{" "}
               {p.order.panelSize}명 × {p.order.rewardPerPerson.toLocaleString("ko-KR")}원
             </p>
           ) : (
             isPayerUs(p.fundingType) && (
               <p className="text-[var(--warning)]">
-                ⚠ 발주가 없습니다 — <strong>공개는 되지만 보상이 생기지 않습니다.</strong>{" "}
-                발주는 나중에 연결할 수 있고, 연결하면 기존 응답분도 소급 생성됩니다.
+                의뢰가 없습니다. <strong>공개는 되지만 보상이 생기지 않습니다.</strong>{" "}
+                의뢰는 나중에 연결할 수 있고, 연결하면 기존 응답분도 소급 생성됩니다.
               </p>
             )
           )}
@@ -170,9 +170,9 @@ export default async function ApprovalsPage({
           )}
           {!isPayerUs(p.fundingType) && (
             <p className="text-[var(--muted)]">
-              지급은 <strong>산학협력단</strong>이 노무비로 합니다 — 보상(Reward)을 만들지 않습니다.
+              지급은 <strong>산학협력단</strong>이 노무비로 합니다. 보상(Reward)을 만들지 않습니다.
               <br />
-              평가가 <strong>끝난 뒤</strong> 노무비 청구가 발주와 정산을 대체하므로, 사전에
+              평가가 <strong>끝난 뒤</strong> 노무비 청구가 의뢰와 정산을 대체하므로, 사전에
               확인할 자금이 없습니다.
             </p>
           )}
@@ -200,7 +200,7 @@ export default async function ApprovalsPage({
                   `「${p.title}」을(를) 승인하고 공개합니다.\n\n` +
                   "· 즉시 학생 전체에게 모집 알림이 나갑니다. 알림은 회수할 수 없습니다.\n" +
                   (!p.order && isPayerUs(p.fundingType)
-                    ? "· 발주가 연결되지 않아 지금은 응답해도 보상이 생기지 않습니다.\n"
+                    ? "· 의뢰가 연결되지 않아 지금은 응답해도 보상이 생기지 않습니다.\n"
                     : "") +
                   "\n정말 승인하시겠습니까?"
                 }
@@ -211,9 +211,9 @@ export default async function ApprovalsPage({
             </form>
             <form action={rejectProjectAction} className="flex items-center gap-2 flex-1 min-w-[260px]">
               <input type="hidden" name="projectId" value={p.id} />
-              <input name="reason" placeholder="반려 사유 (생성자에게 전달됩니다)" className={input} />
+              <input name="reason" placeholder="반려 사유 (개설자에게 전달됩니다)" className={input} />
               <ConfirmButton
-                message={`「${p.title}」을(를) 반려합니다(사유: {reason}).\n\n· 생성자에게 사유와 함께 알림이 갑니다.\n· 다시 공개하려면 생성자가 새로 요청해야 합니다.\n\n정말 반려하시겠습니까?`}
+                message={`「${p.title}」을(를) 반려합니다(사유: {reason}).\n\n· 개설자에게 사유와 함께 알림이 갑니다.\n· 다시 공개하려면 개설자가 새로 요청해야 합니다.\n\n정말 반려하시겠습니까?`}
                 className={dangerBtn}
               >
                 반려
@@ -223,8 +223,8 @@ export default async function ApprovalsPage({
         ) : (
           <div className="mt-4 space-y-3">
             <p className="text-xs text-[var(--muted)] bg-[var(--gray-50)] px-3 py-2 rounded-[var(--radius-md)] leading-relaxed">
-              이 평가는 <strong>이미 공개되어 있습니다.</strong> 발주를 연결하면 정원·1인 보상액의
-              정본이 발주로 넘어가고, 이미 들어온 응답 {p._count.responses}건에 대한 보상이 소급
+              이 평가는 <strong>이미 공개되어 있습니다.</strong> 의뢰를 연결하면 정원·1인 보상액의
+              정본이 의뢰로 넘어가고, 이미 들어온 응답 {p._count.responses}건에 대한 보상이 소급
               생성됩니다.
             </p>
             {linkableOrders.length > 0 ? (
@@ -232,7 +232,7 @@ export default async function ApprovalsPage({
                 <input type="hidden" name="projectId" value={p.id} />
                 <select name="orderId" required className={input} defaultValue="">
                   <option value="" disabled>
-                    연결할 발주를 고르세요
+                    연결할 의뢰를 고르세요
                   </option>
                   {linkableOrders.map((o) => (
                     <option key={o.id} value={o.id}>
@@ -243,26 +243,26 @@ export default async function ApprovalsPage({
                   ))}
                 </select>
                 <ConfirmButton
-                  message={`「${p.title}」에 발주 {orderId} 을(를) 연결합니다.\n\n· 정원·1인 보상액의 기준이 이 발주로 바뀝니다.\n· 이미 들어온 응답 ${p._count.responses}건의 보상이 소급 생성됩니다.\n· 연결은 화면에서 풀 수 없습니다.\n\n정말 연결하시겠습니까?`}
+                  message={`「${p.title}」에 의뢰 {orderId} 을(를) 연결합니다.\n\n· 정원·1인 보상액의 기준이 이 의뢰로 바뀝니다.\n· 이미 들어온 응답 ${p._count.responses}건의 보상이 소급 생성됩니다.\n· 연결은 화면에서 풀 수 없습니다.\n\n정말 연결하시겠습니까?`}
                   className={primaryBtn}
                 >
-                  발주 연결
+                  의뢰 연결
                 </ConfirmButton>
               </form>
             ) : (
               <p className="text-xs text-[var(--warning)] bg-[var(--warning-light)] px-3 py-2 rounded-[var(--radius-md)] leading-relaxed">
-                연결할 수 있는 발주가 없습니다.{" "}
+                연결할 수 있는 의뢰가 없습니다.{" "}
                 <Link href="/dashboard/orders" className="underline font-semibold">
-                  평가 발주
+                  평가 의뢰
                 </Link>
-                에서 먼저 발주를 만드세요.
+                에서 먼저 의뢰를 만드세요.
               </p>
             )}
             {p.fundingType === "UNIVERSITY" && !p.fundConfirmedAt && (
               <form action={confirmFundingAction}>
                 <input type="hidden" name="projectId" value={p.id} />
                 <ConfirmButton
-                  message={`「${p.title}」의 학교 계약서를 확인했다고 기록합니다.\n\n· 확인한 관리자와 시각이 남고, 화면에서 지울 수 없습니다.\n\n정말 기록하시겠습니까?`}
+                  message={`「${p.title}」의 교육기관 계약서를 확인했다고 기록합니다.\n\n· 확인한 관리자와 시각이 남고, 화면에서 지울 수 없습니다.\n\n정말 기록하시겠습니까?`}
                   className={ghostBtn}
                 >
                   계약 확인 기록 (장부용)
@@ -283,8 +283,8 @@ export default async function ApprovalsPage({
         <div>
           <h1 className="text-xl font-bold mt-2 text-[var(--foreground)]">평가 승인</h1>
           <p className="text-sm text-[var(--muted)] mt-1">
-            <strong>승인하면 곧바로 공개</strong>되고 학생에게 모집 알림이 나갑니다. 발주·자금은
-            별개 트랙이라 공개를 막지 않습니다 — 아래 자금 상태를 보고 판단하세요. 승인은 이 건
+            <strong>승인하면 곧바로 공개</strong>되고 학생에게 모집 알림이 나갑니다. 의뢰·자금은
+            별개 트랙이라 공개를 막지 않습니다. 아래 자금 상태를 보고 판단하세요. 승인은 이 건
             하나에만 적용되며 다음 평가는 다시 요청됩니다.
           </p>
         </div>
@@ -323,11 +323,11 @@ export default async function ApprovalsPage({
           <section className="space-y-4">
             <div>
               <h3 className="text-sm font-semibold text-[var(--foreground)]">
-                발주 미연결{" "}
+                의뢰 미연결{" "}
                 <span className="text-[var(--muted)] font-normal">{orderMissing.length}건</span>
               </h3>
               <p className="text-xs text-[var(--muted)] mt-1">
-                공개는 되어 있지만 <strong>보상이 생기지 않는</strong> 업체·학교 평가입니다.
+                공개는 되어 있지만 <strong>보상이 생기지 않는</strong> 기업·교육기관 평가입니다.
                 방치하면 학생이 무보수로 응답합니다.
               </p>
             </div>

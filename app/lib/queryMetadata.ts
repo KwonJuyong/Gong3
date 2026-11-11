@@ -4,16 +4,16 @@ import { maskStudentId } from "./privacy";
 
 /**
  * AI 도우미가 조회할 수 있는 모델·필드·관계 메타데이터.
- * 권한은 queryPolicy.ts, 실행은 queryEngine.ts 에 있다.
+ * 권한은 queryPolicy.ts, 실행은 queryEngine.ts 에 있음
  *
- * 스키마를 바꾸면 여기도 함께 고친다. `npm run check:metadata` 가 스키마와 대조한다.
+ * 스키마를 바꾸면 여기도 함께 고침. `npm run check:metadata` 가 스키마와 대조함
  */
 
 export type FType = "string" | "int" | "float" | "boolean" | "datetime";
 
 export type FieldMeta = {
   type: FType;
-  /** 사람이 읽는 이름. LLM 프롬프트·감사 화면·내보내기 헤더가 같이 쓴다 */
+  /** 사람이 읽는 이름. LLM 프롬프트·감사 화면·내보내기 헤더가 같이 씀 */
   label: string;
   /** ADMIN 에게만 열리는 필드 */
   adminOnly?: boolean;
@@ -23,13 +23,15 @@ export type FieldMeta = {
 
 export type ModelMeta = {
   label: string;
-  /** ADMIN 만 이 모델에 접근할 수 있다 */
+  /** ADMIN 만 이 모델에 접근할 수 있음 */
   adminOnly?: boolean;
   fields: Record<string, FieldMeta>;
-  /** 관계명 → 설명. 존재여부 필터("some"/"none")와 건수 집계에 쓴다 */
+  /** 관계명 → 설명. 존재여부 필터("some"/"none")와 건수 집계에 씀 */
   relations?: Record<string, string>;
-  /** 비관리자 조회에 항상 AND 로 붙는 행 필터. 사용자 where 로 덮을 수 없다. */
+  /** 비관리자 조회에 항상 AND 로 붙는 행 필터. 사용자 where 로 덮을 수 없음 */
   rowFilterForNonAdmin?: Record<string, unknown>;
+  /** 비관리자는 본인 소유 행만. 조회자 id 를 받아 행 필터를 만듦(id 가 없으면 아무 행도 안 맞음). */
+  ownerFilterForNonAdmin?: (userId: string) => Record<string, unknown>;
   /** 기간별 추이의 기본 시간축 */
   dateField?: string;
 };
@@ -79,7 +81,7 @@ export const MODELS: Record<string, ModelMeta> = {
       createdAt: d("생성일"),
     },
     relations: { enrollments: "참여신청", responses: "응답" },
-    // 승인 대기·반려 평가는 비관리자에게 보이지 않는다(화면과 같은 조건).
+    // 승인 대기·반려 평가는 비관리자에게 보이지 않음(화면과 같은 조건).
     rowFilterForNonAdmin: visibleProjectWhere as Record<string, unknown>,
     dateField: "startTime",
   },
@@ -108,6 +110,8 @@ export const MODELS: Record<string, ModelMeta> = {
       createdAt: d("등록일"),
     },
     relations: { surveys: "설문 버전" },
+    // 다른 기업의 의뢰 서비스는 보이지 않음(list_services_surveys 와 같은 규칙).
+    ownerFilterForNonAdmin: (userId) => ({ ownerId: userId }),
     dateField: "createdAt",
   },
   surveyVersion: {
@@ -121,6 +125,7 @@ export const MODELS: Record<string, ModelMeta> = {
       createdAt: d("생성일"),
     },
     relations: { responses: "응답", drafts: "초안" },
+    ownerFilterForNonAdmin: (userId) => ({ service: { ownerId: userId } }),
     dateField: "createdAt",
   },
   surveyResponse: {
@@ -182,7 +187,7 @@ export function getModelMeta(key: string): ModelMeta | undefined {
   return MODELS[key];
 }
 
-/** LLM 에게 넘길 스키마 설명을 메타데이터에서 만든다. */
+/** LLM 에게 넘길 스키마 설명을 메타데이터에서 만듦 */
 export function describeSchemaForLLM(isAdmin: boolean): string {
   const lines: string[] = [];
   for (const [key, m] of Object.entries(MODELS)) {
@@ -201,8 +206,8 @@ export function describeSchemaForLLM(isAdmin: boolean): string {
 }
 
 /**
- * LLM 에게 줄 예시도 역할별로 만든다. 비관리자에게 ADMIN 전용 모델이 보이지 않게 하려는 것이다.
- * npm run test:query 가 이를 확인한다.
+ * LLM 에게 줄 예시도 역할별로 만듦. 비관리자에게 ADMIN 전용 모델이 보이지 않게 하려는 것임
+ * npm run test:query 가 이를 확인함
  */
 export function describeExamplesForLLM(isAdmin: boolean): string {
   const ex = [

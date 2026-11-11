@@ -1,22 +1,19 @@
 import { logPersonalData } from "@/app/lib/accessLog";
 /**
- * 월별 원천징수 명세 (CSV). 신고가 월 단위이므로 지급일(Payout.paidAt) 기준으로 모은다.
+ * 월별 원천징수 명세 (CSV). 신고가 월 단위이므로 지급일(Payout.paidAt) 기준으로 모음
  *
- * 홈택스 변환제출 규격은 아니고, 홈택스 서식에 옮겨 적기 위한 형태다.
- * 주민등록번호가 들어가므로 ADMIN 전용이다.
+ * 홈택스 변환제출 규격은 아니고, 홈택스 서식에 옮겨 적기 위한 형태임
+ * 주민등록번호가 들어가므로 ADMIN 전용임
  */
 import { type NextRequest, NextResponse } from "next/server";
+import { checkLimit } from "@/app/lib/limits";
 import { getSessionUserId } from "@/app/session-server";
 import { prisma } from "../../../../db";
 import { decryptRRN } from "../../../../lib/crypto";
 import { withholdingForReport, INCOME_TYPE_LABEL, type IncomeType } from "../../../../lib/withholding";
+import { csvCell } from "../../../../lib/csv";
 
-function csvCell(v: string | number): string {
-  const s = String(v ?? "");
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-/** KST 기준 그 달의 시작·끝(다음 달 시작)을 UTC 인스턴트로. 한국은 서머타임이 없다. */
+/** KST 기준 그 달의 시작·끝(다음 달 시작)을 UTC 인스턴트로. 한국은 서머타임이 없음 */
 function kstMonthRange(year: number, month: number): { gte: Date; lt: Date } {
   return {
     gte: new Date(Date.UTC(year, month - 1, 1) - 9 * 3600_000),
@@ -39,6 +36,8 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "인증 필요" }, { status: 401 });
   const me = await prisma.user.findUnique({ where: { id: userId } });
   if (!me || me.role !== "ADMIN") return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const rl = checkLimit("adminDocument", me.id);
+  if (rl) return NextResponse.json({ error: rl }, { status: 429 });
 
   const sp = req.nextUrl.searchParams;
   const year = Number.parseInt(sp.get("year") ?? "", 10);
@@ -80,12 +79,12 @@ export async function GET(req: NextRequest) {
     "원천징수계",
     "실지급액",
     "비과세",
-    "발주번호",
+    "의뢰 번호",
     "검증",
   ];
   const lines = [header.map(csvCell).join(",")];
 
-  // 합계는 홈택스 원천세 신고서에 그대로 옮겨 적는 값이라 마지막 줄에 붙인다.
+  // 합계는 홈택스 원천세 신고서에 그대로 옮겨 적는 값이라 마지막 줄에 붙임
   let sumGross = 0;
   let sumIncomeTax = 0;
   let sumLocalTax = 0;
@@ -93,7 +92,7 @@ export async function GET(req: NextRequest) {
 
   for (const p of payouts) {
     const r = p.reward;
-    // 신고액은 실제 지급액이므로 재계산하지 않고 지급 시점 값을 쓴다.
+    // 신고액은 실제 지급액이므로 재계산하지 않고 지급 시점 값을 씀
     const w = withholdingForReport(r);
     sumGross += w.gross;
     sumIncomeTax += w.incomeTax;
@@ -145,7 +144,7 @@ export async function GET(req: NextRequest) {
       .join(","),
   );
 
-  const csv = "﻿" + lines.join("\r\n"); // BOM — 엑셀 한글 깨짐 방지
+  const csv = "﻿" + lines.join("\r\n"); // BOM: 엑셀 한글 깨짐 방지
 
   // 접속기록: 주민등록번호가 담긴 파일 출력
   await logPersonalData(me.id, "EXPORT", `월별 원천징수 명세(주민번호) ${year}-${String(month).padStart(2, "0")}`);

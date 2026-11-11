@@ -1,21 +1,14 @@
 import { logPersonalData } from "@/app/lib/accessLog";
 import { type NextRequest, NextResponse } from "next/server";
+import { checkLimit } from "@/app/lib/limits";
 import { prisma, getSessionUser } from "../../db";
-import { questionKey, commentKey } from "../../lib/projectQuestions";
+import { questionKey, commentKey, type ProjectQuestion } from "../../lib/projectQuestions";
+import { csvCell } from "../../lib/csv";
 
-function csvEscape(v: any) {
-  const s =
-    v === null || v === undefined
-      ? ""
-      : Array.isArray(v)
-        ? v.join(" | ")
-        : typeof v === "object"
-          ? JSON.stringify(v)
-          : String(v);
+type Answers = Record<string, unknown>;
 
-  const needsQuote = /[",\n\r]/.test(s);
-  const escaped = s.replace(/"/g, '""');
-  return needsQuote ? `"${escaped}"` : escaped;
+function csvEscape(v: unknown) {
+  return csvCell(Array.isArray(v) ? v.join(" | ") : v && typeof v === "object" ? JSON.stringify(v) : v);
 }
 
 function safeFileName(name: string) {
@@ -40,6 +33,8 @@ function friendlyType(type: string | undefined): string {
       return "동의척도";
     case "semantic7":
       return "의미변별";
+    case "scale":
+      return "숫자척도";
     case "image":
       return "이미지";
     default:
@@ -53,6 +48,8 @@ export async function GET(req: NextRequest) {
     if (!me) {
       return NextResponse.json({ error: "인증이 필요합니다." }, { status: 401 });
     }
+    const rl = checkLimit("evalExport", me.id);
+    if (rl) return NextResponse.json({ error: rl }, { status: 429 });
 
     const projectId = req.nextUrl.searchParams.get("projectId");
 
@@ -88,15 +85,13 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const questions: any[] = Array.isArray(project.questions)
-      ? (project.questions as any[])
-      : [];
+    const questions = (Array.isArray(project.questions) ? project.questions : []) as unknown as ProjectQuestion[];
 
     const origin = process.env.SITE_URL || "https://evalia.co.kr";
 
-    // 문항 → CSV 열. 응답 키는 제출·리포트와 같은 questionKey() 로 만든다.
-    // 서술형 개선 의견은 text:<itemKey> 로 따로 저장되므로 열을 따로 낸다.
-    const columns: { header: string; read: (a: any) => any }[] = [];
+    // 문항 → CSV 열. 응답 키는 제출·리포트와 같은 questionKey() 로 만듦
+    // 서술형 개선 의견은 text:<itemKey> 로 따로 저장되므로 열을 따로 냄
+    const columns: { header: string; read: (a: Answers) => unknown }[] = [];
 
     questions.forEach((q, i) => {
       const label = q?.label || `${friendlyType(q?.type)} ${i + 1}`;
@@ -123,10 +118,11 @@ export async function GET(req: NextRequest) {
         },
       });
 
-      if (q?.itemKey && q?.comment) {
+      const { itemKey } = q ?? {};
+      if (itemKey && q?.comment) {
         columns.push({
           header: `${label} (개선 의견)`,
-          read: (answers) => answers?.[commentKey(q.itemKey)],
+          read: (answers) => answers?.[commentKey(itemKey)],
         });
       }
     });
@@ -137,7 +133,7 @@ export async function GET(req: NextRequest) {
     rows.push(headers.map(csvEscape).join(","));
 
     for (const r of project.responses) {
-      const answers = (r.answers ?? {}) as any;
+      const answers = (r.answers ?? {}) as Answers;
 
       const row = [
         new Date(r.createdAt).toLocaleString("ko-KR", {

@@ -7,16 +7,16 @@ export const metadata = { title: "이메일 등록" };
 
 /**
  * 로그인한 상태에서 이메일이 없는 계정에 주소를 받는 화면(/email-setup).
- * 이메일 없이 로그인해 둔 세션으로 대시보드에 들어오면 dashboard/layout.tsx 가 여기로 보낸다.
- * 로그인 전 사용자는 로그인 화면의 이메일 등록(migrateToEmailLoginAction)을 쓴다.
+ * 이메일 없이 로그인해 둔 세션으로 대시보드에 들어오면 dashboard/layout.tsx 가 여기로 보냄
+ * 로그인 전 사용자는 로그인 화면의 이메일 등록(migrateToEmailLoginAction)을 씀
  *
- * 세션으로 본인이 확인됐으므로 emailVerifiedAt 은 건드리지 않는다.
- * dashboard/layout 이 이 화면으로 보내므로 /dashboard 아래에 두면 루프가 생긴다.
+ * 세션으로 본인이 확인됐으므로 emailVerifiedAt 은 건드리지 않음
+ * dashboard/layout 이 이 화면으로 보내므로 /dashboard 아래에 두면 루프가 생김
  */
 export default async function EmailSetupPage() {
   const me = await getSessionUser();
   if (!me) redirectToLogin();
-  // 이미 이메일이 있으면 대시보드로 보낸다.
+  // 이미 이메일이 있으면 대시보드로 보냄
   if (me.email) redirect("/dashboard");
 
   return (

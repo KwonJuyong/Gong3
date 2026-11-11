@@ -5,7 +5,7 @@ import { prisma } from "@/app/db";
 import { getSessionUserId } from "@/app/session-server";
 import { sanitizeCertAnswers, type CertServiceFlags } from "@/app/lib/certChecklist";
 
-// 인증 준비 점검 저장. 서비스 소유자 확인은 화면과 별개로 여기서도 한다.
+// 인증 준비 점검 저장. 서비스 소유자 확인은 화면과 별개로 여기서도 함
 
 export type SaveCertResult = { ok: true } | { ok: false; error: string };
 
@@ -30,7 +30,7 @@ export async function saveCertReadinessAction(
       isSafetyCritical: true,
     },
   });
-  // id 존재 여부가 드러나지 않도록 없는 서비스와 다른 사람의 서비스를 같은 문구로 돌려준다.
+  // id 존재 여부가 드러나지 않도록 없는 서비스와 다른 사람의 서비스를 같은 문구로 돌려줌
   if (!service || (service.ownerId !== userId && me.role !== "ADMIN")) {
     return { ok: false, error: "대상 서비스를 찾을 수 없습니다." };
   }
@@ -40,7 +40,7 @@ export async function saveCertReadinessAction(
     hasPersonalData: service.hasPersonalData,
     isSafetyCritical: service.isSafetyCritical,
   };
-  // 활성 문항이 아닌 키와 허용되지 않은 값은 버린다.
+  // 활성 문항이 아닌 키와 허용되지 않은 값은 버림
   const clean = sanitizeCertAnswers(flags, answers);
   const trimmed = note.trim().slice(0, 2000);
 

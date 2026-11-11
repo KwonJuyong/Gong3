@@ -4,8 +4,8 @@ import { useState, useTransition } from "react";
 import { lookupBizAction } from "./actions";
 
 // 발주 폼의 공급받는자(기업) 정보 입력.
-// 사업자번호로 [조회]하면 팝빌에서 상호·대표자·주소를 채운다. 조회에 실패하면 직접 입력한다.
-// 이메일은 조회 결과에 없어 항상 직접 입력한다.
+// 사업자번호로 [조회]하면 팝빌에서 상호·대표자·주소를 채움. 조회에 실패하면 직접 입력함
+// 이메일은 조회 결과에 없어 항상 직접 입력함
 
 export default function BizFields({
   initial,

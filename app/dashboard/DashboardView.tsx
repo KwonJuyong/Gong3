@@ -12,7 +12,6 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  submitResponseAction,
   finishProjectAction,
   createProjectAction,
   createProjectFromServiceAction,
@@ -25,17 +24,18 @@ import {
   sendMessageAction,
   sendProjectAnnouncementAction,
 } from "../actions";
+import CreateSteps from "./services/CreateSteps";
 import RecruitPanel from "./RecruitPanel";
 import EvalForm from "./EvalForm";
 import EvalServiceLink from "./EvalServiceLink";
-import { questionKey, commentKey } from "../lib/projectQuestions";
+import { questionKey, commentKey, type ProjectQuestion } from "../lib/projectQuestions";
 import SubmitButton from "../components/SubmitButton";
 import { confirmSubmit, toast } from "../components/feedback";
 import { useEscape } from "../components/useEscape";
 
 // 수동 생성 폼의 문항 유형. 자동 구성 문항 유형까지 포함한 목록은 app/lib/projectQuestions.ts.
 type QType = "rating" | "text" | "dropdown" | "checkbox" | "image";
-type Question = { id: number; label: string; type: QType; options?: string[] };
+type Question = ProjectQuestion;
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -49,7 +49,7 @@ function timeStrLocal() {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
-/** 평가 상태 → 화면 라벨·색. 상태 표시는 모두 이 함수를 쓴다. */
+/** 평가 상태 → 화면 라벨·색. 상태 표시는 모두 이 함수를 씀 */
 export function statusMeta(status: string): { label: string; cls: string } {
   switch (status) {
     case "PENDING_APPROVAL":
@@ -74,6 +74,7 @@ const QTYPE_LABEL: Record<string, string> = {
   rating: "별점(1~5)",
   likert5: "동의 척도(5점)",
   semantic7: "의미 척도(7점)",
+  scale: "숫자 척도",
   text: "서술형",
   dropdown: "목록에서 1개",
   checkbox: "복수 선택",
@@ -81,9 +82,9 @@ const QTYPE_LABEL: Record<string, string> = {
 };
 
 /** 생성자 정보 표시 컴포넌트 */
-function CreatorBadge({ project }: { project: any }) {
+function CreatorBadge({ project }: { project: DashboardProject }) {
   if (!project.creatorName) return null;
-  const typeLabel = project.creatorUserType === "DEVELOPER" ? "게스트" : project.creatorUserType === "STAFF" ? "교직원" : "";
+  const typeLabel = project.creatorUserType === "DEVELOPER" ? "기업" : project.creatorUserType === "STAFF" ? "교직원" : "";
   const majorLabel = project.creatorMajor || "";
   return (
     <p className="flex items-center gap-1.5 mt-2 text-xs text-[var(--muted)]">
@@ -96,26 +97,76 @@ function CreatorBadge({ project }: { project: any }) {
 }
 
 /**
- * 비용 부담 선택(자동·수동 생성 폼 공용). 생성 방식과는 별개다.
- * 공개 여부와는 무관하고 보상 지급 경로만 정한다.
+ * 비용 부담 선택(자동·수동 생성 폼 공용). 생성 방식과는 별개임
+ * 공개 여부와는 무관하고 보상 지급 경로만 정함
  */
 const FUNDING_OPTIONS = [
   {
     value: "COMPANY",
-    label: "외부 의뢰 — 기업",
+    label: "외부 의뢰형: 기업",
     hint: "평가 의뢰·입금으로 비용이 마련됩니다(선불). 참여 보상은 플랫폼이 지급합니다.",
   },
   {
     value: "UNIVERSITY",
-    label: "외부 의뢰 — 학교·기관 계약",
+    label: "외부 의뢰형: 교육기관 계약",
     hint: "계약으로 진행하고 대금은 검수 후에 들어옵니다(후불). 참여 보상은 플랫폼이 먼저 지급합니다.",
   },
   {
     value: "RESEARCH_FUND",
-    label: "연구과제형 — 연구비",
+    label: "연구과제형: 연구비",
     hint: "평가 의뢰 없이 진행합니다. 평가가 끝난 뒤 참여 보상을 청구하며, 지급은 산학협력단이 합니다.",
   },
 ];
+
+export type DashboardUser = {
+  id: string;
+  studentId: string;
+  name: string;
+  role: string;
+  userType: string;
+};
+
+export type DashboardProject = {
+  id: string;
+  title: string;
+  description: string | null;
+  location: string | null;
+  status: string;
+  startTime: string;
+  endTime: string | null;
+  questions: Question[];
+  link: string | null;
+  creatorId: string | null;
+  creatorName: string | null;
+  creatorMajor: string | null;
+  creatorUserType: string | null;
+  minParticipants: number;
+  maxParticipants: number;
+  capacity: number;
+  rewardPerPerson: number;
+  rejectReason: string | null;
+  enrollmentDeadline: string | null;
+  responseCount: number;
+  enrollmentCount: number;
+  acceptedCount: number;
+  responses: {
+    id: string;
+    userId: string;
+    userName: string | null;
+    userStudentId: string;
+    answers: Record<string, unknown>;
+  }[];
+  enrollments: {
+    id: string;
+    userId: string;
+    userName: string;
+    userStudentId: string;
+    userMajor: string;
+    userResponseCount: number;
+    status: string;
+    createdAt: string;
+  }[];
+};
 
 export type LinkableOrder = {
   id: string;
@@ -166,7 +217,7 @@ function FundingFields({
         <input name="fundRef" placeholder="과제번호 (선택)" aria-label="과제번호" className={box} />
       )}
 
-      {/* 발주는 나중에 연결할 수 있다. 연결 전에는 보상이 생기지 않는다. */}
+      {/* 발주는 나중에 연결할 수 있음. 연결 전에는 보상이 생기지 않음 */}
       {needsOrder &&
         (orders.length > 0 ? (
           <div>
@@ -190,7 +241,7 @@ function FundingFields({
         ) : (
           <p className="text-xs text-[var(--muted)] bg-[var(--gray-50)] px-3 py-2 rounded-[var(--radius-md)] leading-relaxed">
             연결할 평가 의뢰가 없습니다. 평가는 <strong>승인만 되면 공개</strong>되지만, 의뢰가
-            연결되어야 참여 보상이 생깁니다 —{" "}
+            연결되어야 참여 보상이 생깁니다. {" "}
             <Link href="/dashboard/orders" className="underline font-semibold">
               평가 의뢰
             </Link>
@@ -207,8 +258,8 @@ export default function DashboardView({
   confirmedServices = [],
   linkableOrders = [],
 }: {
-  projects: any[];
-  user: any;
+  projects: DashboardProject[];
+  user: DashboardUser;
   confirmedServices?: { id: string; name: string; versionId: string }[];
   /** 아직 평가에 연결되지 않은 내 발주 */
   linkableOrders?: LinkableOrder[];
@@ -221,7 +272,6 @@ export default function DashboardView({
     | "detail"
     | "eval"
     | "result"
-    | "create-choose"
     | "create"
     | "create-auto"
     | "recruit"
@@ -231,20 +281,24 @@ export default function DashboardView({
   const submitted = sp.get("submitted") === "1";
   // 정원이 차서 응답이 거절된 경우.
   const full = sp.get("full") === "1";
-  // 응답 제출 직후(서버 액션이 붙여 보낸다)
+  // 서버 검증에서 응답이 거절된 경우(빈 문항·범위 밖 값)
+  const invalid = sp.get("invalid") === "1";
+  // 신청을 눌렀는데 그 사이 모집이 끝난 경우
+  const enrollClosed = sp.get("enroll") === "closed";
+  // 응답 제출 직후(서버 액션이 붙여 보냄)
   const answered = sp.get("answered");
   const paramDate = sp.get("d") || "";
   const paramTime = sp.get("t") || "";
-  // 서비스 화면에서 "이 서비스로 평가 생성"으로 들어온 경우 해당 서비스를 펼쳐둔다
+  // 평가 만들기 화면에서 서비스를 골라 들어온 경우
   const preselectServiceId = sp.get("s") || "";
 
   const selected = useMemo(() => {
     if (!selectedId) return null;
-    return (projects || []).find((p: any) => p.id === selectedId) || null;
+    return (projects || []).find((p) => p.id === selectedId) || null;
   }, [projects, selectedId]);
 
   const [viewDate, setViewDate] = useState(new Date());
-  // 일정 보기. 기본은 목록이고 달력으로 바꾸면 이 기기에 기억한다.
+  // 일정 보기. 기본은 목록이고 달력으로 바꾸면 이 기기에 기억함
   const [calMode, setCalMode] = useState<"list" | "calendar">("list");
   useEffect(() => {
     try {
@@ -261,7 +315,7 @@ export default function DashboardView({
   const [splitRatio, setSplitRatio] = useState(50); // 좌측 패널 %
   const isDragging = useRef(false);
 
-  // 비용 부담. 자동·수동 생성 폼이 함께 쓴다.
+  // 비용 부담. 자동·수동 생성 폼이 함께 씀
   const [funding, setFunding] = useState("COMPANY");
 
   const [draftQs, setDraftQs] = useState<
@@ -277,7 +331,7 @@ export default function DashboardView({
 
   // 생성 마법사: 4스텝(기본 정보 → 일정·모집 → 평가 항목 → 검토).
   // 모든 스텝의 입력이 한 <form> 안에 남아 있어야 서버 액션에 함께 전송되므로,
-  // 비활성 스텝은 언마운트하지 않고 숨긴다. 따라서 값은 상태로 들고 있는다.
+  // 비활성 스텝은 언마운트하지 않고 숨김. 따라서 값은 상태로 들고 있음
   const [createStep, setCreateStep] = useState(1);
   const stepChangedAt = useRef(0);
   const [createError, setCreateError] = useState("");
@@ -300,7 +354,8 @@ export default function DashboardView({
       setEditDraftQs(
         qs.map((q) => ({
           label: q.label,
-          type: q.type,
+          // 편집기는 수동 문항만 다룸(표준 구성 문항은 잠겨 있음).
+          type: q.type as QType,
           optionsText: (q.options || []).join("\n"),
         }))
       );
@@ -313,7 +368,7 @@ export default function DashboardView({
     setSplitRatio(50);
   }, [view, selectedId]);
 
-  // 생성 뷰 진입 시 마법사를 처음부터. 빈 날짜 모달에서 넘어온 d/t 파라미터를 반영한다.
+  // 생성 뷰 진입 시 마법사를 처음부터. 빈 날짜 모달에서 넘어온 d/t 파라미터를 반영함
   useEffect(() => {
     if (view !== "create") return;
     setCreateStep(1);
@@ -338,14 +393,14 @@ export default function DashboardView({
   function go(url: string) {
     router.push(url, { scroll: false });
   }
-  // 「뒤로」·모달 닫기. 링크로 바로 들어와 이전 화면이 없으면 대시보드로 보낸다.
+  // 「뒤로」·모달 닫기. 링크로 바로 들어와 이전 화면이 없으면 대시보드로 보냄
   const closeByBack = useCallback(() => {
     const cameFromApp = document.referrer.startsWith(window.location.origin);
     if (window.history.length > 1 && cameFromApp) router.back();
     else router.push("/dashboard", { scroll: false });
   }, [router]);
 
-  function openDetail(p: any) {
+  function openDetail(p: DashboardProject) {
     go(`/dashboard?view=detail&p=${p.id}`);
   }
 
@@ -354,7 +409,7 @@ export default function DashboardView({
     go(`/dashboard?view=create&d=${encodeURIComponent(dateYYYYMMDD)}&t=10:00`);
   }
 
-  // 상세 모달: Esc 로 닫고, 떠 있는 동안 뒤 화면이 스크롤되지 않게 한다.
+  // 상세 모달: Esc 로 닫고, 떠 있는 동안 뒤 화면이 스크롤되지 않게 함
   useEscape(view === "detail", closeByBack);
   useEffect(() => {
     if (view !== "detail") return;
@@ -365,16 +420,16 @@ export default function DashboardView({
     };
   }, [view]);
 
-  const canEdit = (p: any) =>
+  const canEdit = (p: DashboardProject) =>
     user.role === "ADMIN" || (p.creatorId && p.creatorId === user.id);
 
-  const canExport = (p: any) =>
+  const canExport = (p: DashboardProject) =>
     user.role === "ADMIN" || (p.creatorId && p.creatorId === user.id);
 
   // 문항 편집기(생성·수정 공용).
   // htmlRequired: 마법사는 숨긴 스텝의 입력도 폼에 남겨 두는데, 숨겨진 입력에 required 가 있으면
-  // 브라우저가 제출을 막으므로 false 로 넘기고 직접 검증한다.
-  // 문항이 하나도 없으면 저장할 수 없어서 마지막 문항은 지울 수 없게 했다.
+  // 브라우저가 제출을 막으므로 false 로 넘기고 직접 검증함
+  // 문항이 하나도 없으면 저장할 수 없어서 마지막 문항은 지울 수 없게 했음
   function renderQuestionBuilder(
     qs: Array<{ label: string; type: QType; optionsText: string }>,
     setQs: Dispatch<
@@ -397,7 +452,7 @@ export default function DashboardView({
     return (
       <div className="border border-[var(--gray-200)] rounded-[var(--radius-lg)] p-4 sm:p-5 space-y-4">
         <div className="flex items-baseline justify-between">
-          <h3 className="text-sm font-semibold text-[var(--foreground)]">평가 항목</h3>
+          <h3 className="text-sm font-semibold text-[var(--foreground)]">평가문항</h3>
           <span className="text-xs text-[var(--muted)]">{qs.length}개</span>
         </div>
 
@@ -418,7 +473,7 @@ export default function DashboardView({
                   );
                 }}
                 placeholder="질문을 입력하세요"
-                aria-label={`${i + 1}번 항목 질문`}
+                aria-label={`${i + 1}번 문항 질문`}
                 required={htmlRequired}
                 className="flex-1 min-w-0 px-3.5 py-2.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors placeholder:text-[var(--gray-400)]"
               />
@@ -428,7 +483,7 @@ export default function DashboardView({
               <select
                 name={`q_type_${i}`}
                 value={q.type}
-                aria-label={`${i + 1}번 항목 응답 방식`}
+                aria-label={`${i + 1}번 문항 응답 방식`}
                 onChange={(e) => {
                   const v = e.target.value as QType;
                   setQs((prev) =>
@@ -445,18 +500,18 @@ export default function DashboardView({
                 <option value="checkbox">보기 중 여러 개 선택</option>
                 <option value="image">이미지 업로드</option>
               </select>
-              <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`${i + 1}번 항목 위로`} className={iconBtn}>
+              <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`${i + 1}번 문항 위로`} className={iconBtn}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6" /></svg>
               </button>
-              <button type="button" onClick={() => move(i, 1)} disabled={i === qs.length - 1} aria-label={`${i + 1}번 항목 아래로`} className={iconBtn}>
+              <button type="button" onClick={() => move(i, 1)} disabled={i === qs.length - 1} aria-label={`${i + 1}번 문항 아래로`} className={iconBtn}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
               </button>
               <button
                 type="button"
                 onClick={() => setQs((prev) => prev.filter((_, idx) => idx !== i))}
                 disabled={qs.length <= 1}
-                aria-label={`${i + 1}번 항목 삭제`}
-                title={qs.length <= 1 ? "항목은 1개 이상 있어야 합니다" : "삭제"}
+                aria-label={`${i + 1}번 문항 삭제`}
+                title={qs.length <= 1 ? "문항은 1개 이상 있어야 합니다" : "삭제"}
                 className={`${iconBtn} hover:text-[var(--danger)] hover:border-[var(--danger)]`}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
@@ -468,7 +523,7 @@ export default function DashboardView({
                 <textarea
                   name={`q_options_${i}`}
                   value={q.optionsText}
-                  aria-label={`${i + 1}번 항목 보기 (한 줄에 하나)`}
+                  aria-label={`${i + 1}번 문항 보기 (한 줄에 하나)`}
                   onChange={(e) => {
                     const v = e.target.value;
                     setQs((prev) =>
@@ -496,18 +551,15 @@ export default function DashboardView({
           }
           className="w-full py-3 rounded-[var(--radius-md)] border border-dashed border-[var(--gray-300)] text-sm font-medium text-[var(--gray-700)] hover:bg-[var(--gray-50)] hover:border-[var(--gray-500)] transition-colors"
         >
-          + 항목 추가
+          + 문항 추가
         </button>
       </div>
     );
   }
 
-  // =========================
-  // EVAL (with split-screen support)
-  // =========================
   if (view === "eval" && selected) {
     // 응답 권한 확인(submitResponseAction 과 같은 조건)
-    const myEnrollment = (selected.enrollments || []).find((e: any) => e.userId === user.id);
+    const myEnrollment = (selected.enrollments || []).find((e) => e.userId === user.id);
     if (selected.status !== "ACTIVE" || myEnrollment?.status !== "ACCEPTED") {
       return (
         <div className="bg-white rounded-[var(--radius-xl)] p-8 text-center">
@@ -524,7 +576,7 @@ export default function DashboardView({
     }
 
     // 기존 응답 확인 (수정 모드)
-    const myResponse = (selected.responses || []).find((r: any) => r.userId === user.id);
+    const myResponse = (selected.responses || []).find((r) => r.userId === user.id);
     const prevAnswers = (myResponse?.answers ?? {}) as Record<string, unknown>;
 
     const toolbar = (
@@ -557,9 +609,9 @@ export default function DashboardView({
 
     const form = (stickyTop: string) => (
       <EvalForm
-        project={{ id: selected.id, title: selected.title, location: selected.location }}
+        project={{ id: selected.id, title: selected.title, location: selected.location ?? undefined }}
         userId={user.id}
-        questions={questions as any}
+        questions={questions}
         prevAnswers={prevAnswers}
         alreadyAnswered={!!myResponse}
         stickyTop={stickyTop}
@@ -592,7 +644,6 @@ export default function DashboardView({
               {form("top-0")}
             </div>
           </div>
-          {/* Drag handle */}
           <div
             role="separator"
             aria-orientation="vertical"
@@ -606,9 +657,9 @@ export default function DashboardView({
             <div className="w-0.5 h-8 bg-[var(--gray-400)] rounded-full" />
           </div>
           <div className="relative" style={{ width: `${100 - splitRatio}%` }}>
-            {/* 프레임 표시를 막는 서비스(X-Frame-Options)는 이 칸이 비어 보이므로 안내한다. */}
+            {/* 프레임 표시를 막는 서비스(X-Frame-Options)는 이 칸이 비어 보이므로 안내함 */}
             <p className="absolute top-0 inset-x-0 z-10 text-xs text-[var(--gray-700)] bg-[var(--gray-50)] border-b border-[var(--gray-200)] px-3 py-1.5">
-              화면이 비어 있으면 그 서비스가 다른 사이트 안에서 열리는 것을 막아 둔 것입니다 —{" "}
+              화면이 비어 있으면 그 서비스가 다른 사이트 안에서 열리는 것을 막아 둔 것입니다. {" "}
               <a href={splitUrl} target="_blank" rel="noopener noreferrer" className="underline font-medium">
                 새 탭에서 열기
               </a>
@@ -633,9 +684,6 @@ export default function DashboardView({
     );
   }
 
-  // =========================
-  // RESULT (creator/admin only)
-  // =========================
   if (view === "result" && selected) {
     if (user.role !== "ADMIN" && user.id !== selected.creatorId) {
       return (
@@ -676,14 +724,14 @@ export default function DashboardView({
         <p className="text-sm text-[var(--muted)] mb-8">결과 · 응답 {selected.responseCount ?? 0}건</p>
 
         <div className="space-y-4">
-          {(questions || []).map((q: any, i: number) => {
+          {(questions || []).map((q, i) => {
             const res = selected.responses || [];
 
-            // 응답 키는 questionKey() 로 만든다(수동은 인덱스, 설문 원본은 itemKey).
+            // 응답 키는 questionKey() 로 만듦(수동은 인덱스, 설문 원본은 itemKey).
             const key = questionKey(q, i);
 
             const scores = res
-              .map((r: any) => Number(r.answers?.[key]))
+              .map((r) => Number(r.answers?.[key]))
               .filter((s: number) => !isNaN(s));
             const avg =
               scores.length > 0
@@ -691,30 +739,32 @@ export default function DashboardView({
                     scores.reduce((a: number, b: number) => a + b, 0) /
                     scores.length
                   ).toFixed(1)
-                : // 응답이 없으면 0.0 대신 표시하지 않는다
+                : // 응답이 없으면 0.0 대신 표시하지 않음
                   "—";
 
-            // 척도 문항은 평균을 그린다. semantic7 은 7점, rating·likert5 는 5점이다.
+            // 척도 문항은 평균을 그림. semantic7 은 7점, rating·likert5 는 5점, scale 은 문항의 범위.
             const isScale =
-              q.type === "rating" || q.type === "likert5" || q.type === "semantic7";
-            const scaleMax = q.type === "semantic7" ? 7 : 5;
+              q.type === "rating" || q.type === "likert5" || q.type === "semantic7" || q.type === "scale";
+            const scaleMin = q.type === "scale" ? (q.scaleMin ?? 1) : 1;
+            const scaleMax = q.type === "scale" ? (q.scaleMax ?? 7) : q.type === "semantic7" ? 7 : 5;
 
-            // 평균만으로는 분포를 알 수 없어 점수별 분포도 그린다.
+            // 평균만으로는 분포를 알 수 없어 점수별 분포도 그림
             const dist: number[] = [];
             if (isScale) {
-              for (let v = 1; v <= scaleMax; v++) {
+              for (let v = scaleMin; v <= scaleMax; v++) {
                 dist.push(scores.filter((s: number) => Math.round(s) === v).length);
               }
             }
 
-            const comments = q.itemKey
+            const { itemKey } = q;
+            const comments = itemKey
               ? res
-                  .map((r: any) => ({
-                    text: String(r.answers?.[commentKey(q.itemKey)] ?? "").trim(),
+                  .map((r) => ({
+                    text: String(r.answers?.[commentKey(itemKey)] ?? "").trim(),
                     userName: r.userName,
                     userStudentId: r.userStudentId,
                   }))
-                  .filter((c: any) => c.text)
+                  .filter((c) => c.text)
               : [];
 
             const counts: Record<string, number> = {};
@@ -759,13 +809,13 @@ export default function DashboardView({
                             <div
                               className="w-full rounded-t-sm bg-[var(--accent)]"
                               style={{
-                                // 0명이어도 막대가 보이도록 최소 높이를 준다.
+                                // 0명이어도 막대가 보이도록 최소 높이를 줌
                                 height: `${Math.max(2, Math.round(ratio * 36))}px`,
                                 opacity: n > 0 ? 1 : 0.15,
                               }}
                             />
                             <span className="text-xs text-[var(--gray-500)]">
-                              {v + 1}
+                              {v + scaleMin}
                             </span>
                           </div>
                         );
@@ -775,7 +825,7 @@ export default function DashboardView({
                     {/* 서술형 개선 의견(text:<itemKey>) */}
                     {comments.length > 0 && (
                       <div className="space-y-1.5 pt-1">
-                        {comments.map((c: any, idx: number) => (
+                        {comments.map((c, idx) => (
                           <div
                             key={idx}
                             className="bg-white px-3.5 py-2.5 rounded-[var(--radius-md)] border border-[var(--gray-200)]"
@@ -807,7 +857,7 @@ export default function DashboardView({
                   </div>
                 ) : q.type === "image" ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {(res || []).map((r: any, idx: number) => {
+                    {(res || []).map((r, idx) => {
                       const url = String(r.answers?.[key] ?? "").trim();
                       if (!url || (!url.startsWith("/uploads/") && !url.startsWith("/api/uploads/"))) return null;
                       return (
@@ -838,7 +888,7 @@ export default function DashboardView({
                         </div>
                       );
                     })}
-                    {(res || []).filter((r: any) => {
+                    {(res || []).filter((r) => {
                       const v = String(r.answers?.[key] ?? "").trim();
                       return v && (v.startsWith("/uploads/") || v.startsWith("/api/uploads/"));
                     }).length === 0 && (
@@ -849,7 +899,7 @@ export default function DashboardView({
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    {(res || []).map((r: any, idx: number) => (
+                    {(res || []).map((r, idx) => (
                       <div
                         key={idx}
                         className="bg-white px-3.5 py-2.5 rounded-[var(--radius-md)] border border-[var(--gray-200)]"
@@ -868,121 +918,50 @@ export default function DashboardView({
     );
   }
 
-  // =========================
-  // RECRUIT (신청자 선발)
-  // =========================
   if (view === "recruit" && selected && canEdit(selected)) {
     return <RecruitPanel project={selected} onBack={closeByBack} isAdmin={user.role === "ADMIN"} />;
   }
 
-  // =========================
-  // CREATE-CHOOSE (평가 만들기: 방식 선택)
-  // =========================
-  // 자동 구성은 조건이 안 돼도 카드를 보여주고, 비활성 상태로 서비스 등록 방법을 안내한다.
-  if (view === "create-choose") {
-    const hasServices = confirmedServices.length > 0;
-    return (
-      <div className="bg-white rounded-[var(--radius-xl)] px-5 sm:px-8 py-6 sm:py-8">
-        <button
-          onClick={closeByBack}
-          className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors mb-6"
-        >
-          &larr; 뒤로
-        </button>
-
-        <h1 className="text-xl font-bold text-[var(--foreground)] mb-2">평가 만들기</h1>
-        <p className="text-sm text-[var(--muted)] mb-6">
-          어떤 방식으로 평가를 만들지 고르세요. 어느 쪽이든 관리자 승인 후에 참여자 모집이 시작됩니다.
-        </p>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div
-            className={`rounded-[var(--radius-lg)] border p-5 flex flex-col ${
-              hasServices ? "border-[var(--accent)]" : "border-[var(--gray-200)] bg-[var(--surface)]"
-            }`}
-          >
-            <h2 className="text-base font-semibold text-[var(--foreground)] mb-1.5">표준 기반 자동 구성</h2>
-            <p className="text-sm text-[var(--gray-700)] leading-relaxed flex-1">
-              등록한 서비스의 <strong>확정된 설문</strong>을 그대로 평가 문항으로 가져옵니다.
-              품질 표준에 맞춘 문항이 들어가므로 하나하나 입력할 필요가 없습니다.
-            </p>
-            {hasServices ? (
-              <button
-                onClick={() => go(`/dashboard?view=create-auto`)}
-                className="mt-4 w-full py-2.5 bg-[var(--accent)] text-white rounded-[var(--radius-md)] font-semibold text-sm hover:bg-[var(--accent-dark)] transition-colors"
-              >
-                서비스 고르기 ({confirmedServices.length})
-              </button>
-            ) : (
-              <div className="mt-4 space-y-2">
-                <p className="text-sm text-[var(--muted)]">확정된 설문이 있는 서비스가 아직 없습니다.</p>
-                <Link
-                  href="/dashboard/services"
-                  className="block text-center w-full py-2.5 rounded-[var(--radius-md)] border border-[var(--gray-300)] text-sm font-medium text-[var(--foreground)] hover:bg-white"
-                >
-                  서비스 등록하고 설문 만들기 →
-                </Link>
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-[var(--radius-lg)] border border-[var(--gray-200)] bg-[var(--surface)] p-5 flex flex-col">
-            <h2 className="text-base font-semibold text-[var(--foreground)] mb-1.5">직접 만들기</h2>
-            <p className="text-sm text-[var(--gray-700)] leading-relaxed flex-1">
-              질문을 직접 씁니다. 별점·서술형·보기 선택·이미지 업로드를 섞어 쓸 수 있습니다.
-            </p>
-            <button
-              onClick={() => go(`/dashboard?view=create`)}
-              className={`mt-4 w-full py-2.5 rounded-[var(--radius-md)] font-semibold text-sm transition-colors ${
-                hasServices
-                  ? "border border-[var(--gray-300)] text-[var(--foreground)] hover:bg-white"
-                  : "bg-[var(--accent)] text-white hover:bg-[var(--accent-dark)]"
-              }`}
-            >
-              직접 만들기
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // =========================
-  // CREATE-AUTO (서비스 설문에서 자동 생성). 수동 생성과 같은 입력 칸·검증을 쓴다.
   if (view === "create-auto") {
     const field =
       "w-full px-3.5 py-2.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors";
     const labelCls = "block text-xs font-medium text-[var(--gray-700)] mb-1.5";
+    // 서비스를 정하고 들어왔으면 그 서비스의 폼만 보여줌
+    const picked = confirmedServices.filter((s) => s.id === preselectServiceId);
+    const autoServices = picked.length > 0 ? picked : confirmedServices;
     return (
       <div className="bg-white rounded-[var(--radius-xl)] px-5 sm:px-8 py-6 sm:py-8">
-        <button
-          onClick={closeByBack}
-          className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors mb-6"
+        <Link
+          href="/dashboard/services"
+          className="inline-block text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors mb-6"
         >
-          &larr; 뒤로
-        </button>
+          &larr; 평가 만들기
+        </Link>
 
-        <h1 className="text-xl font-bold text-[var(--foreground)] mb-2">표준 기반 자동 구성</h1>
+        <h1 className="text-xl font-bold text-[var(--foreground)] mb-2">일정과 인원 정하기</h1>
+        <div className="mb-3">
+          <CreateSteps current={3} />
+        </div>
         <p className="text-sm text-[var(--muted)] mb-6">
-          서비스를 고르면 그 서비스의 확정된 설문이 평가 문항이 됩니다. 일정과 인원만 정하세요.
+          서비스의 확정된 평가문항이 이 평가의 문항이 됩니다. 일정과 인원만 정해 주세요.
         </p>
 
         {confirmedServices.length === 0 ? (
           <div className="text-center py-10 space-y-3">
-            <p className="text-sm text-[var(--muted)]">확정된 설문이 있는 서비스가 없습니다.</p>
+            <p className="text-sm text-[var(--muted)]">확정된 평가문항이 있는 서비스가 없습니다.</p>
             <Link
               href="/dashboard/services"
               className="inline-block text-sm px-4 py-2 rounded-[var(--radius-md)] border border-[var(--gray-300)] text-[var(--foreground)] hover:bg-[var(--gray-50)] transition-colors"
             >
-              서비스 등록하고 설문 만들기 →
+              서비스 등록하고 평가문항 만들기 →
             </Link>
           </div>
         ) : (
           <div className="space-y-4">
-            {confirmedServices.map((svc) => (
+            {autoServices.map((svc) => (
               <details
                 key={svc.id}
-                open={svc.id === preselectServiceId || confirmedServices.length === 1}
+                open={autoServices.length === 1}
                 className="group border border-[var(--gray-200)] rounded-[var(--radius-xl)] overflow-hidden"
               >
                 <summary className="flex items-center justify-between gap-3 px-5 py-4 cursor-pointer hover:bg-[var(--surface)] transition-colors list-none">
@@ -1068,7 +1047,7 @@ export default function DashboardView({
                     승인 요청하기
                   </SubmitButton>
                   <p className="text-xs text-[var(--muted)] text-center">
-                    관리자가 승인하면 모집이 시작되고 참여자에게 알림이 갑니다.
+                    관리자가 승인하면 모집이 시작되고 평가자에게 알림이 갑니다.
                   </p>
                 </form>
               </details>
@@ -1079,17 +1058,14 @@ export default function DashboardView({
     );
   }
 
-  // =========================
-  // CREATE (수동)
-  // =========================
   if (view === "create") {
-    const STEPS = ["기본 정보", "일정·모집", "평가 항목", "검토"];
+    const STEPS = ["기본 정보", "일정·모집", "평가문항", "검토"];
     const field = "w-full px-3.5 py-2.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors placeholder:text-[var(--gray-400)]";
     const labelCls = "block text-xs font-medium text-[var(--gray-700)] mb-1.5";
     const set = (k: keyof typeof createForm, v: string) =>
       setCreateForm((prev) => ({ ...prev, [k]: v }));
 
-    // 스텝별 검증. 숨겨진 입력에는 required 를 걸 수 없으므로 직접 확인한다.
+    // 스텝별 검증. 숨겨진 입력에는 required 를 걸 수 없으므로 직접 확인함
     const stepError = (n: number): string => {
       if (n === 1) {
         return createForm.title.trim() ? "" : "평가 제목을 입력하세요.";
@@ -1103,13 +1079,13 @@ export default function DashboardView({
         return "";
       }
       if (n === 3) {
-        if (draftQs.length === 0) return "평가 항목을 최소 1개 추가하세요.";
+        if (draftQs.length === 0) return "평가문항을 최소 1개 추가하세요.";
         for (let i = 0; i < draftQs.length; i++) {
           const q = draftQs[i];
-          if (!q.label.trim()) return `${i + 1}번 항목의 제목을 입력하세요.`;
+          if (!q.label.trim()) return `${i + 1}번 문항의 제목을 입력하세요.`;
           if (q.type === "dropdown" || q.type === "checkbox") {
             const opts = q.optionsText.split("\n").filter((s) => s.trim());
-            if (opts.length < 2) return `${i + 1}번 항목의 선택지를 2개 이상 입력하세요.`;
+            if (opts.length < 2) return `${i + 1}번 문항의 선택지를 2개 이상 입력하세요.`;
           }
         }
       }
@@ -1127,9 +1103,9 @@ export default function DashboardView({
       setCreateError("");
       setCreateStep((s) => s - 1);
     };
-    // 검토 단계에서 제출하기 전에 앞선 스텝을 다시 확인한다(뒤로 가서 지웠을 수 있다)
+    // 검토 단계에서 제출하기 전에 앞선 스텝을 다시 확인함(뒤로 가서 지웠을 수 있음)
     const guardSubmit = (e: React.FormEvent) => {
-      // 「다음」과 「승인 요청하기」가 같은 자리라, 단계가 바뀐 직후의 제출은 더블클릭으로 보고 무시한다.
+      // 「다음」과 「승인 요청하기」가 같은 자리라, 단계가 바뀐 직후의 제출은 더블클릭으로 보고 무시함
       if (Date.now() - stepChangedAt.current < 700) {
         e.preventDefault();
         return;
@@ -1155,16 +1131,16 @@ export default function DashboardView({
 
     return (
       <div className="bg-white rounded-[var(--radius-xl)] px-5 sm:px-8 py-6 sm:py-8">
+        {/* 달력의 날짜에서 들어오면 달력으로, 그 외에는 평가 만들기로 돌아감 */}
         <button
-          onClick={closeByBack}
+          onClick={paramDate ? closeByBack : () => go("/dashboard/services")}
           className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors mb-6"
         >
-          &larr; 뒤로
+          &larr; {paramDate ? "뒤로" : "평가 만들기"}
         </button>
 
         <h1 className="text-xl font-bold text-[var(--foreground)] mb-6">평가 직접 만들기</h1>
 
-        {/* 스텝 표시 */}
         <div className="flex items-center mb-8">
           {STEPS.map((label, i) => {
             const n = i + 1;
@@ -1205,7 +1181,6 @@ export default function DashboardView({
         </div>
 
         <form action={createProjectAction} onSubmit={guardSubmit} className="space-y-4">
-          {/* 1. 기본 정보 */}
           <div className={createStep === 1 ? "space-y-4" : "hidden"}>
             <div>
               <label htmlFor="create-title" className={labelCls}>평가 제목</label>
@@ -1256,7 +1231,6 @@ export default function DashboardView({
             <FundingFields value={funding} onChange={setFunding} orders={linkableOrders} />
           </div>
 
-          {/* 2. 일정·모집 */}
           <div className={createStep === 2 ? "space-y-4" : "hidden"}>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1287,7 +1261,7 @@ export default function DashboardView({
               <div>
                 <h3 className="text-sm font-semibold text-[var(--foreground)]">참여 신청 설정</h3>
                 <p className="text-xs text-[var(--muted)] mt-1">
-                  평가는 모집 상태로 만들어집니다. 신청은 정원을 넘어서도 받고, 이후 신청자 중에서 참여자를 선발합니다.
+                  평가는 모집 상태로 만들어집니다. 신청은 정원을 넘어서도 받고, 이후 신청자 중에서 평가자를 선발합니다.
                 </p>
               </div>
 
@@ -1345,12 +1319,10 @@ export default function DashboardView({
             </div>
           </div>
 
-          {/* 3. 평가 항목 */}
           <div className={createStep === 3 ? "" : "hidden"}>
             {renderQuestionBuilder(draftQs, setDraftQs, false)}
           </div>
 
-          {/* 4. 검토 */}
           {createStep === 4 && (
             <div className="space-y-4">
               <div className="border border-[var(--gray-200)] rounded-[var(--radius-lg)] divide-y divide-[var(--gray-100)]">
@@ -1380,7 +1352,7 @@ export default function DashboardView({
 
               <div className="border border-[var(--gray-200)] rounded-[var(--radius-lg)] p-4">
                 <p className="text-xs font-semibold text-[var(--gray-600)] mb-2">
-                  평가 항목 {draftQs.length}개
+                  평가문항 {draftQs.length}개
                 </p>
                 <ol className="space-y-1.5">
                   {draftQs.map((q, i) => (
@@ -1396,7 +1368,7 @@ export default function DashboardView({
               </div>
 
               <p className="text-xs text-[var(--muted)] text-center">
-                요청하면 관리자 승인 대기 상태가 됩니다. 승인되면 모집이 시작되고 참여자에게 알림이 갑니다.
+                요청하면 관리자 승인 대기 상태가 됩니다. 승인되면 모집이 시작되고 평가자에게 알림이 갑니다.
               </p>
             </div>
           )}
@@ -1407,7 +1379,6 @@ export default function DashboardView({
             </p>
           )}
 
-          {/* 이동 버튼 */}
           <div className="flex gap-2 pt-2">
             {createStep > 1 && (
               <button
@@ -1442,9 +1413,6 @@ export default function DashboardView({
     );
   }
 
-  // =========================
-  // EDIT
-  // =========================
   if (view === "edit" && selected) {
     const st = new Date(selected.startTime);
     const editDate = `${st.getFullYear()}-${pad2(st.getMonth() + 1)}-${pad2(
@@ -1456,9 +1424,11 @@ export default function DashboardView({
     const labelCls = "block text-xs font-medium text-[var(--gray-700)] mb-1.5";
 
     // 문항 잠금(updateProjectAction 과 같은 조건): 응답이 있거나 자동 구성 문항(itemKey)이 있으면
-    // 편집기를 잠근다.
-    const qs = (selected.questions || []) as any[];
-    const locked = (selected.responseCount ?? 0) > 0 || qs.some((q) => !!q?.itemKey);
+    // 편집기를 잠금
+    const qs = selected.questions;
+    const approvedLock =
+      user.role !== "ADMIN" && selected.status !== "PENDING_APPROVAL" && selected.status !== "REJECTED";
+    const locked = approvedLock || (selected.responseCount ?? 0) > 0 || qs.some((q) => !!q?.itemKey);
 
     return (
       <div className="bg-white rounded-[var(--radius-xl)] px-5 sm:px-8 py-6 sm:py-8">
@@ -1486,7 +1456,7 @@ export default function DashboardView({
               id="edit-description"
               name="description"
               defaultValue={selected.description || ""}
-              placeholder="참여자에게 보일 설명"
+              placeholder="평가자에게 보일 설명"
               className={`${field} h-20 resize-y`}
             />
           </div>
@@ -1500,13 +1470,17 @@ export default function DashboardView({
               placeholder="https://..."
               type="url"
               inputMode="url"
-              className={field}
+              readOnly={approvedLock}
+              className={`${field}${approvedLock ? " bg-[var(--gray-50)] text-[var(--muted)]" : ""}`}
             />
+            {approvedLock && (
+              <p className="mt-1 text-xs text-[var(--muted)]">승인된 평가의 서비스 주소는 관리자에게 변경을 요청해 주세요.</p>
+            )}
           </div>
 
           <div>
             <label htmlFor="edit-location" className={labelCls}>평가 장소</label>
-            <input id="edit-location" name="location" defaultValue={selected.location} placeholder="미정이면 비워 두세요" className={field} />
+            <input id="edit-location" name="location" defaultValue={selected.location ?? ""} placeholder="미정이면 비워 두세요" className={field} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -1523,13 +1497,15 @@ export default function DashboardView({
           {locked ? (
             <div className="border border-[var(--gray-200)] rounded-[var(--radius-lg)] p-4 sm:p-5">
               <div className="flex items-baseline justify-between mb-2">
-                <h3 className="text-sm font-semibold text-[var(--foreground)]">평가 항목</h3>
+                <h3 className="text-sm font-semibold text-[var(--foreground)]">평가문항</h3>
                 <span className="text-xs text-[var(--muted)]">{qs.length}개 · 수정 불가</span>
               </div>
               <p className="text-sm text-[var(--gray-700)] bg-[var(--warning-light)] px-3 py-2 rounded-[var(--radius-md)] mb-3 leading-relaxed">
                 {(selected.responseCount ?? 0) > 0
                   ? `이미 응답이 ${selected.responseCount}건 있어 문항을 바꿀 수 없습니다. 바꾸면 기존 응답이 다른 문항에 연결됩니다.`
-                  : "표준 기반으로 구성된 문항은 여기서 고칠 수 없습니다. 서비스의 설문을 고친 뒤 새로 만들어 주세요."}
+                  : approvedLock
+                    ? "승인된 평가는 관리자가 검토한 문항으로 진행됩니다. 문항 변경이 필요하면 관리자에게 요청해 주세요."
+                    : "표준 기반으로 구성된 문항은 여기서 고칠 수 없습니다. 서비스의 평가문항을 고친 뒤 새로 만들어 주세요."}
               </p>
               <ol className="space-y-1 text-sm text-[var(--gray-700)] max-h-60 overflow-y-auto">
                 {qs.map((q, i) => (
@@ -1555,21 +1531,19 @@ export default function DashboardView({
     );
   }
 
-  // =========================
   // LIST (Calendar + detail modal)
-  // =========================
   const canCreate = user.role !== "USER";
   const sameDay = (iso: string, y: number, m: number, d: number) => {
     const t = new Date(iso);
     return t.getFullYear() === y && t.getMonth() === m && t.getDate() === d;
   };
-  // 이번 달 평가(날짜순). 폰에서는 달력 칸이 좁아 이 목록을 보여준다.
+  // 이번 달 평가(날짜순). 폰에서는 달력 칸이 좁아 이 목록을 보여줌
   const monthEvents = (projects || [])
-    .filter((p: any) => {
+    .filter((p) => {
       const t = new Date(p.startTime);
       return t.getFullYear() === year && t.getMonth() === month;
     })
-    .sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
   const now = new Date();
   const navBtn =
     "w-9 h-9 rounded-[var(--radius-md)] border border-[var(--gray-200)] flex items-center justify-center text-[var(--gray-700)] hover:bg-[var(--gray-50)] transition-colors";
@@ -1579,7 +1553,7 @@ export default function DashboardView({
       {/* 만든 평가는 관리자 승인 후 공개된다는 안내 */}
       {submitted && (
         <div role="status" className="rounded-[var(--radius-md)] bg-[var(--warning-light)] text-[var(--gray-800)] text-sm px-4 py-3">
-          <strong>승인 요청이 접수되었습니다.</strong> 관리자가 내용을 확인한 뒤 참여자
+          <strong>승인 요청이 접수되었습니다.</strong> 관리자가 내용을 확인한 뒤 평가자
           모집이 시작됩니다. 승인·반려 결과는 알림으로 알려드립니다.
         </div>
       )}
@@ -1589,6 +1563,12 @@ export default function DashboardView({
           {answered !== "updated" && " 보상이 있는 평가는 검수 후 지급됩니다."}
         </div>
       )}
+      {invalid && (
+        <div role="alert" className="rounded-[var(--radius-md)] bg-[var(--danger-light)] text-[var(--danger)] text-sm px-4 py-3">
+          <strong>응답을 저장하지 못했어요.</strong> 빠진 문항이나 올바르지 않은 값이 있어요. 평가를 다시 열어
+          확인한 뒤 제출해 주세요. 작성하던 내용은 이 기기에 남아 있어요.
+        </div>
+      )}
       {full && (
         <div role="alert" className="rounded-[var(--radius-md)] bg-[var(--danger-light)] text-[var(--danger)] text-sm px-4 py-3">
           <strong>모집 정원이 찼습니다.</strong> 응답이 저장되지 않았습니다. 다른 평가를
@@ -1596,7 +1576,6 @@ export default function DashboardView({
         </div>
       )}
 
-      {/* Calendar */}
       <section aria-labelledby="cal-h" className="bg-white rounded-[var(--radius-xl)] p-5">
         <div className="flex flex-wrap justify-between items-center gap-3 mb-3">
           <div className="flex items-center gap-1.5">
@@ -1633,17 +1612,17 @@ export default function DashboardView({
               ))}
             </div>
             {canCreate && (
-              <button
-                onClick={() => go(`/dashboard?view=create-choose`)}
+              <Link
+                href="/dashboard/services"
                 className="px-3.5 py-2 bg-[var(--accent)] text-white rounded-[var(--radius-md)] text-sm font-semibold hover:bg-[var(--accent-dark)] transition-colors"
               >
                 평가 만들기
-              </button>
+              </Link>
             )}
           </div>
         </div>
 
-        {/* 범례(달력 보기). 색만으로 구분하지 않도록 글자로도 적는다. */}
+        {/* 범례(달력 보기). 색만으로 구분하지 않도록 글자로도 적음 */}
         <div className={`${calMode === "calendar" ? "hidden sm:flex" : "hidden"} flex-wrap gap-2 mb-3 text-xs`}>
           {["RECRUITING", "ACTIVE", "FINISHED", ...(canCreate ? ["PENDING_APPROVAL"] : [])].map((st) => (
             <span key={st} className={`px-1.5 py-0.5 rounded ${statusMeta(st).cls}`}>
@@ -1655,7 +1634,7 @@ export default function DashboardView({
         {/* 목록 보기(폰에서는 항상) */}
         <ul className={`${calMode === "calendar" ? "sm:hidden" : ""} divide-y divide-[var(--gray-100)]`}>
           {monthEvents.length === 0 && <li className="py-6 text-sm text-center text-[var(--muted)]">이번 달 평가가 없습니다</li>}
-          {monthEvents.map((e: any) => {
+          {monthEvents.map((e) => {
             const t = new Date(e.startTime);
             const meta = statusMeta(e.status);
             return (
@@ -1668,7 +1647,7 @@ export default function DashboardView({
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px] font-medium text-[var(--foreground)] truncate">{e.title}</span>
                     <span className="block text-[13px] text-[var(--muted)] truncate">
-                      {t.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} · {e.location}
+                      {t.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" })} · {e.location}
                     </span>
                   </span>
                   <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded ${meta.cls}`}>{meta.label}</span>
@@ -1697,8 +1676,8 @@ export default function DashboardView({
 
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
-            // 같은 날 평가가 여럿이면 각각 눌러 열 수 있게 한다.
-            const evs = (projects || []).filter((p: any) => sameDay(p.startTime, year, month, day));
+            // 같은 날 평가가 여럿이면 각각 눌러 열 수 있게 함
+            const evs = (projects || []).filter((p) => sameDay(p.startTime, year, month, day));
             const dateYYYYMMDD = `${year}-${pad2(month + 1)}-${pad2(day)}`;
             const isToday = sameDay(now.toISOString(), year, month, day);
 
@@ -1723,7 +1702,7 @@ export default function DashboardView({
                   )}
                 </div>
                 <div className="mt-1 space-y-1">
-                  {evs.map((e: any) => (
+                  {evs.map((e) => (
                     <button
                       key={e.id}
                       onClick={() => openDetail(e)}
@@ -1785,25 +1764,28 @@ export default function DashboardView({
             ) : (
               (() => {
                 const enrollments = selected.enrollments || [];
-                const myEnrollment = enrollments.find((e: any) => e.userId === user.id);
+                const myEnrollment = enrollments.find((e) => e.userId === user.id);
                 const isEnrolled = !!myEnrollment;
-                // 정원 초과 신청을 허용하므로 신청 버튼을 정원으로 막지 않는다.
-                // 응답 권한은 선발(ACCEPTED) 여부로 결정된다.
+                // 정원 초과 신청을 허용하므로 신청 버튼을 정원으로 막지 않음
+                // 응답 권한은 선발(ACCEPTED) 여부로 결정됨
                 const isAccepted = myEnrollment?.status === "ACCEPTED";
                 const isRejected = myEnrollment?.status === "REJECTED";
                 // 관리자가 진행 중에 제외한 사람(removeParticipantAction)
                 const isRemoved = myEnrollment?.status === "REMOVED";
-                // 평가가 시작된 뒤 선발된 사람은 취소할 수 없다(cancelEnrollmentAction 과 같은 조건).
+                // 평가가 시작된 뒤 선발된 사람은 취소할 수 없음(cancelEnrollmentAction 과 같은 조건).
                 const isRecruiting = selected.status === "RECRUITING";
                 const isActive = selected.status === "ACTIVE";
                 const isOpen = isRecruiting || isActive;
                 const canCancel = isRecruiting || (!isAccepted && !isRemoved && isActive);
-                const acceptedCount = enrollments.filter((e: any) => e.status === "ACCEPTED").length;
+                // 학생에게는 명단 대신 인원 수만 내려옴(page.tsx).
+                const enrollmentCount: number = selected.enrollmentCount ?? enrollments.length;
+                const acceptedCount: number =
+                  selected.acceptedCount ?? enrollments.filter((e) => e.status === "ACCEPTED").length;
                 const deadlinePassed = selected.enrollmentDeadline
                   ? new Date() > new Date(selected.enrollmentDeadline)
                   : false;
                 const isCreatorOrAdmin = user.role === "ADMIN" || user.id === selected.creatorId;
-                const myResponse = (selected.responses || []).find((r: any) => r.userId === user.id);
+                const myResponse = (selected.responses || []).find((r) => r.userId === user.id);
                 const capacity = selected.capacity ?? selected.maxParticipants ?? 10;
                 const primaryBtn =
                   "w-full flex items-center justify-center gap-1.5 px-4 py-3 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-sm font-semibold hover:bg-[var(--accent-dark)] transition-colors";
@@ -1813,16 +1795,15 @@ export default function DashboardView({
 
                 return (
                   <div className="mt-4 space-y-4">
-                    {/* 핵심 정보 */}
                     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
                       <dt className="text-[var(--muted)]">일시</dt>
                       <dd className="text-[var(--foreground)]">
-                        {st.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" })}{" "}
-                        {st.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                        {st.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short", timeZone: "Asia/Seoul" })}{" "}
+                        {st.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" })}
                       </dd>
                       <dt className="text-[var(--muted)]">장소</dt>
                       <dd className="text-[var(--foreground)]">{selected.location || "미정"}</dd>
-                      {/* 보상액은 플랫폼이 지급하는 건에만 표시한다(page.tsx 가 계산) */}
+                      {/* 보상액은 플랫폼이 지급하는 건에만 표시함(page.tsx 가 계산) */}
                       {selected.rewardPerPerson > 0 && (
                         <>
                           <dt className="text-[var(--muted)]">보상</dt>
@@ -1840,6 +1821,7 @@ export default function DashboardView({
                               day: "numeric",
                               hour: "2-digit",
                               minute: "2-digit",
+                              timeZone: "Asia/Seoul",
                             })}
                             {deadlinePassed && " (마감됨)"}
                           </dd>
@@ -1851,10 +1833,9 @@ export default function DashboardView({
                       <p className="text-sm text-[var(--gray-700)] whitespace-pre-line leading-relaxed">{selected.description}</p>
                     )}
 
-                    {/* 개설자에게만 보이는 승인 상태 */}
                     {selected.status === "PENDING_APPROVAL" && (
                       <p className="text-sm text-[var(--gray-800)] bg-[var(--warning-light)] px-3 py-2.5 rounded-[var(--radius-md)]">
-                        관리자 승인을 기다리는 중입니다. 승인되면 참여자 모집이 시작되고 알림이 갑니다.
+                        관리자 승인을 기다리는 중입니다. 승인되면 평가자 모집이 시작되고 알림이 갑니다.
                         아직 학생에게는 보이지 않습니다.
                       </p>
                     )}
@@ -1865,20 +1846,19 @@ export default function DashboardView({
                       </p>
                     )}
 
-                    {/* 모집 현황 */}
                     {isOpen && (
                       <div className="p-3 bg-[var(--surface)] rounded-[var(--radius-md)]">
                         <div className="flex items-center justify-between text-sm mb-2">
                           <span className="text-[var(--gray-700)]">선발 정원 {capacity}명</span>
                           <span className="text-[var(--foreground)] font-medium tabular-nums">
-                            {isRecruiting ? `신청 ${enrollments.length}명` : `참여 ${acceptedCount}명`}
+                            {isRecruiting ? `신청 ${enrollmentCount}명` : `참여 ${acceptedCount}명`}
                           </span>
                         </div>
                         <div className="w-full bg-[var(--gray-200)] rounded-full h-1.5" aria-hidden="true">
                           <div
                             className="bg-[var(--accent)] h-1.5 rounded-full transition-all"
                             style={{
-                              width: `${Math.min(100, ((isRecruiting ? enrollments.length : acceptedCount) / Math.max(1, capacity)) * 100)}%`,
+                              width: `${Math.min(100, ((isRecruiting ? enrollmentCount : acceptedCount) / Math.max(1, capacity)) * 100)}%`,
                             }}
                           />
                         </div>
@@ -1890,9 +1870,13 @@ export default function DashboardView({
                       </div>
                     )}
 
-                    {/* 주 동작 */}
+                    {enrollClosed && !isEnrolled && (
+                      <p role="alert" className="text-sm text-[var(--danger)] bg-[var(--danger-light)] px-3 py-2.5 rounded-[var(--radius-md)]">
+                        신청하는 사이 모집이 마감되어 신청되지 않았어요.
+                      </p>
+                    )}
+
                     <div className="space-y-2">
-                      {/* 개설자·관리자 */}
                       {isCreatorOrAdmin && isRecruiting && (
                         <button type="button" onClick={() => go(`/dashboard?view=recruit&p=${selected.id}`)} className={primaryBtn}>
                           신청자 선발 ({enrollments.length}명 신청{acceptedCount > 0 ? ` · ${acceptedCount}명 선발됨` : ""})
@@ -1900,11 +1884,10 @@ export default function DashboardView({
                       )}
                       {isCreatorOrAdmin && isActive && (
                         <button type="button" onClick={() => go(`/dashboard?view=recruit&p=${selected.id}`)} className={`${secondaryBtn} w-full`}>
-                          참여자 관리 ({acceptedCount}명 참여 중)
+                          평가자 관리 ({acceptedCount}명 참여 중)
                         </button>
                       )}
 
-                      {/* 참여자 */}
                       {isAccepted && isActive && (
                         <button type="button" onClick={() => go(`/dashboard?view=eval&p=${selected.id}`)} className={primaryBtn}>
                           {myResponse ? "내 응답 보기·고치기" : "평가 응답하기"}
@@ -1930,7 +1913,7 @@ export default function DashboardView({
                         </p>
                       )}
                       {!isEnrolled && !isCreatorOrAdmin && isRecruiting && (
-                        // 신청하면 개설자에게 알림이 가므로 확인을 받는다.
+                        // 신청하면 개설자에게 알림이 가므로 확인을 받음
                         <form
                           action={enrollProjectAction}
                           onSubmit={(e) =>
@@ -1953,7 +1936,7 @@ export default function DashboardView({
                       {!isEnrolled && !isCreatorOrAdmin && isActive && (
                         <p className="text-sm text-center text-[var(--muted)] py-2">모집이 끝난 평가입니다.</p>
                       )}
-                      {/* 취소하면 신청이 삭제되고, 평가가 시작되면 다시 신청할 수 없으므로 확인을 받는다. */}
+                      {/* 취소하면 신청이 삭제되고, 평가가 시작되면 다시 신청할 수 없으므로 확인을 받음 */}
                       {isEnrolled && canCancel && (
                         <form
                           action={cancelEnrollmentAction}
@@ -1980,7 +1963,6 @@ export default function DashboardView({
                       )}
                     </div>
 
-                    {/* 보조 동작: 결과·내보내기 */}
                     {isCreatorOrAdmin && (
                       <div className="flex gap-2">
                         <button type="button" onClick={() => go(`/dashboard?view=result&p=${selected.id}`)} className={secondaryBtn}>
@@ -1995,14 +1977,14 @@ export default function DashboardView({
                     )}
 
                     {/* 개설자에게 문의(참여자) */}
-                    {selected.creatorId && selected.creatorId !== user.id && selected.creatorStudentId && (
+                    {selected.creatorId && selected.creatorId !== user.id && (
                       <details className="rounded-[var(--radius-md)] border border-[var(--gray-200)]">
                         <summary className="px-3 py-2.5 text-sm text-[var(--gray-700)] cursor-pointer">
                           개설자({selected.creatorName})에게 문의하기
                         </summary>
                         <form
                           action={async (fd: FormData) => {
-                            fd.set("receiverStudentId", selected.creatorStudentId!);
+                            fd.set("receiverId", selected.creatorId!);
                             await sendMessageAction(fd);
                             toast("메시지를 보냈습니다. 답장은 메신저에서 볼 수 있습니다.", "success");
                           }}
@@ -2026,7 +2008,7 @@ export default function DashboardView({
                     {canEdit(selected) && (
                       <details className="rounded-[var(--radius-md)] border border-[var(--gray-200)]">
                         <summary className="px-3 py-2.5 text-sm font-medium text-[var(--gray-700)] cursor-pointer">
-                          관리 — 공지·수정·종료{user.role === "ADMIN" ? "·삭제" : ""}
+                          관리: 공지·수정·종료{user.role === "ADMIN" ? "·삭제" : ""}
                         </summary>
                         <div className="px-3 pb-3 space-y-3">
                           {enrollments.length > 0 && (
@@ -2036,9 +2018,9 @@ export default function DashboardView({
                                 toast("공지를 보냈습니다.", "success");
                               }}
                               onSubmit={(e) => {
-                                const recipients = enrollments.filter((x: any) => x.status !== "REMOVED").length;
+                                const recipients = enrollments.filter((x) => x.status !== "REMOVED").length;
                                 confirmSubmit(e, {
-                                  message: `참여자 ${recipients}명에게 알림을 보냅니다. 보낸 알림은 취소할 수 없습니다.\n\n정말 보내시겠습니까?`,
+                                  message: `평가자 ${recipients}명에게 알림을 보냅니다. 보낸 알림은 취소할 수 없습니다.\n\n정말 보내시겠습니까?`,
                                   confirmLabel: "공지 보내기",
                                 });
                               }}
@@ -2074,12 +2056,12 @@ export default function DashboardView({
                                 action={finishProjectAction}
                                 className="flex-1 flex"
                                 onSubmit={(e) =>
-                                  // 종료는 되돌릴 수 없다.
+                                  // 종료는 되돌릴 수 없음
                                   confirmSubmit(e, {
                                     message:
                                       `"${selected.title}" 평가를 종료합니다.\n\n` +
                                       `· 더 이상 응답을 받지 않습니다(현재 응답 ${selected.responseCount ?? 0}건).\n` +
-                                      `· 응답한 참여자 전원에게 종료 알림이 나갑니다.\n` +
+                                      `· 응답한 평가자 전원에게 종료 알림이 나갑니다.\n` +
                                       `· 종료한 평가는 화면에서 다시 열 수 없습니다.\n\n정말 종료하시겠습니까?`,
                                     confirmLabel: "평가 종료",
                                     danger: true,
@@ -2128,13 +2110,13 @@ export default function DashboardView({
                           신청자 {enrollments.length}명
                         </summary>
                         <ul className="px-3 pb-3 space-y-1">
-                          {enrollments.map((e: any) => (
+                          {enrollments.map((e) => (
                             <li key={e.id} className="flex items-center justify-between text-sm">
                               <span className="text-[var(--foreground)]">
                                 {e.userName} <span className="text-[var(--muted)]">({e.userStudentId})</span>
                               </span>
                               <span className="text-xs text-[var(--muted)]">
-                                {new Date(e.createdAt).toLocaleDateString("ko-KR", { month: "short", day: "numeric" })}
+                                {new Date(e.createdAt).toLocaleDateString("ko-KR", { month: "short", day: "numeric", timeZone: "Asia/Seoul" })}
                               </span>
                             </li>
                           ))}
@@ -2142,13 +2124,12 @@ export default function DashboardView({
                       </details>
                     )}
 
-                    {/* 문항 미리보기 */}
                     <div className="border-t border-[var(--gray-100)] pt-4">
                       <p className="text-xs font-medium text-[var(--muted)] mb-2">
-                        평가 항목 {(questions || []).length}개
+                        평가문항 {(questions || []).length}개
                       </p>
                       <ol className="space-y-1.5">
-                        {(questions || []).slice(0, 5).map((q: any, i: number) => (
+                        {(questions || []).slice(0, 5).map((q, i) => (
                           <li key={i} className="bg-[var(--surface)] rounded-[var(--radius-md)] px-3.5 py-2.5 flex items-center justify-between gap-3">
                             <span className="text-sm text-[var(--foreground)] truncate">
                               {q.type === "semantic7" ? `${q.leftLabel} ↔ ${q.rightLabel}` : q.label}

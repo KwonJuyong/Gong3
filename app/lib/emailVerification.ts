@@ -6,10 +6,10 @@ import { sendMail, siteUrl, esc, isConfigured as mailConfigured } from "./mail";
 /**
  * 가입 이메일 인증 토큰 발급·검증·소비.
  *
- * - 원본 토큰은 저장하지 않고 sha256 해시만 남긴다.
- * - 유효기간 24시간, 1회용. 새로 발급하면 이전 토큰은 지운다.
- * - 토큰에 대상 이메일을 함께 저장해, 발급 후 주소가 바뀌면 옛 링크로 인증되지 않게 한다.
- * - 학교 메일 도메인을 권장하지만 강제하지는 않는다.
+ * - 원본 토큰은 저장하지 않고 sha256 해시만 남김
+ * - 유효기간 24시간, 1회용. 새로 발급하면 이전 토큰은 지움
+ * - 토큰에 대상 이메일을 함께 저장해, 발급 후 주소가 바뀌면 옛 링크로 인증되지 않게 함
+ * - 학교 메일 도메인을 권장하지만 강제하지는 않음
  */
 
 const TTL_MS = 24 * 60 * 60 * 1000; // 24시간
@@ -21,7 +21,7 @@ export function isMailReady(): boolean {
 }
 
 /**
- * 인증 메일 발송(재발송 포함). 기존 토큰은 버리고 새로 만든다.
+ * 인증 메일 발송(재발송 포함). 기존 토큰은 버리고 새로 만듦
  *
  * @returns 실패하면 사용자에게 보여줄 사유. 성공이면 null.
  */
@@ -56,7 +56,7 @@ export async function sendVerificationEmail(userId: string): Promise<string | nu
   });
 
   if (!r.ok) {
-    // 발송에 실패했으면 토큰도 지운다.
+    // 발송에 실패했으면 토큰도 지움
     await prisma.emailVerificationToken.deleteMany({ where: { userId: user.id } });
     return r.error ?? "메일 발송에 실패했습니다.";
   }
@@ -68,11 +68,11 @@ export type VerifyResult =
   | { ok: false; reason: "invalid" | "expired" | "used" | "email-changed" };
 
 /**
- * 링크의 토큰을 소비해 인증을 완료한다.
+ * 링크의 토큰을 소비해 인증을 완료함
  *
- * 토큰에 저장한 주소가 현재 User.email 과 같을 때만 인증한다.
+ * 토큰에 저장한 주소가 현재 User.email 과 같을 때만 인증함
  * 링크를 두 번 누르거나 메일 보안 스캐너가 먼저 열어도 성공으로 보이도록,
- * 행을 지우지 않고 usedAt 만 기록한다.
+ * 행을 지우지 않고 usedAt 만 기록함
  */
 export async function consumeVerificationToken(raw: string): Promise<VerifyResult> {
   const token = (raw || "").trim();
@@ -90,7 +90,7 @@ export async function consumeVerificationToken(raw: string): Promise<VerifyResul
   });
 
   if (!row) return { ok: false, reason: "invalid" };
-  // 이미 인증된 계정이면 다시 눌러도 성공으로 처리한다.
+  // 이미 인증된 계정이면 다시 눌러도 성공으로 처리함
   if (row.user.emailVerifiedAt) return { ok: true, alreadyDone: true };
   if (row.usedAt) return { ok: false, reason: "used" };
   if (row.expiresAt.getTime() < Date.now()) return { ok: false, reason: "expired" };
@@ -98,7 +98,7 @@ export async function consumeVerificationToken(raw: string): Promise<VerifyResul
 
   await prisma.$transaction([
     prisma.user.update({ where: { id: row.userId }, data: { emailVerifiedAt: new Date() } }),
-    // 행은 남긴다. 다음 발급 때 sendVerificationEmail 이 지우므로 쌓이지 않는다.
+    // 행은 남김. 다음 발급 때 sendVerificationEmail 이 지우므로 쌓이지 않음
     prisma.emailVerificationToken.updateMany({
       where: { userId: row.userId, usedAt: null },
       data: { usedAt: new Date() },
@@ -109,8 +109,8 @@ export async function consumeVerificationToken(raw: string): Promise<VerifyResul
 }
 
 /**
- * [재발송] 로그인 ID 또는 이메일로 찾아 인증 메일을 다시 보낸다.
- * 계정 존재 여부는 드러내지 않고, 메일 발송 설정이 없는 경우만 알린다.
+ * 로그인 ID 또는 이메일로 찾아 인증 메일을 다시 보냄
+ * 계정 존재 여부는 드러내지 않고, 메일 발송 설정이 없는 경우만 알림
  */
 export async function resendVerification(identifier: string): Promise<{ configError?: string }> {
   if (!mailConfigured()) return { configError: "메일 발송이 설정되지 않았습니다." };
@@ -118,7 +118,7 @@ export async function resendVerification(identifier: string): Promise<{ configEr
   const key = identifier.trim();
   if (!key) return {};
 
-  // 이메일은 대소문자를 무시하고 찾는다. 결과와 무관하게 같은 응답을 주므로 못 찾아도 드러나지 않는다.
+  // 이메일은 대소문자를 무시하고 찾음. 결과와 무관하게 같은 응답을 주므로 못 찾아도 드러나지 않음
   const user = await prisma.user.findFirst({
     where: { OR: [{ studentId: key }, { email: { equals: key, mode: "insensitive" } }] },
     select: { id: true, emailVerifiedAt: true },
@@ -126,7 +126,7 @@ export async function resendVerification(identifier: string): Promise<{ configEr
   if (!user || user.emailVerifiedAt) return {};
 
   const err = await sendVerificationEmail(user.id);
-  // 발송 실패 사유는 설정 문제일 때만 올려보낸다.
+  // 발송 실패 사유는 설정 문제일 때만 올려보냄
   return err && err.includes("설정") ? { configError: err } : {};
 }
 

@@ -1,14 +1,13 @@
 "use client";
 
-
 import SubmitButton from "@/app/components/SubmitButton";
 import { useActionState } from "react";
 import { setMissingEmailAction } from "../actions";
 import { ActionState } from "../db";
 
 /**
- * 이메일 등록 폼. 인증 메일을 보내지 않으므로 오타를 막으려고 주소를 두 번 받는다.
- * 붙여넣기는 막지 않는다.
+ * 이메일 등록 폼. 인증 메일을 보내지 않으므로 오타를 막으려고 주소를 두 번 받음
+ * 붙여넣기는 막지 않음
  */
 export default function EmailSetupForm() {
   const [state, formAction] = useActionState<ActionState, FormData>(

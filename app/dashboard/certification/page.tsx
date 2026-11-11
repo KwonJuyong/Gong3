@@ -6,12 +6,12 @@ import ChecklistForm, { type PlainGroup } from "./ChecklistForm";
 
 export const metadata = { title: "인증 준비 점검" };
 
-// 인증 준비 자가점검(부가 기능). 인증 절차가 아니므로 판정처럼 읽히는 표현은 쓰지 않는다.
-// 제도 설명은 직접 쓰고 공식 자료는 링크로만 안내한다.
+// 인증 준비 자가점검(부가 기능). 인증 절차가 아니므로 판정처럼 읽히는 표현은 쓰지 않음
+// 제도 설명은 직접 쓰고 공식 자료는 링크로만 안내함
 
 export const dynamic = "force-dynamic";
 
-/** 공식 안내처. 본문을 옮기지 않고 링크만 보낸다. */
+/** 공식 안내처. 본문을 옮기지 않고 링크만 보냄 */
 const OFFICIAL_LINKS = [
   { name: "TTA 소프트웨어 시험인증", href: "https://cs.tta.or.kr/" },
   { name: "KTR 소프트웨어 시험평가", href: "https://ktr.or.kr/" },
@@ -48,7 +48,7 @@ export default async function CertificationPage({
     },
   });
 
-  // 요청한 서비스가 내 것이 아니면 첫 번째 서비스를 보여준다.
+  // 요청한 서비스가 내 것이 아니면 첫 번째 서비스를 보여줌
   const service = services.find((s) => s.id === wanted) ?? services[0] ?? null;
 
   const flags: CertServiceFlags | null = service
@@ -59,7 +59,7 @@ export default async function CertificationPage({
       }
     : null;
 
-  // 조건부 문항(when)은 함수라 클라이언트로 넘길 수 없어 여기서 거른다.
+  // 조건부 문항(when)은 함수라 클라이언트로 넘길 수 없어 여기서 거름
   const groups: PlainGroup[] = flags
     ? activeCertGroups(flags).map((g) => ({
         id: g.id,
@@ -83,7 +83,6 @@ export default async function CertificationPage({
           </p>
         </div>
 
-        {/* 이 화면의 성격 안내 */}
         <div className="mb-6 rounded-[var(--radius-xl)] border border-[var(--gray-300)] bg-white p-5">
           <p className="text-sm text-[var(--gray-700)] leading-relaxed">
             <b className="text-[var(--foreground)]">이 점검은 인증이 아닙니다.</b> 우리는
@@ -93,7 +92,6 @@ export default async function CertificationPage({
           </p>
         </div>
 
-        {/* 제도 안내 */}
         <section className="mb-6 bg-white rounded-[var(--radius-xl)] p-6">
           <div className="mb-5">
             <h3 className="text-base font-semibold text-[var(--foreground)]">제도가 어떻게 돌아가나</h3>
@@ -138,7 +136,6 @@ export default async function CertificationPage({
           </div>
         </section>
 
-        {/* 자가점검 */}
         {!service ? (
           <section className="bg-white rounded-[var(--radius-xl)] p-8 text-center">
             <p className="text-sm text-[var(--gray-700)]">
@@ -151,7 +148,7 @@ export default async function CertificationPage({
               href="/dashboard/services"
               className="inline-block mt-5 px-4 py-2 bg-[var(--accent)] text-white rounded-[var(--radius-md)] text-sm font-medium hover:bg-[var(--accent-dark)] transition-colors"
             >
-              내 서비스로 이동
+              서비스 등록하러 가기
             </Link>
           </section>
         ) : (
@@ -186,12 +183,13 @@ export default async function CertificationPage({
                     year: "numeric",
                     month: "long",
                     day: "numeric",
+                    timeZone: "Asia/Seoul",
                   })}
                 </p>
               )}
             </div>
             <ChecklistForm
-              // 서비스를 바꾸면 폼 상태를 새로 만든다.
+              // 서비스를 바꾸면 폼 상태를 새로 만듦
               key={service.id}
               serviceId={service.id}
               groups={groups}

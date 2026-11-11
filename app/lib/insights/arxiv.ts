@@ -1,15 +1,15 @@
 import "server-only";
 import { XMLParser } from "fast-xml-parser";
 
-// arXiv 논문 수집. 메타데이터는 CC0 이지만 본문 재호스팅은 허용되지 않아 제목·초록·링크만 받는다.
-// http 로 호출하면 빈 응답이 오므로 https 를 쓴다.
+// arXiv 논문 수집. 메타데이터는 CC0 이지만 본문 재호스팅은 허용되지 않아 제목·초록·링크만 받음
+// http 로 호출하면 빈 응답이 오므로 https 를 씀
 
 const ENDPOINT = "https://export.arxiv.org/api/query";
 
-// AI 평가단이 볼 만한 분류. 넓히면 노이즈가 급증하므로 3개로 묶어 둔다.
+// AI 평가단이 볼 만한 분류. 넓히면 노이즈가 급증하므로 3개로 묶어 둠
 const CATEGORIES = ["cs.AI", "cs.LG", "cs.CL"];
 
-// arXiv 는 연락 가능한 User-Agent 를 요구한다.
+// arXiv 는 연락 가능한 User-Agent 를 요구함
 const USER_AGENT = "evalia.co.kr AI-insights/1.0 (mailto:labchain.hallym@gmail.com)";
 
 export type ArxivPaper = {
@@ -29,7 +29,7 @@ function asArray<T>(v: T | T[] | undefined): T[] {
 }
 
 function clean(s: unknown): string {
-  // Atom의 title·summary는 줄바꿈이 그대로 들어온다
+  // Atom의 title·summary는 줄바꿈이 그대로 들어옴
   return String(s ?? "").replace(/\s+/g, " ").trim();
 }
 
@@ -74,7 +74,7 @@ export async function fetchArxivPapers(limit = 25): Promise<ArxivPaper[]> {
 
     papers.push({
       externalId,
-      // id의 http를 그대로 쓰지 않고 https 정규 URL로 내보낸다
+      // id의 http를 그대로 쓰지 않고 https 정규 URL로 내보냄
       url: `https://arxiv.org/abs/${externalId}`,
       title,
       abstract: clean(e.summary),

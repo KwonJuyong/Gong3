@@ -10,14 +10,12 @@ import { maskStudentId } from "../lib/privacy";
 import { pendingApprovalCount } from "../lib/approvals";
 import { canTransact } from "../lib/bizProfile";
 import { getSettlementProfile } from "../lib/settlementProfile";
-import { getBizProfile } from "../lib/bizProfile";
-import { computeCompletion } from "../lib/profileCompletion";
 import { kstMonth, monthRange } from "./access/month";
 
-/** 알림함에 싣는 최대 개수. 안 읽은 개수는 따로 센다. */
+/** 알림함에 싣는 최대 개수. 안 읽은 개수는 따로 셈 */
 const NOTIFICATION_LIMIT = 50;
 
-// 모든 대시보드 페이지에 공용 머리글·내비게이션·메신저를 붙인다.
+// 모든 대시보드 페이지에 공용 머리글·내비게이션·메신저를 붙임
 export default async function DashboardLayout({
   children,
 }: {
@@ -29,9 +27,7 @@ export default async function DashboardLayout({
   let notifications: {
     id: string;
     content: string;
-    isRead: boolean;
     type: string;
-    fromUserId: string | null;
     fromStudentId: string | null;
     fromName: string | null;
     createdAt: string;
@@ -40,7 +36,7 @@ export default async function DashboardLayout({
   let unreadMessages = 0;
   let pendingApprovals = 0;
   let accessReviewDue = false;
-  // 발주 메뉴 표시 여부. 실제 권한 검사는 발주 화면·액션·견적서 API 가 각각 한다.
+  // 발주 메뉴 표시 여부. 실제 권한 검사는 발주 화면·액션·견적서 API 가 각각 함
   let transactable = false;
   let header: React.ComponentProps<typeof AppHeader> | null = null;
 
@@ -51,11 +47,11 @@ export default async function DashboardLayout({
         notifications: {
           orderBy: { createdAt: "desc" },
           take: NOTIFICATION_LIMIT,
-          include: { fromUser: true },
+          include: { fromUser: { select: { name: true, studentId: true } } },
         },
       },
     });
-    // 이메일이 없는 계정은 이메일 등록 화면으로 보낸다(/dashboard 밖에 있어야 루프가 없다).
+    // 이메일이 없는 계정은 이메일 등록 화면으로 보냄(/dashboard 밖에 있어야 루프가 없음).
     if (user && !user.email) redirect("/email-setup");
 
     if (user) {
@@ -64,9 +60,7 @@ export default async function DashboardLayout({
       notifications = (user.notifications || []).map((n) => ({
         id: n.id,
         content: n.content,
-        isRead: n.isRead,
         type: n.type,
-        fromUserId: n.fromUserId,
         fromStudentId: n.fromUser ? maskStudentId(n.fromUser.studentId, isAdmin) : null,
         fromName: n.fromUser?.name || null,
         createdAt: n.createdAt.toISOString(),
@@ -74,9 +68,9 @@ export default async function DashboardLayout({
       unreadNotifications = await prisma.notification.count({ where: { userId, isRead: false } });
       unreadMessages = await getUnreadTotal();
       transactable = await canTransact(user);
-      // 관리자에게만 필요한 값이라 역할을 확인하고 센다.
+      // 관리자에게만 필요한 값이라 역할을 확인하고 셈
       if (isAdmin) pendingApprovals = await pendingApprovalCount();
-      // 지난달 접속기록 점검(월 1회)을 하지 않았으면 표시한다. 기록이 없던 달은 제외한다.
+      // 지난달 접속기록 점검(월 1회)을 하지 않았으면 표시함. 기록이 없던 달은 제외함
       if (isAdmin) {
         const prev = kstMonth(-1);
         const range = monthRange(prev)!;
@@ -87,39 +81,21 @@ export default async function DashboardLayout({
         accessReviewDue = !reviewed && logged > 0;
       }
 
-      // 머리글 프로필 메뉴의 요약. 완성도는 프로필 화면과 같은 계산을 쓴다.
-      const [settlement, biz, rewardCount, participated] = await Promise.all([
+      const [settlement, rewardCount] = await Promise.all([
         getSettlementProfile(user.id),
-        getBizProfile(user.id),
         prisma.reward.count({ where: { userId: user.id } }),
-        prisma.response.findMany({ where: { userId: user.id }, distinct: ["projectId"], select: { projectId: true } }),
       ]);
-      const completion = computeCompletion({
-        role: user.role,
-        name: user.name,
-        phone: user.phone || "",
-        email: user.email || "",
-        profileImage: user.profileImage || null,
-        settlement,
-        biz,
-        showBiz: isAdmin || !!biz.bizNo,
-        showSettlement: true,
-      });
       header = {
         user: {
           name: user.name,
           studentId: user.studentId,
           role: user.role,
           userType: user.userType || "STUDENT",
-          major: user.major || "",
-          phone: user.phone || "",
-          email: user.email || "",
           profileImage: user.profileImage || null,
         },
-        participatedCount: participated.length,
-        completionPercent: completion.percent,
-        // 받을 보상이 있는데 계좌가 없을 때만 표시한다.
+        // 받을 보상이 있는데 계좌가 없을 때만 표시함
         payoutBlocked: !settlement.payoutReady && rewardCount > 0,
+        notifications,
         unreadNotifications,
       };
     }
@@ -139,11 +115,7 @@ export default async function DashboardLayout({
           <div className="flex-1">{children}</div>
         </div>
       </div>
-      <FloatingHub
-        notifications={notifications}
-        userRole={userRole}
-        initialUnreadMessages={unreadMessages}
-      />
+      <FloatingHub initialUnreadMessages={unreadMessages} />
     </>
   );
 }

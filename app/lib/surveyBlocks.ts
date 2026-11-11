@@ -9,7 +9,7 @@ export type AdaptiveBlock = {
   text: string;
   /**
    * 응답 주체: EVALUATOR(평가단 학생) | DEVELOPER(개발사 자가평가).
-   * 오래된 블록에는 없어서 blocksToProjectQuestions 가 constructSnapshot 으로 보충한다.
+   * 오래된 블록에는 없어서 blocksToProjectQuestions 가 constructSnapshot 으로 보충함
    */
   evaluator?: string;
 };
@@ -58,4 +58,4 @@ export function collectItemKeys(blocks: SurveyBlock[]): string[] {
   return keys;
 }
 
-// 직접 입력한 문항은 Project.questions 에 저장되고, 이 파일은 SurveyVersion 문항 전용이다.
+// 직접 입력한 문항은 Project.questions 에 저장되고, 이 파일은 SurveyVersion 문항 전용임

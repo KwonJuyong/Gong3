@@ -7,7 +7,7 @@ import { type SurveyBlock } from "../../../lib/surveyBlocks";
 import { legacySurveyWhere } from "../../../lib/approvals";
 import { submitResponseAction } from "../actions";
 
-export const metadata = { title: "설문 응답" };
+export const metadata = { title: "평가 응답" };
 
 const LIKERT5 = ["전혀 그렇지 않다", "그렇지 않다", "보통", "그렇다", "매우 그렇다"];
 
@@ -66,8 +66,8 @@ export default async function TakeSurveyPage({
   const { versionId } = await params;
   const { incomplete } = await searchParams;
 
-  // URL 로 직접 들어와도 목록과 같은 공개 조건(approvals.ts)을 적용한다.
-  // 없는 id 와 미공개 회차는 같은 응답으로 처리한다.
+  // URL 로 직접 들어와도 목록과 같은 공개 조건(approvals.ts)을 적용함
+  // 없는 id 와 미공개 회차는 같은 응답으로 처리함
   const version = await prisma.surveyVersion.findFirst({
     where: { id: versionId, ...legacySurveyWhere },
     include: { service: { select: { name: true } } },
@@ -105,7 +105,6 @@ export default async function TakeSurveyPage({
         <form action={submitResponseAction} className="space-y-6">
           <input type="hidden" name="versionId" value={version.id} />
 
-          {/* LLM 적응 문항 */}
           {adaptive.length > 0 && (
             <section className="bg-white rounded-[var(--radius-xl)] p-5 space-y-5">
               <h3 className="text-sm font-semibold text-[var(--foreground)]">서비스 평가</h3>
@@ -143,7 +142,6 @@ export default async function TakeSurveyPage({
             </section>
           ))}
 
-          {/* 앵커링 비네트 */}
           {vignettes.length > 0 && (
             <section className="bg-white rounded-[var(--radius-xl)] p-5 space-y-5">
               <div>

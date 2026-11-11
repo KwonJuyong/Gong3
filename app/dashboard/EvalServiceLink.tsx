@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 /**
  * 응답 화면 제목 아래의 「평가할 서비스」 링크 줄.
  *
- * 줄 전체가 링크이고 주소는 도메인만 보여준다(전체 주소는 title).
- * 「이 화면 옆에 띄우기」는 /api/frame-check 가 iframe 표시가 가능하다고 확인한 경우에만 보인다.
+ * 줄 전체가 링크이고 주소는 도메인만 보여줌(전체 주소는 title).
+ * 「이 화면 옆에 띄우기」는 /api/frame-check 가 iframe 표시가 가능하다고 확인한 경우에만 보임
  */
 export default function EvalServiceLink({
   projectId,
@@ -16,7 +16,7 @@ export default function EvalServiceLink({
 }: {
   projectId: string;
   link: string;
-  /** 분할 화면이 열려 있으면 짧은 안내 한 줄만 보인다(서비스는 이미 옆에 떠 있다). */
+  /** 분할 화면이 열려 있으면 짧은 안내 한 줄만 보임(서비스는 이미 옆에 떠 있음). */
   split: boolean;
   onSplit: () => void;
 }) {
@@ -44,7 +44,7 @@ export default function EvalServiceLink({
   try {
     host = new URL(link).host;
   } catch {
-    /* 형식이 이상한 주소는 그대로 보여준다 */
+    /* 형식이 이상한 주소는 그대로 보여줌 */
   }
 
   return (
@@ -77,7 +77,6 @@ export default function EvalServiceLink({
       </a>
       <p className="mt-2 px-1 text-xs text-[var(--muted)] leading-relaxed">
         새 탭에서 열립니다. 써 본 뒤 이 화면으로 돌아와 답해 주세요.
-        {/* 화면 분할은 넓은 화면에서만 */}
         {embeddable === true && (
           <button
             type="button"

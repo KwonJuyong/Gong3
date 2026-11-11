@@ -3,9 +3,9 @@
 import { useState } from "react";
 
 /**
- * [ADMIN] 세무 안내(정산 화면에서 펼쳐 보는 신고 규칙 요약). 기본은 접혀 있다.
- * 문구는 명사형 단문으로 쓰고 주의는 ※ 로 표시하며, 항목마다 근거 조문과 원문 링크를 붙인다.
- * 세법이 바뀔 수 있으므로 원문은 링크를 기준으로 한다.
+ * 세무 안내(정산 화면에서 펼쳐 보는 신고 규칙 요약). 기본은 접혀 있음
+ * 문구는 명사형 단문으로 쓰고 주의는 ※ 로 표시하며, 항목마다 근거 조문과 원문 링크를 붙임
+ * 세법이 바뀔 수 있으므로 원문은 링크를 기준으로 함
  */
 
 const LINK = "text-[var(--accent)] underline underline-offset-2 hover:opacity-80 transition-opacity";
@@ -137,7 +137,7 @@ export default function TaxGuidePanel() {
             </ul>
           </Section>
 
-          <Section title="2. 제출의무 — 세액 0원인 경우">
+          <Section title="2. 제출의무: 세액 0원인 경우">
             <div className="rounded-[var(--radius-md)] border border-[var(--warning)] bg-[var(--warning-light)] p-3 text-xs leading-relaxed">
               <p className="text-[var(--foreground)] font-medium">
                 원천징수세액이 0원인 경우에도 신고·제출 대상이다.
@@ -220,7 +220,7 @@ export default function TaxGuidePanel() {
                 고지하지 아니한다.
               </li>
               <li>
-                · 평가단 보상은 비사업자 지급분으로{" "}
+                · 참여 보상은 비사업자 지급분으로{" "}
                 <span className="text-[var(--foreground)] font-medium">매입세액이 발생하지 않는다.</span>{" "}
                 매출세액 전액이 납부 대상이 된다.
               </li>
@@ -277,7 +277,6 @@ export default function TaxGuidePanel() {
             </ul>
             <p className="text-xs text-[var(--gray-500)] mt-2">
               ※ 세법은 개정된다. 본 안내는 요약이며 위 링크가 원문이다. 연 1회 대조를 권고한다.
-              상세 절차는 <code>docs/tax-filing.md</code> 참조.
             </p>
           </Section>
         </div>

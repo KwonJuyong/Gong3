@@ -1,8 +1,8 @@
 // PWA 아이콘과 파비콘 생성: public/brand/AI평가단_로고심플.png -> public/icons/*, public/favicon.ico
-// 실행: node scripts/gen-icons.mjs  (sharp 는 next 의존성에 포함돼 있다)
+// 실행: node scripts/gen-icons.mjs  (sharp 는 next 의존성에 포함돼 있음)
 //
-// 원본에는 가이드선과 미색 배경이 있고 마크가 위로 치우쳐 있다.
-// 밝기 임계값으로 마크만 뽑아 알파로 쓰고 정사각 캔버스 중앙에 다시 배치한다.
+// 원본에는 가이드선과 미색 배경이 있고 마크가 위로 치우쳐 있음
+// 밝기 임계값으로 마크만 뽑아 알파로 쓰고 정사각 캔버스 중앙에 다시 배치함
 import sharp from "sharp";
 import { mkdir, writeFile } from "fs/promises";
 
@@ -11,7 +11,7 @@ const OUT = "public/icons";
 
 const MARK = { r: 0x2f, g: 0x2f, b: 0x2d }; // 로고 차콜
 const BG = { r: 255, g: 255, b: 255, alpha: 1 }; // manifest background_color 와 동일
-const THRESHOLD = 150; // 마크(≈#3a3a38)는 남기고 가이드선(≈#ddd)·미색 배경은 날린다
+const THRESHOLD = 150; // 마크(≈#3a3a38)는 남기고 가이드선(≈#ddd)·미색 배경은 날림
 
 /** 원본에서 마크만 뽑아 투명 배경 PNG(여백 없는 bbox)로 반환 */
 async function extractMark() {
@@ -20,7 +20,7 @@ async function extractMark() {
   // 마크=255, 나머지=0 인 1채널 마스크
   const mask = await sharp(SRC).grayscale().threshold(THRESHOLD).negate().raw().toBuffer();
 
-  // 단색 마크에 위 마스크를 알파로 붙인 뒤, 투명 여백을 잘라 bbox만 남긴다
+  // 단색 마크에 위 마스크를 알파로 붙인 뒤, 투명 여백을 잘라 bbox만 남김
   const solid = await sharp({ create: { width, height, channels: 3, background: MARK } })
     .joinChannel(mask, { raw: { width, height, channels: 1 } })
     .png()
@@ -48,7 +48,7 @@ async function square(mark, size, inset, bg) {
     .toBuffer();
 }
 
-/** PNG 여러 장을 멀티사이즈 .ico 로 묶는다 (ICO는 PNG를 그대로 담을 수 있다) */
+/** PNG 여러 장을 멀티사이즈 .ico 로 묶는다 (ICO는 PNG를 그대로 담을 수 있음) */
 function buildIco(pngs) {
   const header = Buffer.alloc(6);
   header.writeUInt16LE(0, 0); // reserved
@@ -86,11 +86,11 @@ for (const size of [48, 96, 192, 512]) {
 await writeFile(`${OUT}/icon-maskable-512.png`, await square(mark, 512, 0.58, BG));
 console.log("✓ icon-maskable-512.png (안전영역 58%)");
 
-// iOS 홈 화면은 투명을 지원하지 않아 불투명 배경을 쓴다
+// iOS 홈 화면은 투명을 지원하지 않아 불투명 배경을 씀
 await writeFile(`${OUT}/apple-touch-icon.png`, await square(mark, 180, 0.72, BG));
 console.log("✓ apple-touch-icon.png");
 
-// Windows 바로가기/작업표시줄은 SVG 를 읽지 못해 .ico 가 필요하다
+// Windows 바로가기/작업표시줄은 SVG 를 읽지 못해 .ico 가 필요함
 const ico = [];
 for (const size of [16, 32, 48]) ico.push({ size, data: await square(mark, size, 0.84, BG) });
 await writeFile("public/favicon.ico", buildIco(ico));

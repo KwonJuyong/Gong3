@@ -8,15 +8,15 @@ import { checkRateLimit } from "../rate-limit";
 import { consumeClaimToken, lookupClaimToken } from "../lib/accountClaim";
 import { clientIp, logAccess } from "../lib/accessLog";
 
-// IP 는 clientIp()(lib/accessLog.ts)로 얻는다.
+// IP 는 clientIp()(lib/accessLog.ts)로 얻음
 const getClientIP = clientIp;
 
 /**
- * [계정 인계] 링크를 받은 사람이 로그인용 이메일과 비밀번호를 정한다.
+ * 링크를 받은 사람이 로그인용 이메일과 비밀번호를 정함
  *
- * 본인 확인은 관리자가 보낸 토큰으로 하므로 학번이나 기존 비밀번호는 묻지 않는다.
- * 링크가 이미 사람을 특정하므로 이메일 인증 메일은 보내지 않고 emailVerifiedAt 을 채운다.
- * 대신 오타를 막으려고 주소를 두 번 입력받는다. 끝나면 바로 로그인시킨다.
+ * 본인 확인은 관리자가 보낸 토큰으로 하므로 학번이나 기존 비밀번호는 묻지 않음
+ * 링크가 이미 사람을 특정하므로 이메일 인증 메일은 보내지 않고 emailVerifiedAt 을 채움
+ * 대신 오타를 막으려고 주소를 두 번 입력받음. 끝나면 바로 로그인시킴
  */
 export async function claimAccountAction(
   _prev: ActionState,
@@ -55,12 +55,12 @@ export async function claimAccountAction(
   if (password !== passwordConfirm) {
     return { error: "두 비밀번호가 서로 다릅니다.", success: false };
   }
-  // 학번과 같은 비밀번호는 쓰지 못하게 한다.
+  // 학번과 같은 비밀번호는 쓰지 못하게 함
   if (password.trim() === found.studentId) {
     return { error: "학번과 같은 비밀번호는 쓸 수 없습니다. 다른 값으로 정해 주세요.", success: false };
   }
 
-  // 이메일 중복은 대소문자를 무시하고 확인한다(registerAction 과 같은 규칙).
+  // 이메일 중복은 대소문자를 무시하고 확인함(registerAction 과 같은 규칙).
   const taken = await prisma.user.findFirst({
     where: { email: { equals: email, mode: "insensitive" }, id: { not: found.userId } },
     select: { id: true },
@@ -69,7 +69,7 @@ export async function claimAccountAction(
     return { error: "이미 다른 계정이 사용 중인 이메일입니다.", success: false };
   }
 
-  // 동시 제출 중 하나만 통과하도록 토큰을 먼저 소비한다(조건부 updateMany).
+  // 동시 제출 중 하나만 통과하도록 토큰을 먼저 소비함(조건부 updateMany).
   if (!(await consumeClaimToken(token))) {
     return { error: "이미 사용된 링크입니다.", success: false };
   }
@@ -80,13 +80,13 @@ export async function claimAccountAction(
       data: {
         email,
         password: await bcrypt.hash(password, 10),
-        // 링크로 본인을 확인했으므로 인증 완료로 둔다.
+        // 링크로 본인을 확인했으므로 인증 완료로 둠
         emailVerifiedAt: new Date(),
-        // 기존 세션을 모두 끊는다(임시 비밀번호 발급과 같은 처리).
+        // 기존 세션을 모두 끊음(임시 비밀번호 발급과 같은 처리).
         sessionEpoch: { increment: 1 },
       },
     });
-    // 이전 재설정 링크도 무효화한다.
+    // 이전 재설정 링크도 무효화함
     await prisma.passwordResetToken.deleteMany({ where: { userId: found.userId } });
   } catch {
     return { error: "저장 중 오류가 발생했습니다. 다시 시도해 주세요.", success: false };

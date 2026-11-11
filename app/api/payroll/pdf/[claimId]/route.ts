@@ -1,5 +1,6 @@
 import { logPersonalData } from "@/app/lib/accessLog";
 import { type NextRequest, NextResponse } from "next/server";
+import { checkLimit } from "@/app/lib/limits";
 import { getSessionUserId } from "@/app/session-server";
 import { prisma } from "../../../../db";
 import { renderClaimPdfBuffer } from "../../../../dashboard/payroll/pdfData";
@@ -26,6 +27,8 @@ export async function GET(
     if (!me || me.role !== "ADMIN") {
       return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
     }
+    const rl = checkLimit("adminDocument", me.id);
+    if (rl) return NextResponse.json({ error: rl }, { status: 429 });
 
     const { claimId } = await params;
     const claim = await prisma.laborClaim.findUnique({

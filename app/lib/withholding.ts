@@ -1,16 +1,16 @@
 /**
- * 평가단 보상의 원천징수 계산. 소득 구분은 AppSetting 으로 정하고 Reward 에 함께 저장한다.
+ * 평가단 보상의 원천징수 계산. 소득 구분은 AppSetting 으로 정하고 Reward 에 함께 저장함
  *
- * 기타소득(일시적 인적용역) — OTHER
+ * 기타소득(일시적 인적용역): OTHER
  * - 필요경비 60% 의제, 기타소득금액 = 지급액 × 40%
  * - 과세최저한: 기타소득금액 50,000원 이하(지급액 125,000원 이하)면 원천징수 0
  * - 세액 = 기타소득금액 × 22%(소득세 20% + 지방소득세 2%) = 지급액 × 8.8%
  *
- * 사업소득(계속·반복적 인적용역) — BUSINESS
+ * 사업소득(계속·반복적 인적용역): BUSINESS
  * - 3.3%(소득세 3% + 지방소득세 0.3%)
- * - 소액부징수: 소득세 1,000원 미만(지급액 33,333원 이하)이면 징수하지 않는다
+ * - 소액부징수: 소득세 1,000원 미만(지급액 33,333원 이하)이면 징수하지 않음
  *
- * 금액은 정수(원)이고 소득세·지방소득세를 각각 원 단위로 절사한 뒤 합한다.
+ * 금액은 정수(원)이고 소득세·지방소득세를 각각 원 단위로 절사한 뒤 합함
  */
 
 export type IncomeType = "OTHER" | "BUSINESS";
@@ -64,7 +64,7 @@ export function computeWithholding(gross: number, incomeType: IncomeType): Withh
 
   // 사업소득: 3.3%
   const incomeTax = Math.floor(g * 0.03); // 소득세 3%
-  // 소액부징수: 소득세 1,000원 미만이면 원천징수하지 않는다
+  // 소액부징수: 소득세 1,000원 미만이면 원천징수하지 않음
   if (incomeTax < 1000) {
     return zeroTax(incomeType, g, 0, g, "사업소득 소액부징수(소득세 1천원 미만)");
   }
@@ -110,9 +110,8 @@ export function nominalRateBp(incomeType: IncomeType): number {
   return incomeType === "OTHER" ? 880 : 330;
 }
 
-// ───────────────────────── 신고 자료용 ─────────────────────────
 
-/** 신고 자료에 필요한 Reward 필드. 지급 시점에 computeWithholding 으로 계산해 저장한 값이다. */
+/** 신고 자료에 필요한 Reward 필드. 지급 시점에 computeWithholding 으로 계산해 저장한 값임 */
 export interface RewardTaxSnapshot {
   grossAmount: number;
   incomeType: string;
@@ -127,9 +126,9 @@ export interface ReportedWithholding extends Withholding {
 }
 
 /**
- * 원천징수 합계에서 소득세·지방소득세를 역산한다.
+ * 원천징수 합계에서 소득세·지방소득세를 역산함
  * 지방소득세 = floor(소득세 × 0.1) 이라 나눗셈으로는 1원씩 어긋날 수 있어,
- * 근삿값 주변에서 t + floor(t/10) === total 을 만족하는 값을 찾는다.
+ * 근삿값 주변에서 t + floor(t/10) === total 을 만족하는 값을 찾음
  */
 function splitTax(total: number): { incomeTax: number; localTax: number } {
   const approx = Math.floor((total * 10) / 11);
@@ -147,8 +146,8 @@ function splitTax(total: number): { incomeTax: number; localTax: number } {
  * 지급명세서·원천세 신고용 금액.
  *
  * 신고할 값은 실제로 지급하고 원천징수한 금액이므로, 지급액·원천징수 합계·실지급액은
- * Reward 에 저장된 값을 그대로 쓰고 필요경비·소득세 등 세부 내역만 다시 계산한다.
- * 저장값과 현재 계산이 다르면 mismatch 에 사유를 담아 CSV 에 보여준다.
+ * Reward 에 저장된 값을 그대로 쓰고 필요경비·소득세 등 세부 내역만 다시 계산함
+ * 저장값과 현재 계산이 다르면 mismatch 에 사유를 담아 CSV 에 보여줌
  */
 export function withholdingForReport(r: RewardTaxSnapshot): ReportedWithholding {
   const incomeType: IncomeType = r.incomeType === "BUSINESS" ? "BUSINESS" : "OTHER";
@@ -158,7 +157,7 @@ export function withholdingForReport(r: RewardTaxSnapshot): ReportedWithholding 
     return { ...fresh, mismatch: null };
   }
 
-  // 다르면 저장값을 기준으로 세부 내역을 역산한다.
+  // 다르면 저장값을 기준으로 세부 내역을 역산함
   const { incomeTax, localTax } = r.taxExempt
     ? { incomeTax: 0, localTax: 0 }
     : splitTax(r.taxAmount);

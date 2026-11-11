@@ -21,7 +21,7 @@ export default function DirectorSignForm({
     setUploading(true);
     setError(null);
     try {
-      // 서명은 공개 업로드 경로가 아니라 민감 첨부 저장소에 올린다.
+      // 서명은 공개 업로드 경로가 아니라 민감 첨부 저장소에 올림
       const r = await uploadSensitiveImage(file, "SIGNATURE");
       if (!r.ok) setError(r.error);
       else setSignatureUrl(r.url);

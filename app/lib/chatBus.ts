@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 
 // 실시간 채팅용 인메모리 이벤트 버스 (userId 단위 pub/sub).
 // prisma 싱글톤과 동일한 패턴으로 dev 핫리로드에도 단일 인스턴스 유지.
-// 수평 확장(다중 컨테이너) 시 아래 publish/subscribe만 Redis Pub/Sub로 교체하면 된다.
+// 수평 확장(다중 컨테이너) 시 아래 publish/subscribe만 Redis Pub/Sub로 교체하면 됨
 
 export type ChatEvent =
   | {
@@ -42,6 +42,11 @@ function channel(userId: string): string {
 /** 특정 사용자에게 이벤트 발행 */
 export function publishToUser(userId: string, event: ChatEvent): void {
   bus.emit(channel(userId), event);
+}
+
+/** 사용자 채널의 현재 구독(열린 탭·기기) 수 */
+export function subscriberCount(userId: string): number {
+  return bus.listenerCount(channel(userId));
 }
 
 /** 특정 사용자 채널 구독. 반환된 함수 호출 시 구독 해제. */

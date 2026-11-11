@@ -10,8 +10,8 @@ import { monthRange } from "./month";
 const PATH = "/dashboard/access";
 
 /**
- * [ADMIN] 접속기록 월 점검 완료 기록(월 1회, month unique).
- * 이상 징후 건수는 점검 당시 값으로 저장한다. 보관기간(25개월)이 지난 기록도 이때 파기한다.
+ * 접속기록 월 점검 완료 기록(월 1회, month unique).
+ * 이상 징후 건수는 점검 당시 값으로 저장함. 보관기간(25개월)이 지난 기록도 이때 파기함
  */
 export async function recordAccessReviewAction(formData: FormData) {
   const me = await getSessionUser();

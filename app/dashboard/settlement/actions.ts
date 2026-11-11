@@ -29,7 +29,7 @@ async function requireAdmin() {
   return me;
 }
 
-/** [소득 구분 설정: ADMIN] 기타소득/사업소득 */
+/** 기타소득/사업소득 */
 export async function setIncomeTypeAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) return;
@@ -39,8 +39,8 @@ export async function setIncomeTypeAction(formData: FormData) {
 }
 
 /**
- * [보상 금액 조정: ADMIN] 참여 시간이 다른 사람의 보상액을 개인별로 바꾼다(adjustRewardAmount).
- * 지급 전(PENDING)만 바뀌고, 0건이면 이미 검수된 건이라 그 사실을 알린다.
+ * 참여 시간이 다른 사람의 보상액을 개인별로 바꿈(adjustRewardAmount).
+ * 지급 전(PENDING)만 바뀌고, 0건이면 이미 검수된 건이라 그 사실을 알림
  */
 export async function adjustRewardAction(formData: FormData) {
   const me = await requireAdmin();
@@ -64,7 +64,7 @@ export async function adjustRewardAction(formData: FormData) {
   redirect(PATH);
 }
 
-/** [보상 검수: ADMIN] 승인/반려 */
+/** 승인/반려 */
 export async function reviewRewardAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) return;
@@ -77,7 +77,7 @@ export async function reviewRewardAction(formData: FormData) {
   redirect(PATH);
 }
 
-/** [지급 생성: ADMIN] 승인분 → Payout 생성 */
+/** 승인분 → Payout 생성 */
 export async function generatePayoutsAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) return;
@@ -89,7 +89,7 @@ export async function generatePayoutsAction(formData: FormData) {
   redirect(`${PATH}?created=${r.created}${miss ? `&missing=${miss}` : ""}`);
 }
 
-/** [지급 완료 확인: ADMIN] 한 건의 이체를 마친 뒤 누른다(기본 경로). */
+/** 한 건의 이체를 마친 뒤 누름(기본 경로). */
 export async function confirmPayoutAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) return;
@@ -100,7 +100,7 @@ export async function confirmPayoutAction(formData: FormData) {
   redirect(`${PATH}?paid=${ok ? 1 : 0}`);
 }
 
-/** [이체 실패 기록: ADMIN] 계좌 오류·예금주 불일치. 원장에는 기록하지 않는다. */
+/** 계좌 오류·예금주 불일치. 원장에는 기록하지 않음 */
 export async function failPayoutAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) return;
@@ -112,7 +112,7 @@ export async function failPayoutAction(formData: FormData) {
   redirect(`${PATH}?failed=1`);
 }
 
-/** [재이체 대기로: ADMIN] 계좌를 고친 뒤 다시 이체 목록에 올린다. */
+/** 계좌를 고친 뒤 다시 이체 목록에 올림 */
 export async function retryPayoutAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) return;
@@ -126,7 +126,7 @@ export async function retryPayoutAction(formData: FormData) {
   redirect(`${PATH}?retried=1`);
 }
 
-/** [전체 지급 완료 확인: ADMIN] 모든 이체가 성공했을 때만 쓴다. 원장에 기록한다. */
+/** 모든 이체가 성공했을 때만 씀. 원장에 기록함 */
 export async function confirmPayoutsAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) return;
@@ -137,7 +137,7 @@ export async function confirmPayoutsAction(formData: FormData) {
   redirect(`${PATH}?paid=${paid}`);
 }
 
-/** [세금 납부 기록: ADMIN] 원천세·부가세를 납부한 뒤 금액을 원장에 기록한다. */
+/** 원천세·부가세를 납부한 뒤 금액을 원장에 기록함 */
 export async function recordRemittanceAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) return;
@@ -148,7 +148,7 @@ export async function recordRemittanceAction(formData: FormData) {
     redirect(`${PATH}?tab=filing&error=${encodeURIComponent("금액을 숫자로 입력하세요.")}`);
   }
 
-  // 매입세액은 공제라 현금은 움직이지 않고 납부할 부가세만 줄어든다.
+  // 매입세액은 공제라 현금은 움직이지 않고 납부할 부가세만 줄어듦
   if (kind === "VAT_INPUT") {
     await recordVatInput(amount, memo || "운영비 매입세액");
   } else {
@@ -163,7 +163,7 @@ export async function recordRemittanceAction(formData: FormData) {
   redirect(`${PATH}?tab=filing&remitted=1`);
 }
 
-/** [환불 송금 완료: ADMIN] 마감 때 확정한 미달분을 보낸 뒤 원장에 기록한다. */
+/** 마감 때 확정한 미달분을 보낸 뒤 원장에 기록함 */
 export async function confirmOrderRefundSentAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) return;
@@ -175,7 +175,7 @@ export async function confirmOrderRefundSentAction(formData: FormData) {
   redirect(`${PATH}?refundSent=1`);
 }
 
-/** [정산 마감: ADMIN] 미달분 환불액을 확정하고 마감한다(원장은 송금 확인 때 기록). */
+/** 미달분 환불액을 확정하고 마감함(원장은 송금 확인 때 기록). */
 export async function settleOrderAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) return;
@@ -187,10 +187,9 @@ export async function settleOrderAction(formData: FormData) {
   redirect(`${PATH}?settled=1&refund=${r.refund ?? 0}`);
 }
 
-// ─────────────────────────── 세무 신고 기록 ───────────────────────────
-// 수정신고가 있으므로 기록한 금액은 고칠 수 있다(app/lib/taxFiling.ts).
+// 수정신고가 있으므로 기록한 금액은 고칠 수 있음(app/lib/taxFiling.ts).
 
-/** [신고 기록: ADMIN] 없으면 만들고, 있으면 고친다. 값은 폼에서 온 것을 그대로 쓴다. */
+/** 없으면 만들고, 있으면 고침. 값은 폼에서 온 것을 그대로 씀 */
 export async function recordTaxFilingAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) redirect(`${PATH}?tab=filing&error=권한이 없습니다.`);
@@ -230,7 +229,7 @@ export async function recordTaxFilingAction(formData: FormData) {
   });
 
   if (existing) {
-    // 기존 기록을 다시 저장하면 수정한 것으로 기록한다.
+    // 기존 기록을 다시 저장하면 수정한 것으로 기록함
     await prisma.taxFiling.update({
       where: { id: existing.id },
       data: { ...data, amendedAt: new Date(), amendedById: me.id },
@@ -245,7 +244,7 @@ export async function recordTaxFilingAction(formData: FormData) {
   redirect(`${PATH}?tab=filing`);
 }
 
-/** [신고 기록 삭제: ADMIN] 잘못 기록한 경우. 삭제하면 리마인더가 다시 온다. */
+/** 잘못 기록한 경우. 삭제하면 리마인더가 다시 옴 */
 export async function deleteTaxFilingAction(formData: FormData) {
   const me = await requireAdmin();
   if (!me) redirect(`${PATH}?tab=filing&error=권한이 없습니다.`);

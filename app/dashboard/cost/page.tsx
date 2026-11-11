@@ -62,16 +62,13 @@ export default async function CostDashboardPage() {
     <div className="min-h-screen bg-[var(--surface)]">
       <CostNav />
 
-      {/* Hero */}
-
       <main className="max-w-[1100px] mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div>
           <h1 className="text-xl font-bold text-[var(--foreground)]">비용 관리 대시보드</h1>
           <p className="text-sm text-[var(--muted)] mt-1">
-            평가 참여자 노무비 예산 현황 및 지급 이력을 관리합니다.
+            평가자 노무비 예산 현황 및 지급 이력을 관리합니다.
           </p>
         </div>
-        {/* Summary cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-[var(--radius-xl)] p-5">
             <p className="text-xs text-[var(--muted)]">총 예산</p>
@@ -110,20 +107,19 @@ export default async function CostDashboardPage() {
           </div>
         </div>
 
-        {/* Participant table */}
         <section className="bg-white rounded-[var(--radius-xl)] overflow-hidden">
           <div className="px-5 py-4 border-b border-[var(--gray-100)] flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">참여자별 지급 이력</h3>
+            <h3 className="text-sm font-semibold text-[var(--foreground)]">평가자별 지급 이력</h3>
             <span className="text-xs text-[var(--muted)]">총 {rows.length}명</span>
           </div>
           {rows.length === 0 ? (
-            <p className="text-sm text-[var(--gray-500)] text-center py-12">참여자 데이터가 없습니다.</p>
+            <p className="text-sm text-[var(--gray-500)] text-center py-12">평가자 데이터가 없습니다.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-[var(--gray-500)] bg-[var(--gray-50)]">
-                    <th className="px-4 py-3 font-semibold">참여자</th>
+                    <th className="px-4 py-3 font-semibold">평가자</th>
                     <th className="px-4 py-3 font-semibold">학번/사번</th>
                     <th className="px-4 py-3 font-semibold">참여 횟수</th>
                     <th className="px-4 py-3 font-semibold">산정 금액</th>

@@ -9,10 +9,10 @@ import { formatPhone } from "../../../components/PhoneInput";
 export const metadata = { title: "회원 활동 내역" };
 
 /**
- * 회원 활동 내역(ADMIN) — /dashboard/members/<userId>
+ * 회원 활동 내역(ADMIN): /dashboard/members/<userId>
  *
- * 신청·응답·보상·노무비·발주·관리자 조작을 { at, kind, title, detail } 로 맞춰 시간순 한 줄로 보여준다.
- * 응답 내용과 주민번호·계좌는 싣지 않는다(각각 리포트와 정산 화면에서 본다).
+ * 신청·응답·보상·노무비·발주·관리자 조작을 { at, kind, title, detail } 로 맞춰 시간순 한 줄로 보여줌
+ * 응답 내용과 주민번호·계좌는 싣지 않음(각각 리포트와 정산 화면에서 봄).
  */
 
 type Kind = "ENROLL" | "RESPONSE" | "REWARD" | "LABOR" | "ORDER" | "ADMIN";
@@ -30,7 +30,7 @@ const KIND_META: Record<Kind, { label: string; cls: string }> = {
   RESPONSE: { label: "응답 제출", cls: "bg-[var(--accent-light)] text-[var(--accent)]" },
   REWARD: { label: "보상", cls: "bg-[var(--success-light)] text-[var(--success)]" },
   LABOR: { label: "노무비", cls: "bg-[var(--warning-light)] text-[var(--warning)]" },
-  ORDER: { label: "발주", cls: "bg-[var(--accent-light)] text-[var(--accent)]" },
+  ORDER: { label: "의뢰", cls: "bg-[var(--accent-light)] text-[var(--accent)]" },
   ADMIN: { label: "관리자 조작", cls: "bg-[var(--danger-light)] text-[var(--danger)]" },
 };
 
@@ -67,7 +67,7 @@ export default async function MemberActivityPage({
   if (!user) notFound();
   await logPersonalData(me.id, "VIEW", "회원 활동 내역", user.id);
 
-  // 병렬로 조회하고 종류마다 최근 100건까지만 가져온다.
+  // 병렬로 조회하고 종류마다 최근 100건까지만 가져옴
   const TAKE = 100;
   const [enrollments, responses, surveyResponses, rewards, laborClaims, orders, audits] =
     await Promise.all([
@@ -138,7 +138,7 @@ export default async function MemberActivityPage({
       }),
     ]);
 
-  // 조작한 관리자의 이름을 한 번에 채운다(N+1 방지). AuditLog 는 관계가 없어 id 만 갖고 있다.
+  // 조작한 관리자의 이름을 한 번에 채움(N+1 방지). AuditLog 는 관계가 없어 id 만 갖고 있음
   const actorIds = [...new Set(audits.map((a) => a.actorId))];
   const actors = actorIds.length
     ? await prisma.user.findMany({
@@ -167,12 +167,12 @@ export default async function MemberActivityPage({
       kind: "RESPONSE" as const,
       title: r.project.title,
     })),
-    // 이전 방식(SurveyVersion 직접 응답)의 응답도 함께 보여준다.
+    // 이전 방식(SurveyVersion 직접 응답)의 응답도 함께 보여줌
     ...surveyResponses.map((s) => ({
       at: s.createdAt,
       kind: "RESPONSE" as const,
       title: `${s.surveyVersion.service.name} · 회차 ${s.surveyVersion.round}`,
-      detail: s.submittedAt ? "제출 완료 (설문 직접 응답)" : "작성 중 (설문 직접 응답)",
+      detail: s.submittedAt ? "제출 완료 (평가 직접 응답)" : "작성 중 (평가 직접 응답)",
     })),
     ...rewards.map((r) => ({
       at: r.createdAt,
@@ -212,7 +212,6 @@ export default async function MemberActivityPage({
   return (
     <div className="min-h-screen bg-[var(--surface)]">
 
-
       <main className="max-w-[900px] mx-auto px-4 sm:px-6 py-8 space-y-6">
         <Link href="/dashboard/members" className="inline-flex items-center gap-1 text-sm text-[var(--muted)] hover:text-[var(--foreground)] mb-4">
           ← 회원 관리
@@ -236,7 +235,6 @@ export default async function MemberActivityPage({
             {user.major ? ` · ${user.major}` : ""} · 가입 {seoulDate(user.createdAt)}
           </p>
         </div>
-        {/* 요약: 건수와 금액 */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "평가 신청", value: `${enrollments.length}건` },
@@ -257,7 +255,7 @@ export default async function MemberActivityPage({
           ))}
         </div>
 
-        {/* 연락처(정산 정보는 두지 않는다) */}
+        {/* 연락처(정산 정보는 두지 않음) */}
         <div className="bg-white rounded-[var(--radius-lg)] px-5 py-4">
           <dl className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
             <div>
@@ -326,8 +324,7 @@ export default async function MemberActivityPage({
           )}
 
           <p className="text-xs text-[var(--gray-500)] mt-3 leading-relaxed">
-            각 항목은 최근 {TAKE}건까지 표시합니다. 응답 원문은 평가 리포트 화면에서 봅니다 —
-            이 화면은 &ldquo;언제 무엇을 했나&rdquo;만 다룹니다.
+            각 항목은 최근 {TAKE}건까지 표시합니다. 응답 원문은 평가 리포트 화면에서 봅니다. 이 화면은 &ldquo;언제 무엇을 했나&rdquo;만 다룹니다.
           </p>
         </section>
       </main>

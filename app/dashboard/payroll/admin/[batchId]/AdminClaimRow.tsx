@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import ConfirmButton from "@/app/components/ConfirmButton";
 import { deleteClaim } from "../../actions";
 
@@ -50,16 +51,16 @@ export default function AdminClaimRow({ claim }: { claim: ClaimRow }) {
           >
             PDF
           </a>
-          <a
+          <Link
             href={`/dashboard/payroll/admin/${claim.batchId}/${claim.id}`}
             className="text-xs text-[var(--foreground)] underline hover:opacity-70"
           >
             편집
-          </a>
+          </Link>
           <form action={deleteClaim}>
             <input type="hidden" name="claimId" value={claim.id} />
             <ConfirmButton
-              message={`${claim.name}님의 청구서를 삭제합니다.\n\n· 되돌릴 수 없습니다.\n· 「참여자 서류 자동 생성」을 다시 누르면 새로 만들어집니다(수정한 내용은 복구되지 않습니다).\n\n정말 삭제하시겠습니까?`}
+              message={`${claim.name}님의 청구서를 삭제합니다.\n\n· 되돌릴 수 없습니다.\n· 「평가자 서류 자동 생성」을 다시 누르면 새로 만들어집니다(수정한 내용은 복구되지 않습니다).\n\n정말 삭제하시겠습니까?`}
               className="text-xs text-[var(--danger)] hover:underline"
             >
               삭제

@@ -1,6 +1,5 @@
 "use client";
 
-
 import SubmitButton from "@/app/components/SubmitButton";
 import { useState } from "react";
 import { createServiceAction } from "./actions";
@@ -18,10 +17,10 @@ type Flags = {
 };
 
 const FLAG_META: { key: keyof Flags; label: string; hint: string }[] = [
-  { key: "isAiService", label: "AI 서비스", hint: "AI 전용 모듈(출력 정확성·강건성·투명성) 활성" },
-  { key: "hasRecommendation", label: "추천·개인화 기능", hint: "추천 정확도 모듈 활성" },
-  { key: "isSafetyCritical", label: "안전 민감(safety-critical)", hint: "안전성 모듈 활성(헬스케어 등)" },
-  { key: "hasPersonalData", label: "개인정보 수집", hint: "보안 가중치 상향" },
+  { key: "isAiService", label: "AI 서비스", hint: "AI 전용 평가 항목(출력 정확성·강건성·투명성)을 포함해요" },
+  { key: "hasRecommendation", label: "추천·개인화 기능", hint: "추천 정확도 평가 항목을 포함해요" },
+  { key: "isSafetyCritical", label: "안전 민감(safety-critical)", hint: "안전성 평가 항목을 포함해요(헬스케어 등)" },
+  { key: "hasPersonalData", label: "개인정보 수집", hint: "보안 평가 비중을 높여요" },
   { key: "userFacingUi", label: "사용자 대면 UI", hint: "상호작용 역량 강조" },
 ];
 
@@ -33,11 +32,11 @@ const DEFAULT_FLAGS: Flags = {
   userFacingUi: true,
 };
 
-export default function ServiceForm() {
+export default function ServiceForm({ defaultOpen }: { defaultOpen: boolean }) {
   const [flags, setFlags] = useState<Flags>(DEFAULT_FLAGS);
   const [preset, setPreset] = useState<string>("");
 
-  // 프리셋을 바꾸면 체크박스가 기본값으로 돌아가므로, 직접 조정한 뒤라면 안내를 띄운다.
+  // 프리셋을 바꾸면 체크박스가 기본값으로 돌아가므로, 직접 조정한 뒤라면 안내를 띄움
   const [presetReset, setPresetReset] = useState(false);
 
   function applyPreset(id: string) {
@@ -50,13 +49,20 @@ export default function ServiceForm() {
   }
 
   return (
-    <section className="bg-white rounded-[var(--radius-xl)] p-5">
-      <h3 className="text-sm font-semibold text-[var(--foreground)] mb-1">새 서비스 등록</h3>
-      <p className="text-xs text-[var(--muted)] mb-4">
-        유형을 고르면 평가 항목이 자동 구성됩니다. 세부 속성은 직접 조정할 수 있습니다.
-      </p>
+    <details open={defaultOpen} className="group bg-white rounded-[var(--radius-xl)] p-5">
+      <summary className="list-none cursor-pointer flex items-center justify-between gap-3">
+        <span>
+          <span className="block text-sm font-semibold text-[var(--foreground)]">새 서비스 등록</span>
+          <span className="block text-xs text-[var(--muted)] mt-0.5">
+            유형을 고르면 평가 항목이 자동 구성됩니다. 세부 속성은 직접 조정할 수 있습니다.
+          </span>
+        </span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-[var(--gray-500)] transition-transform group-open:rotate-180" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </summary>
 
-      <form action={createServiceAction} className="space-y-4">
+      <form action={createServiceAction} className="space-y-4 mt-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="text-xs text-[var(--muted)]">
             서비스명
@@ -123,6 +129,6 @@ export default function ServiceForm() {
           서비스 등록
         </SubmitButton>
       </form>
-    </section>
+    </details>
   );
 }

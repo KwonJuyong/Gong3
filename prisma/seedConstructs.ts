@@ -3,9 +3,9 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 // L0 구성개념 사전 (ISO 25010:2023 / 25059 / 25019 기반)
-// instrument: SUS | UEQ | NASA_TLX | CSAT_NPS | null(=LLM 적응 블록)
+// instrument: SUS | UEQ | NASA_TLX | CSAT_NPS | S_TIAS | UES_SF | CLS8 | null(=LLM 적응 블록)
 // evaluator : EVALUATOR(평가단) | DEVELOPER(게스트 자가평가)
-// group     : A_CORE | A_AI | A_DOMAIN | A_MODALITY | A_DEV | B | C
+// group     : A_CORE | A_AI | A_DOMAIN | A_MODALITY | A_EDU | A_DEV | B | C
 const constructs = [
   // ── A-1 공통 코어 (모든 서비스 항상 적용 · ISO 25010:2023 · 평가단) ──
   { id: 'func_suitability',       group: 'A_CORE',   name: '기능 적합성',            isoRef: 'ISO/IEC 25010:2023', evaluator: 'EVALUATOR', instrument: null,        sortOrder: 10, description: '기능 완전성·정확성·적절성. 서비스가 명시된 기능을 빠짐없이 정확하게 수행하는 정도.' },
@@ -20,6 +20,7 @@ const constructs = [
   { id: 'robustness',             group: 'A_AI',     name: '강건성',                 isoRef: 'ISO/IEC 25059:2023', evaluator: 'EVALUATOR', instrument: null,        sortOrder: 120, description: '입력 변동·엣지케이스에서의 일관성. 신뢰성의 신규 하위특성.' },
   { id: 'functional_adaptability',group: 'A_AI',     name: '기능 적응성',            isoRef: 'ISO/IEC 25059:2023', evaluator: 'EVALUATOR', instrument: null,        sortOrder: 130, description: '변화하는 환경·맥락에 대한 적응. 25059 신규 특성.' },
   { id: 'transparency_control',   group: 'A_AI',     name: '투명성·사용자 제어성',   isoRef: 'ISO/IEC 25059:2023', evaluator: 'EVALUATOR', instrument: null,        sortOrder: 140, description: '동작 설명 가능성·사용자 개입 가능성. 신뢰 가능한 AI 요건.' },
+  { id: 'trust',                  group: 'A_AI',     name: '신뢰',                   isoRef: 'S-TIAS',             evaluator: 'EVALUATOR', instrument: 'S_TIAS',    sortOrder: 150, description: 'AI 서비스를 믿고 쓸 수 있다고 느끼는 정도. S-TIAS(McGrath 외 2025) 3문항.' },
 
   // ── A-3 도메인 조건부 모듈 (속성 플래그로 ON/OFF) ──
   { id: 'recommendation_accuracy',group: 'A_DOMAIN', name: '추천·개인화 정확도',     isoRef: 'ISO/IEC 25059:2023', evaluator: 'EVALUATOR', instrument: null,        sortOrder: 210, description: '추천/개인화 결과의 적합성. hasRecommendation=true 일 때.' },
@@ -33,6 +34,10 @@ const constructs = [
   { id: 'speech_naturalness',     group: 'A_MODALITY', name: '발화 자연스러움',       isoRef: 'ISO/IEC 25059',      evaluator: 'EVALUATOR', instrument: null,        sortOrder: 240, description: '합성 음성의 억양·속도·끊김이 사람의 말처럼 자연스러운 정도.' },
   { id: 'cross_modal_consistency',group: 'A_MODALITY', name: '모달 간 일관성',        isoRef: 'ISO/IEC 25059',      evaluator: 'EVALUATOR', instrument: null,        sortOrder: 250, description: '텍스트·이미지·음성 등 서로 다른 형태의 출력이 같은 내용을 모순 없이 전달하는 정도. 멀티모달 전용.' },
 
+  // ── 교육 서비스 (preset=education) ──
+  { id: 'cognitive_load',         group: 'A_EDU',    name: '학습 인지 부하',         isoRef: 'CLS-8',              evaluator: 'EVALUATOR', instrument: 'CLS8',      sortOrder: 260, description: '설명·안내가 학습에 주는 불필요한 부담(외재 부하). Leppink·van den Heuvel(2015) 8문항 중 외재 부하로 점수화.' },
+  { id: 'learning_engagement',    group: 'A_EDU',    name: '학습 몰입',              isoRef: 'UES-SF',             evaluator: 'EVALUATOR', instrument: 'UES_SF',    sortOrder: 270, description: "학습 중 집중·사용성·심미성·보람. UES-SF(O'Brien 외 2018) 12문항." },
+
   // ── 게스트 자가평가 (코드 내부 속성 → 평가단 외부관찰 불가) ──
   { id: 'maintainability',        group: 'A_DEV',    name: '유지보수성',             isoRef: 'ISO/IEC 25010:2023', evaluator: 'DEVELOPER', instrument: null,        sortOrder: 310, description: '수정 용이성·모듈성·테스트 용이성. 게스트 자가평가.' },
   { id: 'flexibility',            group: 'A_DEV',    name: '유연성',                 isoRef: 'ISO/IEC 25010:2023', evaluator: 'DEVELOPER', instrument: null,        sortOrder: 320, description: '적응성·설치성·대체성(구 이식성). 게스트 자가평가.' },
@@ -41,13 +46,13 @@ const constructs = [
   { id: 'overall_satisfaction',   group: 'B',        name: '전체 만족도',            isoRef: 'ISO/IEC 25019:2023', evaluator: 'EVALUATOR', instrument: 'CSAT_NPS',  sortOrder: 410, description: '전반적 만족·추천 의향. CSAT/NPS로 측정.' },
   { id: 'user_experience',        group: 'B',        name: '사용자 경험',            isoRef: 'ISO/IEC 25019:2023', evaluator: 'EVALUATOR', instrument: 'UEQ',       sortOrder: 420, description: '매력도·명료성·효율성·신뢰성·자극·신규성(6차원). UEQ로 측정.' },
 
-  // ── C그룹 운영·메타 (플랫폼 운영 품질, A/B 와 합산하지 않는다) ──
+  // ── C그룹 운영·메타 (플랫폼 운영 품질, A/B 와 합산하지 않음) ──
   { id: 'eval_fatigue',           group: 'C',        name: '평가 피로도',            isoRef: 'NASA-TLX',           evaluator: 'EVALUATOR', instrument: 'NASA_TLX',  sortOrder: 510, description: '평가 수행의 인지 부하(6차원). 응답 신뢰도 보정용. 평가 종료 후 응답.' },
   { id: 'feedback_usefulness',    group: 'C',        name: '피드백 유용성',          isoRef: '운영 KPI',           evaluator: 'DEVELOPER', instrument: null,        sortOrder: 520, description: '리포트가 개발에 실제로 유용했는지. 게스트가 리포트 확인 후 응답.' },
 ] as const
 
 async function main() {
-  console.log('🌱 구성개념(Construct) 사전 시드 시작...')
+  console.log('구성개념(Construct) 사전 시드 시작...')
 
   for (const c of constructs) {
     await prisma.construct.upsert({
@@ -82,7 +87,7 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error('❌ 구성개념 시드 실패:', e)
+    console.error('구성개념 시드 실패:', e)
     process.exit(1)
   })
   .finally(async () => {

@@ -35,7 +35,6 @@ function canManageService(role: string) {
 
 const ALLOWED_MODALITY = ["text", "image", "voice", "multimodal"];
 
-/** [서비스 등록] */
 export async function createServiceAction(formData: FormData) {
   const me = await getMe();
   if (!me || !canManageService(me.role)) return;
@@ -49,7 +48,7 @@ export async function createServiceAction(formData: FormData) {
   const modalityRaw = ((formData.get("modality") as string) || "text").trim();
   const modality = ALLOWED_MODALITY.includes(modalityRaw) ? modalityRaw : "text";
 
-  await prisma.service.create({
+  const service = await prisma.service.create({
     data: {
       name,
       ownerId: me.id,
@@ -64,10 +63,10 @@ export async function createServiceAction(formData: FormData) {
   });
 
   revalidatePath(SERVICES_PATH);
-  redirect(`${SERVICES_PATH}?created=1`);
+  // 등록 다음 단계인 설문 작성으로 바로 보냄
+  redirect(`${SERVICES_PATH}/${service.id}?created=1`);
 }
 
-/** [서비스 삭제: 소유자 또는 ADMIN] */
 export async function deleteServiceAction(formData: FormData) {
   const me = await getMe();
   if (!me || !canManageService(me.role)) return;
@@ -94,7 +93,7 @@ async function getOwnedService(serviceId: string, me: { id: string; role: string
   return service;
 }
 
-/** [LLM 적응 블록 생성] 활성 LLM 문항 구성개념의 문구를 생성/갱신 */
+/** 활성 LLM 문항 구성개념의 문구를 생성/갱신 */
 export async function generateDraftsAction(formData: FormData) {
   const me = await getMe();
   if (!me || !canManageService(me.role)) return;
@@ -104,7 +103,7 @@ export async function generateDraftsAction(formData: FormData) {
   const service = await getOwnedService(serviceId, me);
   if (!service) return;
 
-  // 작성 중(DRAFT) 설문 버전. 없으면 회차 1 을 만든다.
+  // 작성 중(DRAFT) 설문 버전. 없으면 회차 1 을 만듦
   let version = await prisma.surveyVersion.findFirst({
     where: { serviceId, status: "DRAFT" },
     orderBy: { round: "desc" },
@@ -156,7 +155,7 @@ export async function generateDraftsAction(formData: FormData) {
     targets.map((c) => ({ id: c.id, name: c.name, description: c.description })),
   );
 
-  // 생성 문구 upsert. 수정본과 승인 상태는 유지하고 generated 만 갱신한다.
+  // 생성 문구 upsert. 수정본과 승인 상태는 유지하고 generated 만 갱신함
   for (const r of results) {
     await prisma.llmQuestionDraft.upsert({
       where: { surveyVersionId_constructId: { surveyVersionId: version.id, constructId: r.constructId } },
@@ -170,7 +169,7 @@ export async function generateDraftsAction(formData: FormData) {
     });
   }
 
-  // 재현을 위해 사용 모델과 프롬프트 판본을 기록한다
+  // 재현을 위해 사용 모델과 프롬프트 판본을 기록함
   await prisma.surveyVersion.update({
     where: { id: version.id },
     data: { llmModelId: activeModel(), promptVersion: PROMPT_VERSION },
@@ -180,7 +179,7 @@ export async function generateDraftsAction(formData: FormData) {
   redirect(`${SERVICES_PATH}/${serviceId}?generated=1`);
 }
 
-/** [문항 초안 편집·승인] LLM 이 만든 문구를 수정·확정한다 */
+/** LLM 이 만든 문구를 수정·확정함 */
 export async function saveDraftAction(formData: FormData) {
   const me = await getMe();
   if (!me || !canManageService(me.role)) return;
@@ -208,7 +207,7 @@ export async function saveDraftAction(formData: FormData) {
   redirect(`${SERVICES_PATH}/${service.id}?saved=1`);
 }
 
-/** [설문 동결] DRAFT 버전을 최종 블록으로 조립·스냅샷하고 CONFIRMED로 잠금 */
+/** DRAFT 버전을 최종 블록으로 조립·스냅샷하고 CONFIRMED로 잠금 */
 export async function freezeVersionAction(formData: FormData) {
   const me = await getMe();
   if (!me || !canManageService(me.role)) return;
@@ -227,7 +226,7 @@ export async function freezeVersionAction(formData: FormData) {
     redirect(`${SERVICES_PATH}/${serviceId}?frozen=none`);
   }
 
-  // 승인하지 않은 문구가 있으면 화면에서 명시적으로 체크했을 때만 동결한다(동결은 되돌릴 수 없다).
+  // 승인하지 않은 문구가 있으면 화면에서 명시적으로 체크했을 때만 동결함(동결은 되돌릴 수 없음).
   const unapproved = version.drafts.filter((d) => !d.approved).length;
   if (unapproved > 0 && formData.get("allowUnapproved") !== "on") {
     redirect(`${SERVICES_PATH}/${serviceId}?frozen=unapproved&n=${unapproved}`);
@@ -253,7 +252,7 @@ export async function freezeVersionAction(formData: FormData) {
 
   for (const c of constructs) {
     if (!c.instrument) {
-      // LLM 적응 문항: 수정본이 있으면 그것을, 없으면 생성본을 쓴다
+      // LLM 적응 문항: 수정본이 있으면 그것을, 없으면 생성본을 씀
       const d = draftByConstruct.get(c.id);
       if (!d) continue;
       blocks.push({
@@ -263,11 +262,11 @@ export async function freezeVersionAction(formData: FormData) {
         scaleType: d.scaleType,
         itemKey: adaptiveKey(c.id),
         text: (d.edited || d.generated).trim(),
-        // 응답 주체를 블록에 실어야 평가 변환에서 개발사 문항을 걸러낼 수 있다.
+        // 응답 주체를 블록에 실어야 평가 변환에서 개발사 문항을 걸러낼 수 있음
         evaluator: c.evaluator,
       });
     } else {
-      // 검증도구: 원문 문항이 시드돼 있을 때만 블록을 만든다(현재 UEQ)
+      // 검증도구: 원문 문항이 시드돼 있을 때만 블록을 만듦(현재 UEQ)
       const items = await prisma.instrumentItem.findMany({
         where: { instrument: c.instrument, locale: "ko" },
         orderBy: { ordinal: "asc" },
@@ -341,7 +340,7 @@ export async function freezeVersionAction(formData: FormData) {
     },
   });
 
-  // 동결은 공개가 아니다. 관리자에게 검토를 요청하고, 공개는 평가를 만들어 승인받은 뒤에 된다.
+  // 동결은 공개가 아님. 관리자에게 검토를 요청하고, 공개는 평가를 만들어 승인받은 뒤에 됨
   await notifyAdminsForReview({ title: `${service.name} · 회차 ${version.round}`, requesterId: me.id });
 
   revalidatePath(`${SERVICES_PATH}/${serviceId}`);

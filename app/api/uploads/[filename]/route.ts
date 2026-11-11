@@ -40,7 +40,7 @@ export async function GET(
 ) {
   const { filename } = await params;
 
-  // 로그인 여부만 본다(파일 소유자는 기록돼 있지 않다). 존재를 드러내지 않도록 404.
+  // 로그인 여부만 봄(파일 소유자는 기록돼 있지 않음). 존재를 드러내지 않도록 404.
   if (!(await getSessionUserId())) {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
@@ -63,7 +63,7 @@ export async function GET(
     await stat(filePath);
     const buffer = await readFile(filePath);
 
-    // 공유 프록시가 인증 없이 다시 내주지 않도록 private 캐시만 허용한다.
+    // 공유 프록시가 인증 없이 다시 내주지 않도록 private 캐시만 허용함
     const headers: Record<string, string> = {
       "Cache-Control": "private, max-age=31536000, immutable",
     };

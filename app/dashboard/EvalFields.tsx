@@ -15,9 +15,9 @@ const choiceCls = (active: boolean) =>
   }`;
 
 /**
- * 5점 동의 척도(리커트). 진술문에 대한 동의 정도를 묻는 척도라 별점과 다르게 라벨을 보여준다.
- * 5칸을 같은 폭으로 둔다. 척도 방향이 기기마다 다르면 응답 분포가 달라지므로 좁은 화면에서도
- * 세로로 바꾸지 않는다.
+ * 5점 동의 척도(리커트). 진술문에 대한 동의 정도를 묻는 척도라 별점과 다르게 라벨을 보여줌
+ * 5칸을 같은 폭으로 둠. 척도 방향이 기기마다 다르면 응답 분포가 달라지므로 좁은 화면에서도
+ * 세로로 바꾸지 않음
  */
 export function Likert5Field({ name, defaultValue, onPick }: { name: string; defaultValue?: number; onPick?: () => void }) {
   const [value, setValue] = useState<number>(defaultValue || 0);
@@ -27,7 +27,7 @@ export function Likert5Field({ name, defaultValue, onPick }: { name: string; def
         const v = i + 1;
         return (
           <label key={v} className={`${choiceCls(value === v)} min-h-12 px-1 py-2 rounded-[var(--radius-md)] text-xs sm:text-[13px] leading-snug break-keep`}>
-            {/* 수정 모드에서 기존 값이 실제로 선택되도록 defaultChecked 를 준다. */}
+            {/* 수정 모드에서 기존 값이 실제로 선택되도록 defaultChecked 를 줌 */}
             <input
               type="radio"
               name={name}
@@ -49,8 +49,8 @@ export function Likert5Field({ name, defaultValue, onPick }: { name: string; def
 
 /**
  * 7점 의미변별 척도(UEQ 등 검증도구용). 1~7 을 그대로 보내고, 역문항 처리와 −3~+3 변환은
- * surveyScore.ts 가 한다.
- * 폰에서는 양 끝 형용사를 척도 위 한 줄에 두고 7칸을 폭에 맞춘다.
+ * surveyScore.ts 가 함
+ * 폰에서는 양 끝 형용사를 척도 위 한 줄에 두고 7칸을 폭에 맞춤
  */
 export function Semantic7Field({
   name,
@@ -73,7 +73,7 @@ export function Semantic7Field({
         <span>{right}</span>
       </div>
       <span className="hidden sm:block text-sm font-medium text-[var(--foreground)] w-28 text-right shrink-0">{left}</span>
-      <div className="grid grid-cols-7 gap-1 sm:flex sm:gap-1.5" role="radiogroup" aria-label={`${left} — ${right}`}>
+      <div className="grid grid-cols-7 gap-1 sm:flex sm:gap-1.5" role="radiogroup" aria-label={`${left}: ${right}`}>
         {[1, 2, 3, 4, 5, 6, 7].map((v) => (
           <label
             key={v}
@@ -100,7 +100,67 @@ export function Semantic7Field({
   );
 }
 
-/** 별점 1~5. 선택한 점수까지 별을 채운다. */
+/**
+ * 검증도구의 숫자 척도(1~7, 0~10 등). 원래 범위를 바꾸면 원척도와 비교할 수 없어 그대로 씀
+ * 양 끝 라벨은 척도 위 한 줄에 두고, 좁은 화면에서도 가로 배열을 유지함
+ */
+export function ScaleField({
+  name,
+  min,
+  max,
+  left,
+  right,
+  defaultValue,
+  onPick,
+}: {
+  name: string;
+  min: number;
+  max: number;
+  left: string;
+  right: string;
+  defaultValue?: number;
+  onPick?: () => void;
+}) {
+  const [value, setValue] = useState<number | undefined>(defaultValue);
+  const points = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  return (
+    <div>
+      <div className="flex justify-between gap-3 text-sm font-medium text-[var(--foreground)] mb-2">
+        <span>
+          {min} = {left}
+        </span>
+        <span className="text-right">
+          {max} = {right}
+        </span>
+      </div>
+      <div
+        className="grid gap-0.5 sm:gap-1.5"
+        style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))` }}
+        role="radiogroup"
+        aria-label={`${min} ${left}: ${max} ${right}`}
+      >
+        {points.map((v) => (
+          <label key={v} className={`${choiceCls(value === v)} h-11 rounded-[var(--radius-md)] text-[15px]`} aria-label={`${v}점`}>
+            <input
+              type="radio"
+              name={name}
+              value={String(v)}
+              defaultChecked={defaultValue === v}
+              className="sr-only"
+              onChange={() => {
+                setValue(v);
+                onPick?.();
+              }}
+            />
+            {v}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 별점 1~5. 선택한 점수까지 별을 채움 */
 export function StarRating({ name, defaultValue, onPick }: { name: string; defaultValue?: number; onPick?: () => void }) {
   const [value, setValue] = useState<number>(defaultValue || 0);
   return (
@@ -132,10 +192,19 @@ export function StarRating({ name, defaultValue, onPick }: { name: string; defau
   );
 }
 
-export function ImageUploadField({ name, onPick }: { name: string; onPick?: () => void }) {
-  const [preview, setPreview] = useState<string | null>(null);
+export function ImageUploadField({
+  name,
+  defaultValue,
+  onPick,
+}: {
+  name: string;
+  /** 이미 제출한 이미지. 없으면 응답을 고쳐 다시 낼 때 이미지 답이 빈 값으로 덮임 */
+  defaultValue?: string;
+  onPick?: () => void;
+}) {
+  const [preview, setPreview] = useState<string | null>(defaultValue || null);
   const [uploading, setUploading] = useState(false);
-  const [uploadedUrl, setUploadedUrl] = useState("");
+  const [uploadedUrl, setUploadedUrl] = useState(defaultValue || "");
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
@@ -175,7 +244,7 @@ export function ImageUploadField({ name, onPick }: { name: string; onPick?: () =
         aria-label="이미지 업로드"
         className="border-2 border-dashed border-[var(--gray-300)] rounded-[var(--radius-lg)] p-6 text-center cursor-pointer hover:border-[var(--accent)] transition-colors"
         onClick={() => fileRef.current?.click()}
-        // Enter·Space 로도 파일 선택을 연다.
+        // Enter·Space 로도 파일 선택을 열기
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();

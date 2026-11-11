@@ -1,5 +1,5 @@
 // 서비스 프로파일(속성 플래그) → 활성 구성개념 판정 로직.
-// 설문 구성·LLM 생성·등록 미리보기에서 함께 쓴다(서버/클라이언트 양쪽 import 가능).
+// 설문 구성·LLM 생성·등록 미리보기에서 함께 씀(서버/클라이언트 양쪽 import 가능).
 
 export type ServiceProfile = {
   isAiService: boolean;
@@ -8,11 +8,11 @@ export type ServiceProfile = {
   hasPersonalData: boolean;
   userFacingUi: boolean;
   preset: string | null;
-  /** text | image | voice | multimodal. A_MODALITY 구성개념 선택에 쓴다. */
+  /** text | image | voice | multimodal. A_MODALITY 구성개념 선택에 씀 */
   modality: string;
 };
 
-// 6개 유형 프리셋 — 속성 플래그의 프리필(UX용). 선택 후 개별 조정 가능.
+// 6개 유형 프리셋: 속성 플래그의 프리필(UX용). 선택 후 개별 조정 가능.
 export const PRESETS: { id: string; label: string; flags: Partial<ServiceProfile> }[] = [
   { id: "education", label: "교육 / 에듀테크", flags: { userFacingUi: true } },
   { id: "healthcare", label: "헬스케어", flags: { isSafetyCritical: true, hasPersonalData: true } },
@@ -38,7 +38,7 @@ export function isConstructActive(
       if (c.id === "deep_accessibility")
         return p.preset === "education"; // 공공·교육 서비스
       return false;
-    // 입력 형태(modality)별 품질. 모달 간 일관성처럼 특정 형태에만 있는 구성개념이 있다.
+    // 입력 형태(modality)별 품질. 모달 간 일관성처럼 특정 형태에만 있는 구성개념이 있음
     case "A_MODALITY": {
       const m = p.modality || "text";
       const visual = m === "image" || m === "multimodal";
@@ -48,6 +48,8 @@ export function isConstructActive(
       if (c.id === "cross_modal_consistency") return m === "multimodal";
       return false;
     }
+    case "A_EDU":
+      return p.preset === "education"; // 교육 서비스 전용 검증도구
     case "A_DEV":
       return true; // 개발사 자가평가, 항상 적용(응답 주체만 다름)
     case "B":

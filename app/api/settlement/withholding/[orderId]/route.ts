@@ -1,32 +1,31 @@
 import { logPersonalData } from "@/app/lib/accessLog";
 /**
- * 발주별 원천징수 명세 (CSV) — 지급명세서·원천세 신고 근거자료.
+ * 발주별 원천징수 명세 (CSV): 지급명세서·원천세 신고 근거자료.
  *
- * 신고는 실제 지급 기준이므로 기본은 PAID 만 내보낸다. ?all=1 이면 확인용으로 미지급분도 포함한다.
- * 주민등록번호가 들어가므로 ADMIN 전용이다.
+ * 신고는 실제 지급 기준이므로 기본은 PAID 만 내보냄. ?all=1 이면 확인용으로 미지급분도 포함함
+ * 주민등록번호가 들어가므로 ADMIN 전용임
  */
 import { type NextRequest, NextResponse } from "next/server";
+import { checkLimit } from "@/app/lib/limits";
 import { getSessionUserId } from "@/app/session-server";
 import { prisma } from "../../../../db";
 import { decryptRRN } from "../../../../lib/crypto";
 import { withholdingForReport, INCOME_TYPE_LABEL, type IncomeType } from "../../../../lib/withholding";
-
-function csvCell(v: string | number): string {
-  const s = String(v ?? "");
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
+import { csvCell } from "../../../../lib/csv";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ orderId: string }> }) {
   const userId = await getSessionUserId();
   if (!userId) return NextResponse.json({ error: "인증 필요" }, { status: 401 });
   const me = await prisma.user.findUnique({ where: { id: userId } });
   if (!me || me.role !== "ADMIN") return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const rl = checkLimit("adminDocument", me.id);
+  if (rl) return NextResponse.json({ error: rl }, { status: 429 });
 
   const { orderId } = await params;
   const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) return NextResponse.json({ error: "발주 없음" }, { status: 404 });
+  if (!order) return NextResponse.json({ error: "의뢰 없음" }, { status: 404 });
 
-  // 기본은 지급된 것만. ?all=1 이면 미지급분도 포함한다.
+  // 기본은 지급된 것만. ?all=1 이면 미지급분도 포함함
   const includeUnpaid = req.nextUrl.searchParams.get("all") === "1";
   const rewards = await prisma.reward.findMany({
     where: {
@@ -70,7 +69,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ orde
   const lines = [header.map(csvCell).join(",")];
 
   for (const r of rewards) {
-    // 신고액은 실제 지급액이므로 재계산하지 않고 지급 시점 값을 쓴다.
+    // 신고액은 실제 지급액이므로 재계산하지 않고 지급 시점 값을 씀
     const w = withholdingForReport(r);
     const rrn = decryptRRN(r.user.payrollProfile?.rrnEnc);
     const paid = r.status === "PAID";

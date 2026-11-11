@@ -8,8 +8,9 @@ import { redirect } from "next/navigation";
 import { prisma } from "../../db";
 import { won } from "../../lib/money";
 import * as ledger from "../../lib/ledger";
-import { INCOME_TYPE_LABEL, type IncomeType } from "../../lib/withholding";
+import { INCOME_TYPE_LABEL } from "../../lib/withholding";
 import { getIncomeType } from "../../lib/rewards";
+import { responseQualityFlags, type ProjectQuestion } from "../../lib/projectQuestions";
 import { listProfileStatus } from "../../lib/settlementProfile";
 import { monthlyWithholding, kstParts } from "../../lib/taxReminder";
 import { monthFilingStatus } from "../../lib/taxFiling";
@@ -66,10 +67,10 @@ export default async function SettlementPage({
   if (!userId) redirectToLogin();
   const me = await prisma.user.findUnique({ where: { id: userId } });
   if (!me || me.role !== "ADMIN") redirect("/dashboard");
-  // 접속기록: 「처리할 일」 탭은 평가단의 계좌를 가리지 않고 보여준다
-  if (tab === "work") await logPersonalData(me.id, "VIEW", "보상 정산 — 계좌 목록");
+  // 접속기록: 「처리할 일」 탭은 평가단의 계좌를 가리지 않고 보여줌
+  if (tab === "work") await logPersonalData(me.id, "VIEW", "보상 정산: 계좌 목록");
 
-  // 신고는 지난달 지급분 기준이다.
+  // 신고는 지난달 지급분 기준임
   const today = kstParts(new Date());
   const filingMonth =
     today.month === 1
@@ -91,7 +92,7 @@ export default async function SettlementPage({
             user: {
               select: {
                 name: true,
-                // 이체할 때 쓰는 화면이라 계좌를 가리지 않는다. 예금주도 함께 가져온다.
+                // 이체할 때 쓰는 화면이라 계좌를 가리지 않음. 예금주도 함께 가져옴
                 payrollProfile: {
                   select: { bankName: true, accountNumber: true, holderName: true },
                 },
@@ -118,6 +119,21 @@ export default async function SettlementPage({
     0,
   );
 
+  // 검수 대기 보상의 불성실 응답 의심 신호. 응답 원문은 검수 대기 건만 읽음
+  const pendingResponses = await prisma.reward.findMany({
+    where: { status: "PENDING", responseId: { not: null } },
+    select: { id: true, response: { select: { answers: true, project: { select: { questions: true } } } } },
+  });
+  const qualityFlags = new Map<string, string[]>();
+  for (const pr of pendingResponses) {
+    if (!pr.response) continue;
+    const flags = responseQualityFlags(
+      (pr.response.project.questions as unknown as ProjectQuestion[]) || [],
+      (pr.response.answers ?? {}) as Record<string, unknown>,
+    );
+    if (flags.length > 0) qualityFlags.set(pr.id, flags);
+  }
+
   const fmt = (d: Date | null) =>
     d
       ? new Intl.DateTimeFormat("ko-KR", {
@@ -127,7 +143,7 @@ export default async function SettlementPage({
         }).format(d)
       : "";
 
-  // Date 객체는 클라이언트로 넘기지 않고 서버에서 문자열로 만든다.
+  // Date 객체는 클라이언트로 넘기지 않고 서버에서 문자열로 만듦
   const ledgerView: LedgerRowView[] = ledgerRows.map((r) => ({
     id: r.id,
     kind: r.kind,
@@ -167,7 +183,7 @@ export default async function SettlementPage({
         <div>
           <h1 className="text-xl font-bold text-[var(--foreground)]">보상 정산</h1>
           <p className="text-sm text-[var(--muted)] mt-1">
-            평가단 응답을 검수하고, 승인분에 원천징수를 적용해 지급합니다.
+            평가자 응답을 검수하고, 승인분에 원천징수를 적용해 지급합니다.
           </p>
         </div>
         {q.error && (
@@ -201,7 +217,7 @@ export default async function SettlementPage({
           <p className="text-sm text-[var(--success)] bg-[var(--success-light)] px-4 py-3 rounded-[var(--radius-md)]">
             정산 마감 완료
             {Number(q.refund) > 0 &&
-              ` · 미달분 ${won(Number(q.refund))} 환불 확정 — 기업 계좌로 이체한 뒤 "환불 송금 완료"를 누르세요(그때 원장에 기록됩니다)`}
+              ` · 미달분 ${won(Number(q.refund))} 환불 확정: 기업 계좌로 이체한 뒤 "환불 송금 완료"를 누르세요(그때 원장에 기록됩니다)`}
           </p>
         )}
         {q.refundSent != null && (
@@ -219,7 +235,7 @@ export default async function SettlementPage({
         <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: "총 수납", value: summary.paymentIn, sub: "기업 결제 (부가세 포함)" },
-            { label: "실지급", value: summary.paidOut, sub: "평가단 (세후)" },
+            { label: "실지급", value: summary.paidOut, sub: "평가자 (세후)" },
             { label: "환불", value: summary.refunded, sub: "송금 완료분" },
             { label: "통장 잔액", value: summary.cash, sub: "수납−지급−환불" },
             { label: "미납 원천세", value: summary.taxPayable, sub: "받아둔 세금", warn: summary.taxPayable > 0 },
@@ -276,12 +292,12 @@ export default async function SettlementPage({
 
         {tab === "work" && (
           <>
-        {/* 정산 정보 현황(계좌 미입력자는 지급 생성에서 빠지므로 먼저 보여준다) */}
+        {/* 정산 정보 현황(계좌 미입력자는 지급 생성에서 빠지므로 먼저 보여줌) */}
         <ProfilesPanel rows={profileRows} />
 
         {orders.length === 0 && (
           <p className="text-sm text-[var(--gray-500)] text-center py-12 bg-white rounded-[var(--radius-xl)]">
-            아직 보상이 없습니다. 유료 발주 평가에 학생이 응답하면 여기에 나타납니다.
+            아직 보상이 없습니다. 유료 의뢰 평가에 학생이 응답하면 여기에 나타납니다.
           </p>
         )}
 
@@ -293,14 +309,14 @@ export default async function SettlementPage({
           const payable = approved.filter((r) => r.payout && r.payout.status === "PENDING").length;
           const failedPayouts = rewards.filter((r) => r.payout?.status === "FAILED").length;
           const grossSum = rewards.reduce((s, r) => s + r.grossAmount, 0);
-          // 이행분: 승인된 것 전부(FAILED 포함). settleOrderRefund 와 같은 기준이다.
+          // 이행분: 승인된 것 전부(FAILED 포함). settleOrderRefund 와 같은 기준임
           const fulfilled = rewards.filter(
             (r) => r.status === "APPROVED" || r.status === "PAID" || r.status === "FAILED",
           );
           const netSum = fulfilled.reduce((s, r) => s + r.netAmount, 0);
           const taxSum = fulfilled.reduce((s, r) => s + r.taxAmount, 0);
-          // 청구액(발주 보상 소계)과 지급 예정액의 차이. 개인별 조정이나 미달이 있으면 생긴다.
-          // 정원이 아직 안 찬 경우에도 음수가 나므로 문구로 구분한다.
+          // 청구액(발주 보상 소계)과 지급 예정액의 차이. 개인별 조정이나 미달이 있으면 생김
+          // 정원이 아직 안 찬 경우에도 음수가 나므로 문구로 구분함
           const subtotalGap = grossSum - order.subtotal;
           const adjustedCount = rewards.filter((r) => r.adjustedAt).length;
           const allResponded = rewards.length >= order.panelSize;
@@ -326,13 +342,12 @@ export default async function SettlementPage({
                       원천징수 {won(taxSum)} · 실지급 {won(netSum)}
                     </div>
                     <div className="text-xs text-[var(--gray-500)] mt-0.5">
-                      발주 보상 소계 {won(order.subtotal)}
+                      의뢰 보상 소계 {won(order.subtotal)}
                       {adjustedCount > 0 && ` · 조정 ${adjustedCount}건`}
                     </div>
                   </div>
                 </div>
 
-                {/* 청구액과 지급 예정액이 다름 */}
                 {subtotalGap !== 0 && (
                   <p
                     className={`mt-2 text-xs leading-relaxed px-3 py-2 rounded-[var(--radius-md)] ${
@@ -343,18 +358,18 @@ export default async function SettlementPage({
                   >
                     {subtotalGap > 0 ? (
                       <>
-                        <strong>지급 예정액이 발주 보상 소계보다 {won(subtotalGap)} 많습니다.</strong>{" "}
-                        기업에 청구한 금액보다 학생에게 나갈 돈이 큽니다 — 견적서에서 빠진
-                        참여자가 없는지, 개인 조정이 과했는지 확인하세요.
+                        <strong>지급 예정액이 의뢰 보상 소계보다 {won(subtotalGap)} 많습니다.</strong>{" "}
+                        기업에 청구한 금액보다 학생에게 나갈 돈이 큽니다. 견적서에서 빠진
+                        평가자가 없는지, 개인 조정이 과했는지 확인하세요.
                       </>
                     ) : allResponded ? (
                       <>
-                        지급 예정액이 발주 보상 소계보다 {won(-subtotalGap)} 적습니다. 정원이 다
+                        지급 예정액이 의뢰 보상 소계보다 {won(-subtotalGap)} 적습니다. 정원이 다
                         찼는데도 남으면 <strong>정산 마감에서 미달분이 환불</strong>됩니다.
                       </>
                     ) : (
                       <>
-                        아직 정원({order.panelSize}명)이 안 찼습니다 — 응답 {rewards.length}명.
+                        아직 정원({order.panelSize}명)이 안 찼습니다. 응답 {rewards.length}명.
                         남은 {won(-subtotalGap)} 은 미응답분입니다.
                       </>
                     )}
@@ -362,7 +377,6 @@ export default async function SettlementPage({
                 )}
               </div>
 
-              {/* 보상 목록 */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -381,15 +395,22 @@ export default async function SettlementPage({
                       const label = REWARD_LABEL[r.status] ?? REWARD_LABEL.PENDING;
                       const po = r.payout;
                       const prof = r.user.payrollProfile;
-                      // Payout 이 있으면 그 계좌, 없으면 현재 프로필 계좌를 보여준다.
+                      // Payout 이 있으면 그 계좌, 없으면 현재 프로필 계좌를 보여줌
                       const bank = po?.bankName || prof?.bankName || "";
                       const acct = po?.accountNumber || prof?.accountNumber || "";
                       const holder = po?.holderName || prof?.holderName || r.user.name;
-                      // 예금주가 본인 이름과 다르면 표시한다.
+                      // 예금주가 본인 이름과 다르면 표시함
                       const holderDiffers = holder !== r.user.name;
                       return (
                         <tr key={r.id} className="border-t border-[var(--gray-100)]">
-                          <td className="px-4 py-2 text-[var(--foreground)]">{r.user.name}</td>
+                          <td className="px-4 py-2 text-[var(--foreground)]">
+                            {r.user.name}
+                            {qualityFlags.get(r.id)?.map((f) => (
+                              <div key={f} className="text-xs text-[var(--warning)] font-medium">
+                                {f}
+                              </div>
+                            ))}
+                          </td>
                           <td className="px-4 py-2 text-[var(--muted)]">
                             {won(r.grossAmount)}
                             {r.adjustedAt && (
@@ -454,7 +475,7 @@ export default async function SettlementPage({
                                     반려
                                   </ConfirmButton>
                                 </form>
-                                {/* 개인별 금액 조정(승인 전에만). 세금도 다시 계산된다. */}
+                                {/* 개인별 금액 조정(승인 전에만). 세금도 다시 계산됨 */}
                                 <form action={adjustRewardAction} className="flex gap-1">
                                   <input type="hidden" name="rewardId" value={r.id} />
                                   <input
@@ -467,7 +488,7 @@ export default async function SettlementPage({
                                     className="w-20 px-1.5 py-1 text-xs border border-[var(--gray-200)] rounded-[var(--radius-sm)]"
                                   />
                                   <ConfirmButton
-                                    message={`${r.user.name}님의 보상액을 ${won(r.grossAmount)} → {grossAmount}원으로 바꿉니다.\n\n· 원천징수 세액이 다시 계산됩니다(과세최저한 판정이 바뀔 수 있습니다).\n· 발주 보상 소계와 차이가 생기면 화면에 표시됩니다.\n\n정말 바꾸시겠습니까?`}
+                                    message={`${r.user.name}님의 보상액을 ${won(r.grossAmount)} → {grossAmount}원으로 바꿉니다.\n\n· 원천징수 세액이 다시 계산됩니다(과세최저한 판정이 바뀔 수 있습니다).\n· 의뢰 보상 소계와 차이가 생기면 화면에 표시됩니다.\n\n정말 바꾸시겠습니까?`}
                                     title="개인별 보상액 조정 (승인 전에만 가능)"
                                     className="px-2 py-1 text-xs font-medium border border-[var(--gray-300)] rounded-[var(--radius-sm)] hover:bg-[var(--gray-50)] whitespace-nowrap"
                                   >
@@ -476,7 +497,7 @@ export default async function SettlementPage({
                                 </form>
                               </div>
                             ) : po?.status === "PENDING" ? (
-                              // 이체했으면 [지급 완료], 실패했으면 [실패]. 원장은 [지급 완료]에서만 기록된다.
+                              // 이체했으면 [지급 완료], 실패했으면 [실패]. 원장은 [지급 완료]에서만 기록됨
                               <div className="flex gap-1 items-center">
                                 <form action={confirmPayoutAction}>
                                   <input type="hidden" name="payoutId" value={po.id} />
@@ -510,7 +531,7 @@ export default async function SettlementPage({
                                 <form action={retryPayoutAction}>
                                   <input type="hidden" name="payoutId" value={po.id} />
                                   <ConfirmButton
-                                    message={`${r.user.name}님 지급을 다시 이체 대기로 올립니다.\n\n· 계좌 정보를 고쳤는지 먼저 확인하세요 — 같은 계좌면 또 튕깁니다.\n\n정말 재이체 대기로 올리시겠습니까?`}
+                                    message={`${r.user.name}님 지급을 다시 이체 대기로 올립니다.\n\n· 계좌 정보를 고쳤는지 먼저 확인하세요. 같은 계좌면 또 튕깁니다.\n\n정말 재이체 대기로 올리시겠습니까?`}
                                     className="px-2 py-1 text-xs font-medium border border-[var(--gray-900)] rounded-[var(--radius-sm)] hover:bg-[var(--gray-50)] whitespace-nowrap"
                                   >
                                     재이체
@@ -528,13 +549,12 @@ export default async function SettlementPage({
                 </table>
               </div>
 
-              {/* 지급 액션 */}
               <div className="px-5 py-4 border-t border-[var(--gray-100)] flex items-center gap-2 flex-wrap">
                 {approvedNoPayout > 0 && (
                   <form action={generatePayoutsAction}>
                     <input type="hidden" name="orderId" value={order.id} />
                     <ConfirmButton
-                      message={`승인된 보상 ${approvedNoPayout}건의 지급(이체 대기) 건을 만듭니다.\n\n· 지금 등록된 계좌·예금주가 이체 대상으로 고정됩니다.\n· 계좌 미등록자는 빠집니다 — 위 「평가단 정산정보」에서 먼저 확인하세요.\n\n정말 지급을 생성하시겠습니까?`}
+                      message={`승인된 보상 ${approvedNoPayout}건의 지급(이체 대기) 건을 만듭니다.\n\n· 지금 등록된 계좌·예금주가 이체 대상으로 고정됩니다.\n· 계좌 미등록자는 빠집니다. 위 「평가자 정산 정보」에서 먼저 확인하세요.\n\n정말 지급을 생성하시겠습니까?`}
                       className="px-3 py-1.5 text-xs font-medium bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)]"
                     >
                       지급 생성 ({approvedNoPayout}건)
@@ -555,7 +575,7 @@ export default async function SettlementPage({
                   원천징수 명세 (주민번호)
                 </a>
                 {payable > 0 && (
-                  // 모든 이체가 성공했을 때만 쓰는 편의 버튼. 실패한 건은 먼저 [실패]로 처리한다.
+                  // 모든 이체가 성공했을 때만 쓰는 편의 버튼. 실패한 건은 먼저 [실패]로 처리함
                   <form action={confirmPayoutsAction}>
                     <input type="hidden" name="orderId" value={order.id} />
                     <ConfirmButton
@@ -569,7 +589,7 @@ export default async function SettlementPage({
                 )}
                 {failedPayouts > 0 && (
                   <span className="text-xs text-[var(--danger)]">
-                    이체 실패 {failedPayouts}건 — 계좌 확인 후 재이체 필요
+                    이체 실패 {failedPayouts}건: 계좌 확인 후 재이체 필요
                   </span>
                 )}
                 {order.status !== "SETTLED" && pending === 0 && (
@@ -581,7 +601,7 @@ export default async function SettlementPage({
                         (order.panelSize > fulfilled.length
                           ? `· 정원 ${order.panelSize}명 중 ${fulfilled.length}명만 이행돼 미달분 환불액이 확정됩니다.\n`
                           : "") +
-                        "· 마감한 발주는 다시 열 수 없습니다.\n\n정말 마감하시겠습니까?"
+                        "· 마감한 의뢰는 다시 열 수 없습니다.\n\n정말 마감하시겠습니까?"
                       }
                       className="px-3 py-1.5 text-xs font-medium border border-[var(--gray-900)] text-[var(--foreground)] rounded-[var(--radius-md)] hover:bg-[var(--gray-50)]"
                     >
@@ -593,7 +613,7 @@ export default async function SettlementPage({
                 )}
                 {order.status === "SETTLED" &&
                   (order.refundAmount && order.refundAmount > 0 && !order.refundSentAt ? (
-                    // 환불액은 마감 때 확정되고, 송금 후 이 버튼으로 원장에 기록한다.
+                    // 환불액은 마감 때 확정되고, 송금 후 이 버튼으로 원장에 기록함
                     <form action={confirmOrderRefundSentAction} className="ml-auto flex items-center gap-2">
                       <input type="hidden" name="orderId" value={order.id} />
                       <span className="text-xs text-[var(--warning)]">
@@ -625,7 +645,7 @@ export default async function SettlementPage({
         <section className="bg-white rounded-[var(--radius-xl)] p-5">
           <div className="flex items-baseline justify-between flex-wrap gap-2">
             <h3 className="text-sm font-semibold text-[var(--foreground)]">
-              신고용 숫자 — {filingMonth.year}년 {filingMonth.month}월 지급분
+              신고용 숫자: {filingMonth.year}년 {filingMonth.month}월 지급분
             </h3>
             <span className="text-xs text-[var(--muted)]">
               원천세·지방소득세 <strong>다음 달 10일</strong> · 간이지급명세서{" "}
@@ -644,7 +664,7 @@ export default async function SettlementPage({
                   { label: "인원", value: `${filing.personCount}명`, sub: `${filing.payoutCount}건` },
                   { label: "지급액(세전)", value: won(filing.gross), sub: "총 지급액" },
                   { label: "소득세", value: won(filing.incomeTax), sub: "홈택스" },
-                  { label: "지방소득세", value: won(filing.localTax), sub: "위택스 ⚠ 별도" },
+                  { label: "지방소득세", value: won(filing.localTax), sub: "위택스 별도" },
                   { label: "실지급", value: won(filing.net), sub: "학생 수령액" },
                 ].map((c) => (
                   <div
@@ -671,7 +691,7 @@ export default async function SettlementPage({
                   <strong>세액 0원인 경우에도 제출 대상</strong> (미제출 가산세 0.25%).
                 </li>
               </ol>
-              {/* 월별 명세(발주별 명세는 발주 화면에서 받는다) */}
+              {/* 월별 명세(발주별 명세는 발주 화면에서 받음) */}
               <form
                 method="get"
                 action="/api/settlement/withholding/monthly"
@@ -711,7 +731,7 @@ export default async function SettlementPage({
                 명세서는 <strong>소득자 1명당 1행</strong>이라 구조가 달라 아래에서 따로 받습니다.
               </p>
 
-              {/* 간이지급명세서(.xlsx). CSV 는 Payout 1행, 이 양식은 소득자 1행 + 지급건수다. */}
+              {/* 간이지급명세서(.xlsx). CSV 는 Payout 1행, 이 양식은 소득자 1행 + 지급건수임 */}
               <SimpleStatementPanel
                 defaultYear={filingMonth.year}
                 defaultMonth={filingMonth.month}
@@ -720,7 +740,7 @@ export default async function SettlementPage({
           )}
         </section>
 
-        {/* 세무 신고 기록(리마인더도 이 기록을 본다) */}
+        {/* 세무 신고 기록(리마인더도 이 기록을 봄) */}
         <FilingPanel
           year={filingStatus.year}
           month={filingStatus.month}
@@ -742,11 +762,8 @@ export default async function SettlementPage({
           }))}
         />
 
-        {/* 세무 안내 */}
         <TaxGuidePanel />
 
-
-        {/* 세금 납부 기록 */}
         <section className="bg-white rounded-[var(--radius-xl)] p-5">
           <h3 className="text-sm font-semibold text-[var(--foreground)]">세금 기록</h3>
           <ul className="text-xs text-[var(--muted)] mt-1 space-y-0.5">

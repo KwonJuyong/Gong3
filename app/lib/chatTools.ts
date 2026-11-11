@@ -1,23 +1,23 @@
 import "server-only";
 import { prisma } from "@/app/db";
-import { visibleProjectWhere } from "./approvals";
+import { HIDDEN_PROJECT_STATUSES, visibleProjectWhere } from "./approvals";
 import { maskStudentId } from "./privacy";
 import { runQuery, type QuerySpec } from "./queryEngine";
 import { describeSchemaForLLM, describeExamplesForLLM } from "./queryMetadata";
 
 // AI 도우미가 호출하는 읽기 전용 조회 함수들.
-// 원칙: 비밀번호(password)와 주민번호(rrnEnc)는 절대 조회/반환하지 않는다.
-// 교차 개인정보(타인의 연락처·계좌 등)는 ADMIN 역할에게만 노출한다.
+// 원칙: 비밀번호(password)와 주민번호(rrnEnc)는 절대 조회/반환하지 않음
+// 교차 개인정보(타인의 연락처·계좌 등)는 ADMIN 역할에게만 노출함
 // 모델·필드 화이트리스트와 권한 판정은 queryMetadata.ts(구조), queryPolicy.ts(권한),
-// queryEngine.ts(실행)에 있다.
+// queryEngine.ts(실행)에 있음
 
-/** query_data 설명 안의 자리표시자. 역할별로 런타임에 채운다. */
+/** query_data 설명 안의 자리표시자. 역할별로 런타임에 채움 */
 export const SCHEMA_PLACEHOLDER = "%%SCHEMA%%";
 export const EXAMPLES_PLACEHOLDER = "%%EXAMPLES%%";
 
 /**
- * 역할에 맞게 도구 설명을 확정한다.
- * 스키마와 예시 모두 역할별로 만들어 ADMIN 전용 모델이 다른 역할의 프롬프트에 실리지 않게 한다.
+ * 역할에 맞게 도구 설명을 확정함
+ * 스키마와 예시 모두 역할별로 만들어 ADMIN 전용 모델이 다른 역할의 프롬프트에 실리지 않게 함
  */
 export function toolsForRole(role: string): ToolDef[] {
   const admin = String(role).toUpperCase() === "ADMIN";
@@ -39,7 +39,7 @@ export type ToolUser = { id: string; name: string; role: string };
 
 /**
  * 도구가 감사 로그에 조회 대상·정책 등을 기록하는 통로.
- * 조회 대상을 알 수 있는 도구만 세 번째 인자로 받는다.
+ * 조회 대상을 알 수 있는 도구만 세 번째 인자로 받음
  */
 export type ToolAuditCtx = {
   /** 조회 대상(모델.필드) 기록 */
@@ -48,7 +48,7 @@ export type ToolAuditCtx = {
   setPolicy: (policy: string) => void;
   /** 반환 행 수 기록 */
   setRowCount: (n: number) => void;
-  /** 권한 차단 기록. outcome 이 BLOCKED 로 남는다 */
+  /** 권한 차단 기록. outcome 이 BLOCKED 로 남음 */
   setBlocked: (reason: string) => void;
 };
 
@@ -73,7 +73,6 @@ const isAdmin = (u: ToolUser) => u.role === "ADMIN";
 const noArgs = { type: "object", properties: {}, additionalProperties: false };
 
 export const chatTools: ToolDef[] = [
-  // ---------- 내 정보 ----------
   {
     name: "get_my_profile",
     description:
@@ -93,7 +92,7 @@ export const chatTools: ToolDef[] = [
           role: true,
           userType: true,
           createdAt: true,
-          // 계좌·주민번호는 본인 것이라도 도우미로는 내보내지 않도록 select 에서 뺀다.
+          // 계좌·주민번호는 본인 것이라도 도우미로는 내보내지 않도록 select 에서 뺌
           payrollProfile: { select: { address: true, updatedAt: true } },
         },
       });
@@ -179,16 +178,16 @@ export const chatTools: ToolDef[] = [
     },
   },
 
-  // ---------- 평가/프로젝트 ----------
   {
     name: "list_open_evaluations",
     description:
-      "지금 참여 신청이 가능한(진행중·정원 여유·신청 마감 전) 평가 목록을 반환한다.",
+      "지금 참여 신청이 가능한(모집 중·신청 마감 전) 평가 목록을 반환한다. 정원을 넘어도 신청은 받고 선발 때 정원을 적용한다.",
     parameters: noArgs,
     async run(user) {
       const now = new Date();
+      // 신청은 모집 중(RECRUITING)에만 받음(enrollProjectAction 과 같은 조건).
       const projects = await prisma.project.findMany({
-        where: { status: "ACTIVE" },
+        where: { status: "RECRUITING" },
         include: {
           _count: { select: { enrollments: true } },
           enrollments: { where: { userId: user.id }, select: { id: true } },
@@ -196,18 +195,14 @@ export const chatTools: ToolDef[] = [
         orderBy: { startTime: "asc" },
       });
       const open = projects
-        .filter(
-          (p) =>
-            (!p.enrollmentDeadline || p.enrollmentDeadline > now) &&
-            p._count.enrollments < p.maxParticipants,
-        )
+        .filter((p) => !p.enrollmentDeadline || p.enrollmentDeadline > now)
         .map((p) => ({
           projectId: p.id,
           title: p.title,
           location: p.location,
           startTime: fmt(p.startTime),
           enrollmentDeadline: fmt(p.enrollmentDeadline),
-          spotsLeft: p.maxParticipants - p._count.enrollments,
+          applicants: `${p._count.enrollments}명 신청 · 정원 ${p.maxParticipants}명`,
           alreadyEnrolled: p.enrollments.length > 0,
         }));
       return { openEvaluations: open };
@@ -226,7 +221,7 @@ export const chatTools: ToolDef[] = [
     },
     async run(user, args) {
       const status = args.status ? String(args.status) : undefined;
-      // 비관리자에게는 승인 대기·반려 평가를 숨긴다(status 인자와 AND 로 묶는다).
+      // 비관리자에게는 승인 대기·반려 평가를 숨김(status 인자와 AND 로 묶음).
       const statusFilter = status ? [{ status }] : [];
       const projects = await prisma.project.findMany({
         where: isAdmin(user)
@@ -281,7 +276,11 @@ export const chatTools: ToolDef[] = [
           creator: { select: { name: true, studentId: true } },
         },
       });
-      if (!p) return { error: "해당 평가를 찾을 수 없습니다." };
+      // 승인 전·반려 평가는 개설자와 ADMIN 에게만 보임
+      const hidden = !!p && (HIDDEN_PROJECT_STATUSES as readonly string[]).includes(p.status);
+      if (!p || (hidden && !isAdmin(user) && p.creatorId !== user.id)) {
+        return { error: "해당 평가를 찾을 수 없습니다." };
+      }
       return {
         title: p.title,
         description: p.description,
@@ -304,7 +303,7 @@ export const chatTools: ToolDef[] = [
   {
     name: "get_project_participants",
     description:
-      "특정 평가(projectId)에 신청한 사람과 응답을 제출한 사람 명단(이름·학번)을 반환한다.",
+      "특정 평가(projectId)에 신청한 사람과 응답을 제출한 사람 명단(이름·학번)을 반환한다. 평가 개설자와 ADMIN 만 조회할 수 있다.",
     parameters: {
       type: "object",
       properties: { projectId: { type: "string", description: "평가(프로젝트) ID" } },
@@ -322,7 +321,11 @@ export const chatTools: ToolDef[] = [
         },
       });
       if (!p) return { error: "해당 평가를 찾을 수 없습니다." };
-      // 비관리자에게는 참여자 학번을 가려서 보여준다(게스트는 studentId 가 이메일이다).
+      // 참여자 명단은 개설자와 ADMIN 만 봄(다른 학생의 참여 이력이 드러남).
+      if (!isAdmin(user) && p.creatorId !== user.id) {
+        return { error: "참여자 명단은 평가 개설자와 관리자만 볼 수 있습니다." };
+      }
+      // 비관리자에게는 참여자 학번을 가려서 보여줌(게스트는 studentId 가 이메일임).
       const admin = isAdmin(user);
       return {
         title: p.title,
@@ -336,7 +339,6 @@ export const chatTools: ToolDef[] = [
     },
   },
 
-  // ---------- 사용자/멤버 ----------
   {
     name: "search_members",
     description:
@@ -376,7 +378,7 @@ export const chatTools: ToolDef[] = [
       return {
         members: users.map((u) => ({
           name: u.name,
-          // 메신저 사람 검색과 같은 규칙으로 학번을 가린다.
+          // 메신저 사람 검색과 같은 규칙으로 학번을 가림
           studentId: maskStudentId(u.studentId, isAdmin(user)),
           major: u.major,
           role: u.role,
@@ -418,7 +420,7 @@ export const chatTools: ToolDef[] = [
           phone: true,
           email: true,
           createdAt: true,
-          // 계좌 정보는 역할과 무관하게 내보내지 않는다.
+          // 계좌 정보는 역할과 무관하게 내보내지 않음
           payrollProfile: { select: { address: true, updatedAt: true } },
           _count: { select: { responses: true, enrollments: true, ownedServices: true } },
         },
@@ -427,7 +429,7 @@ export const chatTools: ToolDef[] = [
       const privileged = isAdmin(user) || u.id === user.id;
       const base = {
         name: u.name,
-        // 조회 키로 이미 아는 값이어도 비관리자에게는 다른 사람의 로그인 ID 원본을 주지 않는다.
+        // 조회 키로 이미 아는 값이어도 비관리자에게는 다른 사람의 로그인 ID 원본을 주지 않음
         studentId: maskStudentId(u.studentId, privileged),
         major: u.major,
         role: u.role,
@@ -451,7 +453,6 @@ export const chatTools: ToolDef[] = [
     },
   },
 
-  // ---------- 서비스/설문 ----------
   {
     name: "list_services_surveys",
     description:
@@ -482,7 +483,7 @@ export const chatTools: ToolDef[] = [
           preset: s.preset,
           modality: s.modality,
           isAiService: s.isAiService,
-          // 비관리자는 where 에서 본인 소유만 걸러지므로 owner 는 자기 자신이다.
+          // 비관리자는 where 에서 본인 소유만 걸러지므로 owner 는 자기 자신임
           owner: `${s.owner.name}(${maskStudentId(s.owner.studentId, isAdmin(user))})`,
           surveys: s.surveys.map((v) => ({
             round: v.round,
@@ -495,7 +496,6 @@ export const chatTools: ToolDef[] = [
     },
   },
 
-  // ---------- 정산(노무비), ADMIN 전용 ----------
   {
     name: "list_payroll",
     description:
@@ -523,7 +523,7 @@ export const chatTools: ToolDef[] = [
               affiliation: true,
               totalAmount: true,
               status: true,
-              // 은행·계좌는 ADMIN 에게도 도우미로는 주지 않는다(정산 화면에서 확인).
+              // 은행·계좌는 ADMIN 에게도 도우미로는 주지 않음(정산 화면에서 확인).
               confirmedAt: true,
             },
           },
@@ -552,7 +552,6 @@ export const chatTools: ToolDef[] = [
     },
   },
 
-  // ---------- 통계 ----------
   {
     name: "platform_stats",
     description:
@@ -572,7 +571,6 @@ export const chatTools: ToolDef[] = [
     },
   },
 
-  // ---------- 범용 조회 (동적 질의 엔진) ----------
   {
     name: "query_data",
     description:
@@ -622,8 +620,8 @@ export const chatTools: ToolDef[] = [
       additionalProperties: false,
     },
     async run(user, args, audit) {
-      // 실행과 권한 판정은 엔진이 한다.
-      const out = await runQuery(user.role, args as unknown as QuerySpec);
+      // 실행과 권한 판정은 엔진이 함
+      const out = await runQuery(user.role, args as unknown as QuerySpec, user.id);
       if (!out.ok) {
         audit?.setPolicy(out.policy);
         audit?.setBlocked(out.reason);

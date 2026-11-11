@@ -4,13 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { logoutAction } from "../actions";
 import { useEscape } from "../components/useEscape";
+import { roleLabel as labelOfRole } from "../lib/roleLabel";
 
-/** 머리글 아바타 드롭다운. 프로필 요약과 바로가기만 보여주고 편집은 /dashboard/profile 에서 한다. */
+/** 머리글 아바타 드롭다운. 프로필 화면으로 가는 입구와 로그아웃만 둠 */
 
 export default function ProfileDropdown({
   user,
-  participatedCount,
-  completionPercent,
   /** 계좌가 없어 보상 지급이 막히는 상태인가 */
   payoutBlocked,
 }: {
@@ -19,13 +18,8 @@ export default function ProfileDropdown({
     studentId: string;
     role: string;
     userType?: string;
-    major?: string;
-    phone?: string;
-    email?: string;
     profileImage?: string | null;
   };
-  participatedCount: number;
-  completionPercent: number;
   payoutBlocked: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -41,22 +35,7 @@ export default function ProfileDropdown({
   useEscape(open, () => setOpen(false));
 
   const initials = user.name.charAt(0).toUpperCase();
-  const userType = user.userType || "STUDENT";
-
-  const roleLabel =
-    user.role === "ADMIN"
-      ? "최고관리자"
-      : user.role === "DEVELOPER"
-        ? userType === "STAFF"
-          ? "교직원·조교"
-          : "게스트"
-        : "평가단원";
-
-  const idLabel = userType === "DEVELOPER" ? "이메일(ID)" : userType === "STAFF" ? "사번" : "학번";
-  const majorLabel = userType === "DEVELOPER" ? "업체명" : "전공";
-
-  const pct = completionPercent;
-  const tone = pct === 100 ? "var(--success)" : pct >= 60 ? "var(--accent)" : "var(--warning)";
+  const roleLabel = labelOfRole(user.role, user.userType);
 
   return (
     <div ref={ref} className="relative">
@@ -73,7 +52,7 @@ export default function ProfileDropdown({
         ) : (
           initials
         )}
-        {/* 지급이 막혀 있으면 드롭다운을 열지 않아도 표시한다 */}
+        {/* 지급이 막혀 있으면 드롭다운을 열지 않아도 표시함 */}
         {payoutBlocked && (
           <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[var(--danger)] ring-2 ring-white" />
         )}
@@ -81,7 +60,6 @@ export default function ProfileDropdown({
 
       {open && (
         <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-[var(--radius-lg)] border border-[var(--gray-200)] shadow-[var(--shadow-lg)] z-50 overflow-hidden">
-          {/* Header */}
           <div className="flex items-center gap-3 p-4 pb-3 border-b border-[var(--gray-100)] bg-[var(--surface)]">
             <div className="w-11 h-11 rounded-full bg-[var(--gray-600)] text-white text-lg font-semibold flex items-center justify-center shrink-0 overflow-hidden">
               {user.profileImage ? (
@@ -100,24 +78,8 @@ export default function ProfileDropdown({
             </div>
           </div>
 
-          {/* 완성도 */}
-          <div className="px-4 pt-3 pb-2">
-            <div className="flex items-baseline justify-between mb-1.5">
-              <span className="text-xs font-medium text-[var(--muted)]">프로필 완성도</span>
-              <span className="text-xs font-bold" style={{ color: tone }}>
-                {pct}%
-              </span>
-            </div>
-            <div className="h-1.5 rounded-full bg-[var(--gray-100)] overflow-hidden">
-              <div
-                className="h-full rounded-full transition-[width] duration-500"
-                style={{ width: `${pct}%`, backgroundColor: tone }}
-              />
-            </div>
-          </div>
-
           {payoutBlocked && (
-            <div className="px-4 pb-2">
+            <div className="px-4 pt-3">
               <Link
                 href="/dashboard/profile?tab=settlement"
                 onClick={() => setOpen(false)}
@@ -128,37 +90,13 @@ export default function ProfileDropdown({
             </div>
           )}
 
-          {/* 요약 */}
-          <div className="px-4 py-1">
-            <Row label={idLabel} value={user.studentId} />
-            <Row label={majorLabel} value={user.major || "-"} />
-            <Row
-              label="연락처"
-              value={
-                user.phone
-                  ? user.phone.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3")
-                  : "-"
-              }
-            />
-            <Row label="이메일" value={user.email || "-"} />
-          </div>
-
-          {/* 바로가기 */}
-          <div className="p-2 pt-2 border-t border-[var(--gray-100)] mt-2 space-y-1">
+          <div className="p-2 space-y-1">
             <Link
               href="/dashboard/profile"
               onClick={() => setOpen(false)}
               className="flex items-center justify-center gap-1.5 w-full py-2 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-dark)] transition-colors"
             >
               프로필 관리
-            </Link>
-            <Link
-              href="/dashboard/profile?tab=activity"
-              onClick={() => setOpen(false)}
-              className="flex items-center justify-between w-full px-3 py-2 rounded-[var(--radius-md)] text-sm text-[var(--gray-700)] hover:bg-[var(--gray-50)] transition-colors"
-            >
-              <span>참여한 평가</span>
-              <span className="text-xs text-[var(--muted)]">{participatedCount}건 →</span>
             </Link>
             <form action={logoutAction}>
               <button className="flex items-center w-full px-3 py-2 rounded-[var(--radius-md)] text-sm text-[var(--gray-700)] hover:bg-[var(--danger-light)] hover:text-[var(--danger)] transition-colors">
@@ -168,15 +106,6 @@ export default function ProfileDropdown({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1.5 border-b border-[var(--gray-50)] last:border-0">
-      <span className="text-xs text-[var(--muted)] shrink-0">{label}</span>
-      <span className="text-sm text-[var(--foreground)] truncate">{value}</span>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import OpenAI from "openai";
+import { LLM_LONG_TIMEOUT_MS, LLM_MAX_RETRIES } from "./limits";
 
-// LLM 문항 문구 생성(OpenAI). 구성개념과 척도는 고정하고 LLM 은 문구만 만든다.
-// Structured Outputs(json_schema)로 출력 필드를 constructId/questionText 로 제한한다.
+// LLM 문항 문구 생성(OpenAI). 구성개념과 척도는 고정하고 LLM 은 문구만 만듦
+// Structured Outputs(json_schema)로 출력 필드를 constructId/questionText 로 제한함
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 export const PROMPT_VERSION = "adaptive-v1";
@@ -11,7 +12,7 @@ let _client: OpenAI | null = null;
 function client(): OpenAI {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY 환경변수가 설정되지 않았습니다.");
-  if (!_client) _client = new OpenAI({ apiKey });
+  if (!_client) _client = new OpenAI({ apiKey, timeout: LLM_LONG_TIMEOUT_MS, maxRetries: LLM_MAX_RETRIES });
   return _client;
 }
 
@@ -43,8 +44,8 @@ const SYSTEM_PROMPT = [
 ].join("\n");
 
 /**
- * 입력 형태별 문구 지침.
- * modality 는 구성개념 선택(surveyProfile.ts 의 A_MODALITY)에도 반영되고, 여기는 문구만 조정한다.
+ * 입력 형태별 문구 지침
+ * modality 는 구성개념 선택(surveyProfile.ts 의 A_MODALITY)에도 반영되고, 여기는 문구만 조정함
  */
 const MODALITY_GUIDE: Record<string, string> = {
   text: "이 서비스는 텍스트로 입출력한다. 문장 품질·이해·응답 흐름을 기준으로 표현할 것.",
@@ -133,7 +134,7 @@ export async function generateAdaptiveQuestions(
     throw new Error("LLM 응답 파싱 실패");
   }
 
-  // 요청한 구성개념 id 만 받는다
+  // 요청한 구성개념 id 만 받음
   const allowed = new Set(constructs.map((c) => c.id));
   return (parsed.questions || [])
     .filter((q) => allowed.has(q.constructId) && (q.questionText || "").trim())

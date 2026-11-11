@@ -1,8 +1,8 @@
 /**
  * ts-hooks.mjs 가 등록하는 해석·적재 훅(테스트 전용).
  *
- * .ts 는 typescript 로 직접 변환한다. Node 내장 타입 스트리핑은 22.18 이상에서만 되므로
- * node:20 컨테이너에서도 돌게 하려는 것이다. typescript 가 없으면 Node 에 넘긴다.
+ * .ts 는 typescript 로 직접 변환함. Node 내장 타입 스트리핑은 22.18 이상에서만 되므로
+ * node:20 컨테이너에서도 돌게 하려는 것임. typescript 가 없으면 Node 에 넘김
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -47,7 +47,7 @@ export async function resolve(specifier, context, next) {
   try {
     return await next(spec, context);
   } catch (err) {
-    // 확장자 생략(./foo)을 처리한다.
+    // 확장자 생략(./foo)을 처리함
     if (spec.startsWith(".") || spec.startsWith("file:")) {
       for (const ext of EXTS) {
         try {
@@ -61,7 +61,7 @@ export async function resolve(specifier, context, next) {
   }
 }
 
-/** `typescript` 는 있을 때만 쓴다. 훅 스레드에서 한 번만 불러온다. */
+/** `typescript` 는 있을 때만 씀. 훅 스레드에서 한 번만 불러옴 */
 let tsPromise;
 function loadTypeScript() {
   tsPromise ??= import("typescript").then((m) => m.default ?? m).catch(() => null);
@@ -87,7 +87,7 @@ export async function load(url, context, next) {
           moduleResolution: ts.ModuleResolutionKind.Bundler,
           jsx: ts.JsxEmit.ReactJSX,
           esModuleInterop: true,
-          // 타입 전용 import 는 런타임에 없으므로 지운다.
+          // 타입 전용 import 는 런타임에 없으므로 지움
           verbatimModuleSyntax: false,
         },
       });

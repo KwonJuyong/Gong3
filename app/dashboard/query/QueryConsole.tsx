@@ -6,9 +6,9 @@ import { askDataAction, type QueryState } from "./actions";
 import QueryChart from "./QueryChart";
 
 /**
- * 자연어 조회 화면. 질문과 결과(표·차트)를 함께 보여주고 Excel·PDF 로 내려받는다.
- * 결과가 없거나 권한으로 막히면 사유를 보여준다.
- * 내보내기는 화면의 행이 아니라 질의 명세(spec)를 보내 서버가 다시 실행한다.
+ * 자연어 조회 화면. 질문과 결과(표·차트)를 함께 보여주고 Excel·PDF 로 내려받음
+ * 결과가 없거나 권한으로 막히면 사유를 보여줌
+ * 내보내기는 화면의 행이 아니라 질의 명세(spec)를 보내 서버가 다시 실행함
  */
 
 const EXAMPLES = [
@@ -16,7 +16,7 @@ const EXAMPLES = [
   "이번 달 응답 제출 추이 보여줘",
   "전공별·역할별 분포 교차분석",
   "참여 신청한 적 있는 회원 수",
-  "진행중인 평가 목록",
+  "진행 중인 평가 목록",
 ];
 
 const initial: QueryState = { ok: false };
@@ -100,7 +100,6 @@ export default function QueryConsole() {
         ))}
       </div>
 
-      {/* 되묻기 */}
       {state.kind === "clarify" && (
         <div className="mt-5 p-4 rounded-lg border border-sky-200 bg-sky-50 text-sm text-sky-900">
           <b className="block mb-1">조금 더 알려주세요</b>
@@ -108,7 +107,6 @@ export default function QueryConsole() {
         </div>
       )}
 
-      {/* 권한 차단 사유 */}
       {state.kind === "blocked" && (
         <div className="mt-5 p-4 rounded-lg border border-amber-300 bg-amber-50 text-sm text-amber-900">
           <b className="block mb-1">조회할 수 없습니다</b>
@@ -152,7 +150,6 @@ export default function QueryConsole() {
             </div>
           ) : (
             <>
-              {/* 단일 값은 큰 숫자로 */}
               {(state.mode === "count" || state.mode === "aggregate") && state.rows?.length === 1 && (
                 <div className="mb-4 p-6 rounded-lg border border-[var(--gray-200)] text-center">
                   <div className="text-sm text-[var(--gray-500)]">{state.columns?.[0]}</div>
@@ -162,14 +159,12 @@ export default function QueryConsole() {
                 </div>
               )}
 
-              {/* 차트 */}
               {state.columns && state.rows && (
                 <div className="mb-4 p-4 rounded-lg border border-[var(--gray-200)] bg-white overflow-x-auto">
                   <QueryChart mode={state.mode ?? ""} columns={state.columns} rows={state.rows} />
                 </div>
               )}
 
-              {/* 표 */}
               <div className="overflow-x-auto border border-[var(--gray-200)] rounded-lg">
                 <table className="w-full text-sm">
                   <thead className="bg-[var(--gray-50)] text-[var(--gray-600)]">

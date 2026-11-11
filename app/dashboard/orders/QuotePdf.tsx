@@ -4,8 +4,8 @@ import { wonInKorean } from "../../lib/money";
 import type { PdfImage } from "../../lib/pdfImage";
 
 /**
- * 견적서 PDF. 기업이 내부 결재에 쓰는 문서라 발주 전에 입력값만으로 만든다(/api/orders/quote).
- * 견적서는 법정 서식이 아니어서 자유 양식으로 직접 그린다. 한글 폰트는 NanumGothic.
+ * 견적서 PDF. 기업이 내부 결재에 쓰는 문서라 발주 전에 입력값만으로 만듦(/api/orders/quote).
+ * 견적서는 법정 서식이 아니어서 자유 양식으로 직접 그림. 한글 폰트는 NanumGothic.
  */
 
 Font.register({
@@ -18,13 +18,13 @@ Font.register({
     },
   ],
 });
-// 한글에는 자동 하이픈을 쓰지 않는다.
+// 한글에는 자동 하이픈을 쓰지 않음
 Font.registerHyphenationCallback((word) => [word]);
 
 export interface QuoteItem {
   /** 품목명. 예: "개인화 챗봇 테스트 · 1회차" */
   label: string;
-  /** 소요시간 구간 표시(비어 있어도 된다) */
+  /** 소요시간 구간 표시(비어 있어도 됨) */
   tierLabel: string;
   /** 인원 */
   qty: number;
@@ -54,25 +54,25 @@ export interface QuoteData {
     addr: string;
     manager: string;
   };
-  /** 직인 이미지. 없으면 직인 없이 만든다. */
+  /** 직인 이미지. 없으면 직인 없이 만듦 */
   sealImg: PdfImage | null;
   serviceName: string;
-  /** 보상 항목(회차마다 단가·인원이 다를 수 있어 여러 줄). 발주는 한 줄일 때만 가능하다. */
+  /** 보상 항목(회차마다 단가·인원이 다를 수 있어 여러 줄). 발주는 한 줄일 때만 가능함 */
   items: QuoteItem[];
-  /** 납기·이행 기간(예: "발주 후 3주 이내"). 비면 줄을 생략한다. */
+  /** 납기·이행 기간(예: "발주 후 3주 이내"). 비면 줄을 생략함 */
   deliveryTerm: string;
   feeRateBp: number;
   subtotal: number;
   fee: number;
   vat: number;
   totalAmount: number;
-  /** 입금 계좌. 비어 있으면 "-" 로 표시한다. */
+  /** 입금 계좌. 비어 있으면 "-" 로 표시함 */
   account: string;
 }
 
-const won = (n: number) => n.toLocaleString("ko-KR") + "원";
+import { wonText as won } from "../../lib/money";
 
-/** 공급받는자 칸을 그릴지. manager 는 항상 값이 있어(로그인 사용자 이름) 판단에서 뺀다. */
+/** 공급받는자 칸을 그릴지. manager 는 항상 값이 있어(로그인 사용자 이름) 판단에서 뺌 */
 function hasBuyer(b: QuoteData["buyer"]): boolean {
   return !!(b.name || b.bizNo || b.ceo || b.addr);
 }
@@ -111,7 +111,7 @@ const s = StyleSheet.create({
   signText: { fontSize: 10 },
   signWrap: { flexDirection: "row", alignItems: "center", marginTop: 2 },
 
-  // (인) 자리. 직인은 이 위에 겹쳐 찍고, 직인이 없어도 도장 찍을 공간(44×44)을 남긴다.
+  // (인) 자리. 직인은 이 위에 겹쳐 찍고, 직인이 없어도 도장 찍을 공간(44×44)을 남김
   sealSlot: {
     position: "relative",
     width: 44,
@@ -143,8 +143,8 @@ const s = StyleSheet.create({
 });
 
 /**
- * @param hideEmpty 값이 비면 줄을 그리지 않는다(공급받는자용).
- * 공급자 정보는 빠진 것이 보이도록 "-" 로 남긴다.
+ * @param hideEmpty 값이 비면 줄을 그리지 않음(공급받는자용).
+ * 공급자 정보는 빠진 것이 보이도록 "-" 로 남김
  */
 function Field({
   label,
@@ -188,7 +188,7 @@ export default function QuotePdf({ d }: { d: QuoteData }) {
               </View>
             )}
           </View>
-          {/* 공급받는자 정보가 없으면 칸을 생략하고 공급자 칸이 전체 폭을 쓴다. */}
+          {/* 공급받는자 정보가 없으면 칸을 생략하고 공급자 칸이 전체 폭을 씀 */}
           {hasBuyer(d.buyer) && (
             <View style={s.party}>
               <Text style={s.partyTitle}>공급받는자</Text>
@@ -263,15 +263,14 @@ export default function QuotePdf({ d }: { d: QuoteData }) {
           <Text style={s.noteLine}>
             · 결제: 무통장입금(계좌이체). 전자세금계산서를 발행합니다.
           </Text>
-          {/* 계좌가 비어 있어도 줄을 남겨 빠진 것이 보이게 한다. */}
+          {/* 계좌가 비어 있어도 줄을 남겨 빠진 것이 보이게 함 */}
           <Text style={s.noteLine}>· 입금 계좌: {d.account || "-"}</Text>
-          {/* 미달분 환불은 견적서에 적지 않는다(정산 마감 때 계산된다). */}
+          {/* 미달분 환불은 견적서에 적지 않음(정산 마감 때 계산됨). */}
           <Text style={s.noteLine}>
             · 본 견적서는 거래 조건 제시를 위한 문서이며 세금계산서를 대체하지 않습니다.
           </Text>
         </View>
 
-        {/* 문서 끝의 발행자 표시 */}
         <View style={s.signLine}>
           <Text style={s.signText}>위와 같이 견적합니다.</Text>
           <View style={s.signWrap}>
@@ -279,7 +278,7 @@ export default function QuotePdf({ d }: { d: QuoteData }) {
               {d.issuedAt} · {d.supplier.name || "-"}
               {d.supplier.ceo ? ` ${d.supplier.ceo}` : ""}
             </Text>
-            {/* (인) 위에 직인을 겹쳐 찍는다 */}
+            {/* (인) 위에 직인을 겹쳐 찍음 */}
             <View style={s.sealSlot}>
               <Text style={s.signText}>(인)</Text>
               {d.sealImg && <Image style={s.sealSlotImg} src={d.sealImg} />}

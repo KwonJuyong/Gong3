@@ -11,8 +11,8 @@ type ActionState = { error: string | null; success: boolean } | null;
 
 /**
  * 기본 정보: 사진·이름·전공(업체명)·연락처·이메일.
- * 현재 비밀번호는 로그인 ID 인 이메일을 바꿀 때만 받는다(비밀번호 변경은 보안 탭).
- * updateProfileAction 은 제출된 필드만 갱신한다.
+ * 현재 비밀번호는 로그인 ID 인 이메일을 바꿀 때만 받음(비밀번호 변경은 보안 탭).
+ * updateProfileAction 은 제출된 필드만 갱신함
  */
 export default function BasicSection({
   user,
@@ -24,7 +24,7 @@ export default function BasicSection({
     phone: string;
     email: string;
     profileImage: string | null;
-    /** 이메일 인증을 마쳤는가. 미인증이면 다음 로그인부터 막힌다. */
+    /** 이메일 인증을 마쳤는가. 미인증이면 다음 로그인부터 막힘 */
     emailVerified: boolean;
   };
 }) {
@@ -35,12 +35,12 @@ export default function BasicSection({
   const [imageUrl, setImageUrl] = useState(user.profileImage || "");
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  // 이메일을 바꾸면 인증이 초기화되고 새 주소로 인증 메일이 간다. 변경 여부는 화면에서 판단한다.
+  // 이메일을 바꾸면 인증이 초기화되고 새 주소로 인증 메일이 감. 변경 여부는 화면에서 판단함
   const [email, setEmail] = useState(user.email);
   const emailChanged = email.trim() !== user.email;
 
   const isDev = user.userType === "DEVELOPER";
-  const majorLabel = isDev ? "업체명" : "전공";
+  const majorLabel = isDev ? "기업명" : "전공";
 
   async function upload(file: File) {
     if (!file.type.startsWith("image/")) return toast("이미지 파일만 업로드할 수 있습니다.", "error");
@@ -64,10 +64,9 @@ export default function BasicSection({
     <form action={formAction} className="space-y-5">
       <Card
         title="기본 정보"
-        desc="이 정보는 평가 참여·모집 안내에 쓰입니다. 이메일이 곧 로그인 ID 입니다 — 바꾸려면 현재 비밀번호가 필요합니다. 비밀번호 변경은 「보안」 탭입니다."
+        desc="이 정보는 평가 참여·모집 안내에 쓰입니다. 이메일이 곧 로그인 ID 입니다. 바꾸려면 현재 비밀번호가 필요합니다. 비밀번호 변경은 「보안」 탭입니다."
       >
         <div className="space-y-4">
-          {/* 프로필 사진 */}
           <div>
             <span className="block text-xs font-medium text-[var(--gray-600)] mb-2">
               프로필 사진
@@ -135,11 +134,11 @@ export default function BasicSection({
                 <input
                   name="major"
                   defaultValue={user.major}
-                  placeholder="업체명을 입력하세요"
+                  placeholder="기업명을 입력하세요"
                   className={INPUT}
                 />
               ) : (
-                // 가입 폼과 같은 컴포넌트. 프로필에서는 전공이 선택 항목이다.
+                // 가입 폼과 같은 컴포넌트. 프로필에서는 전공이 선택 항목임
                 <MajorSelect name="major" defaultValue={user.major} />
               )}
             </Field>
@@ -148,7 +147,7 @@ export default function BasicSection({
               <PhoneInput name="phone" defaultValue={user.phone} />
             </Field>
 
-            {/* 게스트(DEVELOPER)의 이메일은 보안 탭에서 바꾼다. */}
+            {/* 게스트(DEVELOPER)의 이메일은 보안 탭에서 바꿈 */}
             {!isDev && (
               <Field
                 label="이메일 (로그인 ID)"
@@ -166,14 +165,14 @@ export default function BasicSection({
             )}
           </div>
 
-          {/* 미인증 안내(다음 로그인부터 막힌다) */}
+          {/* 미인증 안내(다음 로그인부터 막힘) */}
           {!isDev && !user.emailVerified && !emailChanged && (
             <Note tone="warning">
               이 이메일은 아직 <strong>인증되지 않았습니다.</strong> 메일함의 인증 링크를 눌러
               주세요. 인증하지 않으면 다음 로그인부터 막힙니다.
             </Note>
           )}
-          {/* 이메일(로그인 ID)을 바꿀 때만 현재 비밀번호 칸을 보여준다(서버에서도 확인한다). */}
+          {/* 이메일(로그인 ID)을 바꿀 때만 현재 비밀번호 칸을 보여줌(서버에서도 확인함). */}
           {!isDev && emailChanged && (
             <>
               <Note tone="warning">

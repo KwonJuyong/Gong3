@@ -8,17 +8,17 @@ import {
 
 const prisma = new PrismaClient()
 
-// 스테이징 전용 테스트 계정. 운영 학생 데이터(seed.ts)는 넣지 않는다.
-// 목록과 비밀번호는 app/lib/stagingAccounts.ts 에서 가져온다(로그인 화면 안내와 같은 값).
-// 로그인 ID 가 이메일이므로 email 과 emailVerifiedAt 을 함께 채운다.
+// 스테이징 전용 테스트 계정. 운영 학생 데이터(seed.ts)는 넣지 않음
+// 목록과 비밀번호는 app/lib/stagingAccounts.ts 에서 가져옴(로그인 화면 안내와 같은 값).
+// 로그인 ID 가 이메일이므로 email 과 emailVerifiedAt 을 함께 채움
 
 async function main() {
-  console.log('🌱 스테이징 테스트 계정 시드 시작...')
+  console.log('스테이징 테스트 계정 시드 시작...')
   const hash = await bcrypt.hash(PW, 10)
 
   for (const u of users) {
     const email = emailOf(u.studentId)
-    // 기존 행에도 이메일을 채우도록 update 에도 넣는다(매 배포마다 같은 값으로 맞춘다).
+    // 기존 행에도 이메일을 채우도록 update 에도 넣음(매 배포마다 같은 값으로 맞춤).
     const fields = {
       name: u.name,
       major: u.major,
@@ -43,7 +43,7 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error('❌ 테스트 계정 시드 실패:', e)
+    console.error('테스트 계정 시드 실패:', e)
     process.exit(1)
   })
   .finally(async () => {

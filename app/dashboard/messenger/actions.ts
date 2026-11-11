@@ -1,14 +1,13 @@
 "use server";
 
-import { readFile } from "fs/promises";
-import path from "path";
 import { prisma, getSessionUser } from "@/app/db";
+import { getSessionUserId } from "@/app/session-server";
 import { publishToUser } from "@/app/lib/chatBus";
-import { checkRateLimit } from "@/app/rate-limit";
-import { runChatAgent, type ChatTurn, type ChatContentPart } from "@/app/lib/chatAgent";
+import { checkLimit, checkLlmQuota } from "@/app/lib/limits";
+import { attachmentTurnIndexes, toAgentTurn } from "@/app/lib/chatAttachments";
+import { runChatAgent, type ChatTurn } from "@/app/lib/chatAgent";
 import { maskStudentId } from "@/app/lib/privacy";
 
-// ─────────────────────────────── 타입 ───────────────────────────────
 export type RoomKind = "DM" | "GROUP" | "AI";
 
 export type Attachment = {
@@ -46,11 +45,12 @@ export type RoomDetail = {
   kind: RoomKind;
   title: string;
   members: { userId: string; name: string; studentId: string }[];
+  /** 오래된 메시지가 잘렸는가 */
+  truncated: boolean;
 };
 
 export type UserLite = { id: string; name: string; studentId: string; major: string };
 
-// ────────────────────────────── 헬퍼 ──────────────────────────────
 function parseAttachments(raw: unknown): Attachment[] {
   if (!Array.isArray(raw)) return [];
   const out: Attachment[] = [];
@@ -58,7 +58,7 @@ function parseAttachments(raw: unknown): Attachment[] {
     if (!a || typeof a !== "object") continue;
     const o = a as Record<string, unknown>;
     const url = typeof o.url === "string" ? o.url : "";
-    const name = typeof o.name === "string" ? o.name : "첨부파일";
+    const name = typeof o.name === "string" ? o.name.slice(0, 200) : "첨부파일";
     const kind = o.kind === "image" ? "image" : "file";
     if (!url.startsWith("/api/uploads/")) continue;
     out.push({ url, name, kind, size: typeof o.size === "number" ? o.size : undefined });
@@ -68,16 +68,21 @@ function parseAttachments(raw: unknown): Attachment[] {
 
 function previewText(content: string, attachments: Attachment[]): string {
   if (content) return content;
-  if (attachments.some((a) => a.kind === "image")) return "📷 사진";
-  if (attachments.length > 0) return "📎 파일";
+  if (attachments.some((a) => a.kind === "image")) return "사진";
+  if (attachments.length > 0) return "파일";
   return "";
 }
 
 const MAX_ATTACHMENTS = 10;
-const IMG_MIME: Record<string, string> = {
-  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
-};
-
+/** 방을 열 때 싣는 최근 메시지 수 */
+const ROOM_MESSAGE_LIMIT = 200;
+/** AI 에 넘기는 최근 대화 수. chatAgent 가 쓰는 맥락 길이와 맞춤(첨부를 디스크에서 다시 읽으므로 전체를 읽지 않음). */
+const AI_HISTORY_LIMIT = 12;
+const SEARCH_MIN_LENGTH = 2;
+const SEARCH_LIMIT = 20;
+const GROUP_MEMBER_LIMIT = 50;
+// 붙여넣기 실수로 수 MB 짜리 본문이 저장·전송되지 않게 함
+const MAX_CONTENT = 5000;
 /** DM/GROUP 방의 표시명·아바타 계산 (상대는 나 이외 참여자 기준) */
 function roomTitle(
   kind: RoomKind,
@@ -93,7 +98,20 @@ function roomTitle(
   return { title: name, avatarLabel: name.charAt(0) };
 }
 
-// ───────────────────────── 방 목록 ─────────────────────────
+/** 방별 안 읽은 메시지 수. 방마다 lastReadAt 이 달라 한 번에 세려면 조인이 필요함. senderId 가 null 인 AI 답변은 세지 않음 */
+async function unreadByRoom(userId: string): Promise<Map<string, number>> {
+  const rows = await prisma.$queryRaw<{ conversationId: string; unread: number }[]>`
+    SELECT m."conversationId", COUNT(*)::int AS unread
+    FROM "Message" m
+    JOIN "ConversationMember" cm ON cm."conversationId" = m."conversationId"
+    WHERE cm."userId" = ${userId}
+      AND cm."leftAt" IS NULL
+      AND m."senderId" <> ${userId}
+      AND (cm."lastReadAt" IS NULL OR m."createdAt" > cm."lastReadAt")
+    GROUP BY m."conversationId"`;
+  return new Map(rows.map((r) => [r.conversationId, r.unread]));
+}
+
 export async function listRooms(): Promise<RoomSummary[]> {
   const me = await getSessionUser();
   if (!me) return [];
@@ -111,6 +129,7 @@ export async function listRooms(): Promise<RoomSummary[]> {
     orderBy: { conversation: { updatedAt: "desc" } },
   });
 
+  const unread = await unreadByRoom(me.id);
   const rows: { summary: RoomSummary; pinnedAt: Date | null; sortOrder: number }[] = [];
   for (const mem of memberships) {
     const conv = mem.conversation;
@@ -123,14 +142,6 @@ export async function listRooms(): Promise<RoomSummary[]> {
     const last = conv.messages[0];
     const lastAtt = last ? parseAttachments(last.attachments) : [];
 
-    const unreadCount = await prisma.message.count({
-      where: {
-        conversationId: conv.id,
-        senderId: { not: me.id },
-        createdAt: mem.lastReadAt ? { gt: mem.lastReadAt } : undefined,
-      },
-    });
-
     rows.push({
       summary: {
         id: conv.id,
@@ -140,7 +151,7 @@ export async function listRooms(): Promise<RoomSummary[]> {
         memberCount: conv.members.filter((m) => m.leftAt === null).length,
         lastContent: last ? previewText(last.content, lastAtt) : "",
         lastAt: last ? last.createdAt.toISOString() : conv.createdAt.toISOString(),
-        unreadCount,
+        unreadCount: unread.get(conv.id) ?? 0,
         pinned: mem.pinnedAt !== null,
       },
       pinnedAt: mem.pinnedAt,
@@ -161,11 +172,13 @@ export async function listRooms(): Promise<RoomSummary[]> {
 }
 
 export async function getUnreadTotal(): Promise<number> {
-  const rooms = await listRooms();
-  return rooms.reduce((s, r) => s + r.unreadCount, 0);
+  const userId = await getSessionUserId();
+  if (!userId) return 0;
+  let total = 0;
+  for (const n of (await unreadByRoom(userId)).values()) total += n;
+  return total;
 }
 
-// ───────────────────────── 방 열기(메시지 조회 + 읽음) ─────────────────────────
 async function assertMember(conversationId: string, userId: string) {
   return prisma.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId, userId } },
@@ -186,7 +199,8 @@ export async function getRoom(
     include: {
       members: { include: { user: { select: { id: true, name: true, studentId: true } } } },
       messages: {
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: "desc" },
+        take: ROOM_MESSAGE_LIMIT + 1,
         include: { sender: { select: { id: true, name: true } } },
       },
     },
@@ -205,7 +219,7 @@ export async function getRoom(
     data: { lastReadAt: new Date() },
   });
 
-  const messages: RoomMessage[] = conv.messages.map((m) => ({
+  const messages: RoomMessage[] = conv.messages.slice(0, ROOM_MESSAGE_LIMIT).reverse().map((m) => ({
     id: m.id,
     content: m.content,
     attachments: parseAttachments(m.attachments),
@@ -228,19 +242,22 @@ export async function getRoom(
           name: m.user.name,
           studentId: maskStudentId(m.user.studentId, me.role === "ADMIN"),
         })),
+      truncated: conv.messages.length > ROOM_MESSAGE_LIMIT,
     },
     messages,
   };
 }
 
-// ───────────────────────── 메시지 전송 (DM/GROUP) ─────────────────────────
 export async function sendMessage(
   conversationId: string,
   content: string,
   attachments?: Attachment[],
-): Promise<RoomMessage | null> {
+): Promise<RoomMessage | { error: string } | null> {
   const me = await getSessionUser();
   if (!me || !conversationId) return null;
+
+  const rl = checkLimit("message", me.id);
+  if (rl) return { error: rl };
 
   const mem = await assertMember(conversationId, me.id);
   if (!mem || mem.leftAt) return null;
@@ -251,7 +268,7 @@ export async function sendMessage(
   });
   if (!conv || conv.type === "AI") return null; // AI 방은 sendAiMessage 사용
 
-  const text = (content || "").trim();
+  const text = (content || "").trim().slice(0, MAX_CONTENT);
   const clean = parseAttachments(attachments).slice(0, MAX_ATTACHMENTS);
   if (!text && clean.length === 0) return null;
 
@@ -286,42 +303,6 @@ export async function sendMessage(
   };
 }
 
-// ───────────────────────── AI 방 전송 (에이전트 호출) ─────────────────────────
-/** 저장된 메시지 → 에이전트 히스토리로 변환 (이미지=base64, 텍스트파일=본문 인라인) */
-async function toAgentTurn(
-  content: string,
-  attachments: Attachment[],
-  role: "user" | "assistant",
-): Promise<ChatTurn> {
-  if (role === "assistant") return { role, content };
-
-  const parts: ChatContentPart[] = [];
-  let text = content;
-  for (const a of attachments) {
-    const filename = a.url.replace("/api/uploads/", "");
-    if (filename.includes("/") || filename.includes("..")) continue;
-    const ext = (filename.split(".").pop() || "").toLowerCase();
-    const fp = path.join(process.cwd(), "public", "uploads", filename);
-    try {
-      if (a.kind === "image" && IMG_MIME[ext]) {
-        const buf = await readFile(fp);
-        parts.push({
-          type: "image_url",
-          image_url: { url: `data:${IMG_MIME[ext]};base64,${buf.toString("base64")}` },
-        });
-      } else {
-        const buf = await readFile(fp);
-        text += `\n\n[첨부파일: ${a.name}]\n${buf.toString("utf-8").slice(0, 6000)}`;
-      }
-    } catch {
-      text += `\n\n[첨부파일: ${a.name} — 열 수 없음]`;
-    }
-  }
-  const finalText = text.trim() || "(첨부 파일을 확인해줘)";
-  if (parts.length > 0) return { role, content: [{ type: "text", text: finalText }, ...parts] };
-  return { role, content: finalText };
-}
-
 export async function sendAiMessage(
   conversationId: string,
   content: string,
@@ -330,7 +311,7 @@ export async function sendAiMessage(
   const me = await getSessionUser();
   if (!me || !conversationId) return null;
 
-  const rl = checkRateLimit(`chat:${me.id}`, 20, 60_000);
+  const rl = checkLlmQuota(me);
   if (rl) return { error: rl };
 
   const mem = await assertMember(conversationId, me.id);
@@ -339,7 +320,7 @@ export async function sendAiMessage(
   const conv = await prisma.conversation.findUnique({ where: { id: conversationId } });
   if (!conv || conv.type !== "AI") return null;
 
-  const text = (content || "").trim();
+  const text = (content || "").trim().slice(0, MAX_CONTENT);
   const clean = parseAttachments(attachments).slice(0, MAX_ATTACHMENTS);
   if (!text && clean.length === 0) return null;
 
@@ -353,20 +334,16 @@ export async function sendAiMessage(
     },
   });
 
-  // 히스토리 구성 (저장된 전체 대화)
   const prior = await prisma.message.findMany({
     where: { conversationId },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
+    take: AI_HISTORY_LIMIT,
   });
+  const ordered = prior.reverse().map((m) => ({ ...m, files: parseAttachments(m.attachments) }));
+  const withFiles = attachmentTurnIndexes(ordered.map((m) => !!m.senderId && m.files.length > 0));
   const history: ChatTurn[] = [];
-  for (const m of prior) {
-    history.push(
-      await toAgentTurn(
-        m.content,
-        parseAttachments(m.attachments),
-        m.senderId ? "user" : "assistant",
-      ),
-    );
+  for (const [i, m] of ordered.entries()) {
+    history.push(await toAgentTurn(m.content, m.files, m.senderId ? "user" : "assistant", withFiles.has(i)));
   }
 
   let reply: string;
@@ -400,13 +377,12 @@ export async function sendAiMessage(
   return { user: toRM(userMsg), assistant: toRM(aiMsg) };
 }
 
-// ───────────────────────── 방 생성 ─────────────────────────
 export async function createDmRoom(otherUserId: string): Promise<string | null> {
   const me = await getSessionUser();
   if (!me || !otherUserId || otherUserId === me.id) return null;
 
   const other = await prisma.user.findUnique({ where: { id: otherUserId } });
-  if (!other) return null;
+  if (!other || other.status !== "ACTIVE") return null;
 
   // 기존 DM 방 재사용
   const myDms = await prisma.conversationMember.findMany({
@@ -429,6 +405,8 @@ export async function createDmRoom(otherUserId: string): Promise<string | null> 
     return existing.id;
   }
 
+  if (checkLimit("roomCreate", me.id)) return null;
+
   const conv = await prisma.conversation.create({
     data: {
       type: "DM",
@@ -444,14 +422,14 @@ export async function createGroupRoom(
   memberIds: string[],
 ): Promise<string | null> {
   const me = await getSessionUser();
-  if (!me) return null;
+  if (!me || checkLimit("roomCreate", me.id)) return null;
 
-  const others = Array.from(new Set((memberIds || []).filter((id) => id && id !== me.id)));
+  const others = Array.from(new Set((memberIds || []).filter((id) => id && id !== me.id))).slice(0, GROUP_MEMBER_LIMIT);
   if (others.length === 0) return null;
 
   // 실제 존재하는 유저만
   const valid = await prisma.user.findMany({
-    where: { id: { in: others } },
+    where: { id: { in: others }, status: "ACTIVE" },
     select: { id: true },
   });
   const ids = valid.map((u) => u.id);
@@ -460,7 +438,7 @@ export async function createGroupRoom(
   const conv = await prisma.conversation.create({
     data: {
       type: "GROUP",
-      title: (title || "").trim() || null,
+      title: (title || "").trim().slice(0, 100) || null,
       createdById: me.id,
       members: { create: [{ userId: me.id }, ...ids.map((id) => ({ userId: id }))] },
     },
@@ -471,9 +449,10 @@ export async function createGroupRoom(
   return conv.id;
 }
 
-export async function createAiRoom(): Promise<string> {
+export async function createAiRoom(): Promise<string | null> {
   const me = await getSessionUser();
   if (!me) throw new Error("인증이 필요합니다.");
+  if (checkLimit("roomCreate", me.id)) return null;
   const conv = await prisma.conversation.create({
     data: {
       type: "AI",
@@ -485,7 +464,6 @@ export async function createAiRoom(): Promise<string> {
   return conv.id;
 }
 
-// ───────────────────────── 방 나가기(나만) ─────────────────────────
 export async function leaveRoom(conversationId: string): Promise<boolean> {
   const me = await getSessionUser();
   if (!me || !conversationId) return false;
@@ -512,7 +490,6 @@ export async function leaveRoom(conversationId: string): Promise<boolean> {
   return true;
 }
 
-// ───────────────────────── 상단 고정 / 순서 ─────────────────────────
 export async function pinRoom(
   conversationId: string,
   pinned: boolean,
@@ -559,28 +536,29 @@ export async function reorderPinnedRooms(orderedIds: string[]): Promise<boolean>
   return true;
 }
 
-// ───────────────────────── 사람 검색 (새 채팅) ─────────────────────────
-export async function searchUsers(query: string): Promise<UserLite[]> {
+/** 검색어가 있어야 조회함. 빈 검색으로 회원 명단을 훑을 수 없게 함 */
+export async function searchUsers(query: string): Promise<{ users: UserLite[]; error?: string }> {
   const me = await getSessionUser();
-  if (!me) return [];
-  const q = (query || "").trim();
+  if (!me) return { users: [] };
+  const q = (query || "").trim().slice(0, 100);
+  if (q.length < SEARCH_MIN_LENGTH) return { users: [], error: `${SEARCH_MIN_LENGTH}글자 이상 입력해 주세요.` };
+
+  const rl = checkLimit("userSearch", me.id);
+  if (rl) return { users: [], error: rl };
 
   const users = await prisma.user.findMany({
     where: {
       id: { not: me.id },
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: "insensitive" } },
-              { studentId: { contains: q, mode: "insensitive" } },
-            ],
-          }
-        : {}),
+      status: "ACTIVE",
+      OR: [
+        { name: { contains: q, mode: "insensitive" } },
+        { studentId: { contains: q, mode: "insensitive" } },
+      ],
     },
     select: { id: true, name: true, studentId: true, major: true },
     orderBy: { name: "asc" },
-    take: 30,
+    take: SEARCH_LIMIT,
   });
   const isAdmin = me.role === "ADMIN";
-  return users.map((u) => ({ ...u, studentId: maskStudentId(u.studentId, isAdmin) }));
+  return { users: users.map((u) => ({ ...u, studentId: maskStudentId(u.studentId, isAdmin) })) };
 }

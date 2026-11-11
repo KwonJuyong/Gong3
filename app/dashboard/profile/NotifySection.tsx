@@ -1,8 +1,7 @@
-import Link from "next/link";
 import PushToggle from "../PushToggle";
 import { Card, Note } from "./ui";
 
-/** 알림: 웹 푸시 켜기/끄기(메신저 알림함의 토글과 같은 컴포넌트) */
+/** 알림 설정: 웹 푸시 켜기/끄기. 받은 알림은 머리글 종에서 봄 */
 export default function NotifySection() {
   return (
     <div className="space-y-5">
@@ -21,10 +20,7 @@ export default function NotifySection() {
       >
         <Note tone="muted">
           설치는 왼쪽 메뉴 맨 아래 <strong>앱 설치</strong>에서 안내합니다. iPhone은 Safari에서{" "}
-          <strong>홈 화면에 추가</strong>한 뒤 그 아이콘으로 열어야 알림을 켤 수 있습니다.{" "}
-          <Link href="/dashboard" className="text-[var(--accent)] underline underline-offset-2">
-            대시보드로 이동
-          </Link>
+          <strong>홈 화면에 추가</strong>한 뒤 그 아이콘으로 열어야 알림을 켤 수 있습니다.
         </Note>
       </Card>
     </div>

@@ -8,9 +8,9 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 // beforeinstallprompt는 페이지 로드 직후 딱 한 번 발생하고, 이미 설치된 앱에서는
-// 아예 발생하지 않는다(그때 크롬 주소창은 "설치" 대신 "앱에서 열기"를 띄운다).
+// 아예 발생하지 않음(그때 크롬 주소창은 "설치" 대신 "앱에서 열기"를 띄움).
 // 컴포넌트가 마운트되기 전에 지나갈 수 있으므로 모듈 로드 시점에 붙잡아 보관하고,
-// 설치 UI를 가진 컴포넌트들(하단 배너, NavRail 설치 모달)이 이걸 함께 구독한다.
+// 설치 UI를 가진 컴포넌트들(하단 배너, NavRail 설치 모달)이 이걸 함께 구독함
 let deferred: BeforeInstallPromptEvent | null = null;
 const listeners = new Set<() => void>();
 
@@ -38,17 +38,17 @@ export function useCanInstall() {
   return useSyncExternalStore(
     subscribe,
     () => deferred !== null,
-    () => false, // SSR: 서버에선 알 수 없다
+    () => false, // SSR: 서버에선 알 수 없음
   );
 }
 
-/** 네이티브 설치 프롬프트를 띄운다. 사용자가 수락하면 true. */
+/** 네이티브 설치 프롬프트를 띄움. 사용자가 수락하면 true. */
 export async function promptInstall(): Promise<boolean> {
   if (!deferred) return false;
   const evt = deferred;
   await evt.prompt();
   const { outcome } = await evt.userChoice.catch(() => ({ outcome: "dismissed" as const }));
-  deferred = null; // 프롬프트 이벤트는 1회용이라 재사용할 수 없다
+  deferred = null; // 프롬프트 이벤트는 1회용이라 재사용할 수 없음
   emit();
   return outcome === "accepted";
 }

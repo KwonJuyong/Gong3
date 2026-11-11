@@ -2,7 +2,7 @@
 
 import { getVapidPublicKey, savePushSubscription, deletePushSubscription } from "./push-actions";
 
-// VAPID 공개키는 base64url 문자열로 오는데, pushManager.subscribe는 바이트 배열을 요구한다.
+// VAPID 공개키는 base64url 문자열로 오는데, pushManager.subscribe는 바이트 배열을 요구함
 function urlBase64ToUint8Array(base64url: string): Uint8Array {
   const padding = "=".repeat((4 - (base64url.length % 4)) % 4);
   const base64 = (base64url + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -35,7 +35,7 @@ export type EnableResult = "ok" | "denied" | "unsupported" | "error";
 export async function enablePush(): Promise<EnableResult> {
   if (!pushSupported()) return "unsupported";
 
-  // 브라우저는 사용자 제스처 안에서의 권한 요청만 신뢰한다 — 반드시 버튼 클릭에서 호출할 것.
+  // 브라우저는 사용자 제스처 안에서의 권한 요청만 신뢰함: 반드시 버튼 클릭에서 호출할 것.
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return "denied";
 
@@ -44,7 +44,7 @@ export async function enablePush(): Promise<EnableResult> {
 
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.subscribe({
-    userVisibleOnly: true, // 조용한 푸시는 금지 — 반드시 알림을 띄워야 한다
+    userVisibleOnly: true, // 조용한 푸시는 금지: 반드시 알림을 띄워야 함
     applicationServerKey: urlBase64ToUint8Array(key) as BufferSource,
   });
 

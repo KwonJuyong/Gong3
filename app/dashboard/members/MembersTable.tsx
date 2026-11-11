@@ -1,11 +1,12 @@
 "use client";
 
-
 import SubmitButton from "@/app/components/SubmitButton";
 import { confirmSubmit } from "@/app/components/feedback";
 import ConfirmButton from "@/app/components/ConfirmButton";
+import ReauthField from "@/app/components/ReauthField";
 import { useMemo, useState, useActionState } from "react";
 import Link from "next/link";
+import { csvCell } from "@/app/lib/csv";
 import {
   updateMemberAction,
   changeMemberRoleAction,
@@ -23,17 +24,17 @@ export interface MemberRow {
   name: string;
   studentId: string;
   email: string;
-  /** 이메일 인증 여부. 미인증이면 로그인할 수 없다. */
+  /** 이메일 인증 여부. 미인증이면 로그인할 수 없음 */
   emailVerified: boolean;
   phone: string;
   major: string;
   role: string;
   userType: string;
-  /** ACTIVE | SUSPENDED | WITHDRAWN (탈퇴해도 행은 남는다) */
+  /** ACTIVE | SUSPENDED | WITHDRAWN (탈퇴해도 행은 남음) */
   status: string;
   withdrawnAt: string | null;
   responseCount: number;
-  /** 보상 건수. 지급 기록이 있으면 계정을 삭제할 수 없다. */
+  /** 보상 건수. 지급 기록이 있으면 계정을 삭제할 수 없음 */
   rewardCount: number;
   laborClaimCount: number;
   orderCount: number;
@@ -44,15 +45,15 @@ type Filter = "all" | "noemail" | "unverified" | "staff" | "company" | "inactive
 
 const ROLE_LABEL: Record<string, { text: string; cls: string }> = {
   ADMIN: { text: "최고관리자", cls: "bg-[var(--accent-light)] text-[var(--accent)]" },
-  DEVELOPER: { text: "게스트/교직원", cls: "bg-[var(--gray-100)] text-[var(--gray-600)]" },
-  USER: { text: "평가단원", cls: "bg-[var(--gray-100)] text-[var(--gray-500)]" },
+  DEVELOPER: { text: "기업/교직원", cls: "bg-[var(--gray-100)] text-[var(--gray-600)]" },
+  USER: { text: "학생 평가자", cls: "bg-[var(--gray-100)] text-[var(--gray-500)]" },
 };
 
-/** role 과 userType 을 합쳐 표시 이름을 만든다(STAFF 는 role=DEVELOPER). */
+/** role 과 userType 을 합쳐 표시 이름을 만듦(STAFF 는 role=DEVELOPER). */
 function typeLabel(role: string, userType: string): string {
   if (role === "ADMIN") return "관리자";
   if (userType === "STAFF") return "교직원/조교";
-  if (userType === "DEVELOPER") return "게스트(기업)";
+  if (userType === "DEVELOPER") return "기업";
   return "학생";
 }
 
@@ -64,7 +65,7 @@ const STATUS_BADGE: Record<string, { text: string; cls: string }> = {
 
 /** role·userType 조합 프리셋(서버의 ROLE_PRESETS 와 같은 목록) */
 const ROLE_PRESETS: { key: string; label: string }[] = [
-  { key: "student", label: "학생(평가단)" },
+  { key: "student", label: "학생 평가자" },
   { key: "company", label: "기업" },
   { key: "staff", label: "교직원/조교" },
   { key: "admin", label: "관리자" },
@@ -86,7 +87,7 @@ export default function MembersTable({ rows, meId }: { rows: MemberRow[]; meId: 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
-      // 「이메일 없음」(계정 인계 대상)과 「이메일 미인증」은 다른 필터다.
+      // 「이메일 없음」(계정 인계 대상)과 「이메일 미인증」은 다른 필터임
       if (filter === "noemail" && r.email) return false;
       if (filter === "unverified" && r.emailVerified) return false;
       if (filter === "staff" && r.userType !== "STAFF") return false;
@@ -151,7 +152,7 @@ export default function MembersTable({ rows, meId }: { rows: MemberRow[]; meId: 
               <tr className="text-left text-xs text-[var(--gray-500)] bg-[var(--gray-50)]">
                 <th className="px-4 py-3 font-semibold">이름</th>
                 <th className="px-4 py-3 font-semibold">학번/사번</th>
-                <th className="px-4 py-3 font-semibold">전공/업체</th>
+                <th className="px-4 py-3 font-semibold">전공/기업</th>
                 <th className="px-4 py-3 font-semibold">이메일</th>
                 <th className="px-4 py-3 font-semibold">역할</th>
                 <th className="px-4 py-3 font-semibold text-right">응답</th>
@@ -176,13 +177,13 @@ export default function MembersTable({ rows, meId }: { rows: MemberRow[]; meId: 
       <p className="px-5 py-3 border-t border-[var(--gray-100)] text-xs text-[var(--muted)] leading-relaxed">
         행을 누르면 <strong>정보 수정 · 역할 변경 · 정지/탈퇴 · 비밀번호 재설정</strong>을 할 수
         있습니다. 이메일 <strong>미인증</strong> 회원은 로그인이 막힙니다.
-        계좌·주민번호 등 정산 정보는 <strong>보상 정산 &gt; 평가단 정산정보</strong>에서 봅니다.
+        계좌·주민번호 등 정산 정보는 <strong>보상 정산 &gt; 평가자 정산 정보</strong>에서 봅니다.
       </p>
     </section>
   );
 }
 
-/** 회원 한 줄과 그 아래 펼쳐지는 상세(목록의 필터·검색을 유지하려고 같은 자리에서 연다). */
+/** 회원 한 줄과 그 아래 펼쳐지는 상세(목록의 필터·검색을 유지하려고 같은 자리에서 열기). */
 function MemberRowView({
   m,
   open,
@@ -195,7 +196,7 @@ function MemberRowView({
   isMe: boolean;
 }) {
   const badge = STATUS_BADGE[m.status];
-  // 지급 관련 기록이 있으면 삭제하지 않고 탈퇴로 처리한다.
+  // 지급 관련 기록이 있으면 삭제하지 않고 탈퇴로 처리함
   const money = m.rewardCount + m.laborClaimCount + m.orderCount;
   const field =
     "w-full px-3 py-2 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)]";
@@ -246,6 +247,7 @@ function MemberRowView({
             year: "2-digit",
             month: "2-digit",
             day: "2-digit",
+            timeZone: "Asia/Seoul",
           })}
         </td>
       </tr>
@@ -253,7 +255,7 @@ function MemberRowView({
       {open && (
         <tr className="border-t border-[var(--gray-100)] bg-[var(--gray-50)]">
           <td colSpan={7} className="px-4 py-5">
-            {/* 활동 내역 링크. 행 전체를 링크로 만들면 펼침과 충돌해 안쪽에 둔다. */}
+            {/* 활동 내역 링크. 행 전체를 링크로 만들면 펼침과 충돌해 안쪽에 둠 */}
             <div className="mb-4 max-w-[900px]">
               <Link
                 href={`/dashboard/members/${m.id}`}
@@ -263,11 +265,10 @@ function MemberRowView({
                 <span aria-hidden>→</span>
               </Link>
               <span className="ml-2 text-xs text-[var(--muted)]">
-                신청·응답·보상·노무비·발주·관리자 조작을 시간순으로 봅니다.
+                신청·응답·보상·노무비·의뢰·관리자 조작을 시간순으로 봅니다.
               </span>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 max-w-[900px]">
-              {/* 정보 수정 */}
               <form action={updateMemberAction} className="space-y-3">
                 <input type="hidden" name="userId" value={m.id} />
                 <h4 className="text-xs font-semibold text-[var(--foreground)]">정보 수정</h4>
@@ -277,7 +278,7 @@ function MemberRowView({
                     <input name="name" defaultValue={m.name} required className={field} />
                   </div>
                   <div>
-                    <label className={label}>전공 / 업체</label>
+                    <label className={label}>전공 / 기업</label>
                     <input name="major" defaultValue={m.major} className={field} />
                   </div>
                   <div>
@@ -290,7 +291,7 @@ function MemberRowView({
                   </div>
                 </div>
                 <p className="text-xs text-[var(--warning)] leading-relaxed">
-                  ⚠ 이메일을 바꾸면 <strong>인증이 해제</strong>되어 본인이 다시 인증해야
+                  이메일을 바꾸면 <strong>인증이 해제</strong>되어 본인이 다시 인증해야
                   로그인됩니다. 오타 정정도 마찬가지입니다.
                 </p>
                 <SubmitButton className="px-3 py-2 text-xs font-semibold rounded-[var(--radius-md)] bg-[var(--accent)] text-white hover:opacity-90">
@@ -298,11 +299,10 @@ function MemberRowView({
                 </SubmitButton>
               </form>
 
-              {/* 역할 · 상태 · 비밀번호 */}
               <div className="space-y-4">
                 <div>
                   <h4 className="text-xs font-semibold text-[var(--foreground)] mb-2">역할</h4>
-                  <form action={changeMemberRoleAction} className="flex items-center gap-2">
+                  <form action={changeMemberRoleAction} className="flex flex-wrap items-center gap-2">
                     <input type="hidden" name="userId" value={m.id} />
                     <select
                       name="preset"
@@ -315,6 +315,7 @@ function MemberRowView({
                         </option>
                       ))}
                     </select>
+                    <ReauthField className="w-36 min-w-0" />
                     <ConfirmButton
                       message={`${m.name}님의 역할을 「{preset}」(으)로 바꿉니다.\n\n· 권한과 표시 구분이 함께 바뀝니다.\n· 이 회원이 열어 둔 모든 기기에서 즉시 로그아웃됩니다.\n· 관리자 조작 기록에 남습니다.\n\n정말 바꾸시겠습니까?`}
                       className={btn}
@@ -323,7 +324,7 @@ function MemberRowView({
                     </ConfirmButton>
                   </form>
                   <p className="text-xs text-[var(--muted)] mt-1 leading-relaxed">
-                    권한과 표시 구분을 <strong>한 벌로</strong> 바꿉니다 — 따로 바꾸면 어긋납니다.
+                    권한과 표시 구분을 <strong>한 벌로</strong> 바꿉니다. 따로 바꾸면 어긋납니다.
                   </p>
                 </div>
 
@@ -396,17 +397,17 @@ function MemberRowView({
                   <p className="text-xs text-[var(--muted)] mt-1 leading-relaxed">
                     {m.email
                       ? "메일 링크가 원칙입니다(관리자가 값을 몰라야 안전). 링크는 30분·1회용."
-                      : "⚠ 이메일이 없어 링크를 보낼 수 없습니다 — 임시 비밀번호를 쓰세요."}
+                      : "이메일이 없어 링크를 보낼 수 없습니다. 임시 비밀번호를 쓰세요."}
                   </p>
                 </div>
 
                 {/* 활동 요약(탈퇴·삭제 판단용) */}
                 <div className="text-xs text-[var(--muted)] border-t border-[var(--gray-200)] pt-3 leading-relaxed">
-                  응답 {m.responseCount} · 보상 {m.rewardCount} · 노무비 {m.laborClaimCount} · 발주{" "}
+                  응답 {m.responseCount} · 보상 {m.rewardCount} · 노무비 {m.laborClaimCount} · 의뢰{" "}
                   {m.orderCount}
                   {money > 0 ? (
                     <span className="block mt-1 text-[var(--warning)]">
-                      ⚠ 지급·거래 기록이 있는 계정입니다. 삭제할 수 없고, 정리가 필요하면
+                      지급·거래 기록이 있는 계정입니다. 삭제할 수 없고, 정리가 필요하면
                       <strong> 탈퇴 처리</strong>로 끝냅니다.
                     </span>
                   ) : (
@@ -416,7 +417,7 @@ function MemberRowView({
                         action={deleteMemberAction}
                         className="mt-2"
                         onSubmit={(e) =>
-                          // 되돌릴 수 없어 확인을 받는다.
+                          // 되돌릴 수 없어 확인을 받음
                           confirmSubmit(e, {
                             message: `«${m.name}» 계정을 완전히 삭제합니다. 되돌릴 수 없습니다.\n\n정말 삭제하시겠습니까?`,
                             confirmLabel: "계정 삭제",
@@ -447,7 +448,7 @@ function MemberRowView({
 
 /**
  * 임시 비밀번호 발급 버튼.
- * 자격증명이 URL·로그에 남지 않도록 redirect 대신 useActionState 로 받아 화면에만 보여준다.
+ * 자격증명이 URL·로그에 남지 않도록 redirect 대신 useActionState 로 받아 화면에만 보여줌
  */
 function TempPasswordButton({ userId }: { userId: string }) {
   const [state, formAction, pending] = useActionState<TempPwState | null, FormData>(
@@ -467,6 +468,7 @@ function TempPasswordButton({ userId }: { userId: string }) {
         }
       >
         <input type="hidden" name="userId" value={userId} />
+        <ReauthField className="block w-full mb-1.5 text-xs" />
         <button
           disabled={pending}
           className="px-3 py-2 text-xs font-semibold rounded-[var(--radius-md)] border border-[var(--gray-300)] text-[var(--foreground)] hover:bg-[var(--gray-50)] disabled:opacity-50"
@@ -493,8 +495,8 @@ function TempPasswordButton({ userId }: { userId: string }) {
 /**
  * 계정 인계 링크 일괄 발급(「이메일 없음」 필터에서 표시).
  *
- * 토큰 원본은 저장하지 않으므로 결과는 이 화면에만 보이고 새로고침하면 사라진다.
- * 내려받는 CSV 에는 개인정보와 링크가 들어 있어 전달 후 삭제하도록 안내한다.
+ * 토큰 원본은 저장하지 않으므로 결과는 이 화면에만 보이고 새로고침하면 사라짐
+ * 내려받는 CSV 에는 개인정보와 링크가 들어 있어 전달 후 삭제하도록 안내함
  */
 function ClaimLinkPanel({ rows }: { rows: MemberRow[] }) {
   const [state, formAction, pending] = useActionState<ClaimLinksState | null, FormData>(
@@ -504,14 +506,13 @@ function ClaimLinkPanel({ rows }: { rows: MemberRow[] }) {
 
   const csv = useMemo(() => {
     if (!state?.rows) return "";
-    const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
     const head = "이름,학번,전화번호,링크";
-    const body = state.rows.map((r) => [r.name, r.studentId, r.phone, r.url].map(esc).join(","));
+    const body = state.rows.map((r) => [r.name, r.studentId, r.phone, r.url].map(csvCell).join(","));
     return [head, ...body].join("\r\n");
   }, [state]);
 
   const download = () => {
-    // 엑셀에서 한글이 깨지지 않도록 UTF-8 BOM 을 붙인다.
+    // 엑셀에서 한글이 깨지지 않도록 UTF-8 BOM 을 붙임
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -566,9 +567,9 @@ function ClaimLinkPanel({ rows }: { rows: MemberRow[] }) {
           </div>
 
           <p className="text-xs text-[var(--warning)] leading-snug">
-            ⚠ 지금만 보입니다. 새로고침하면 사라지고, 다시 보려면 재발급해야 합니다.
+            지금만 보입니다. 새로고침하면 사라지고, 다시 보려면 재발급해야 합니다.
             <br />
-            ⚠ 이 파일에는 <strong>계정을 가져갈 수 있는 링크</strong>가 들어 있습니다.
+            이 파일에는 <strong>계정을 가져갈 수 있는 링크</strong>가 들어 있습니다.
             전달이 끝나면 파일을 지워 주세요.
           </p>
 

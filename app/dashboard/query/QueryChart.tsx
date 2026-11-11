@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 조회 결과 차트(SVG 로 직접 그린다).
+ * 조회 결과 차트(SVG 로 직접 그림).
  *
  *   groupBy  → 막대
  *   trend    → 선
@@ -71,7 +71,7 @@ function LineChart({ rows, labelKey, valueKey }: { rows: Row[]; labelKey: string
   const y = (v: number) => padT + innerH - (max ? (v / max) * innerH : 0);
 
   const pts = data.map((r, i) => `${x(i)},${y(num(r[valueKey]))}`).join(" ");
-  // x 축 라벨은 겹치지 않도록 솎아낸다.
+  // x 축 라벨은 겹치지 않도록 솎아냄
   const step = Math.ceil(data.length / 8);
 
   return (
@@ -170,12 +170,12 @@ export default function QueryChart({
     return <LineChart rows={rows} labelKey={columns[0]} valueKey={columns[1]} />;
 
   if (mode === "crosstab" && columns.length >= 3) {
-    // 첫 열은 행 라벨, 마지막 열은 합계이고 그 사이가 계열이다.
+    // 첫 열은 행 라벨, 마지막 열은 합계이고 그 사이가 계열임
     const series = columns.slice(1, -1);
     if (!series.length) return null;
     return <StackedBar rows={rows} labelKey={columns[0]} seriesKeys={series} />;
   }
 
-  // count·aggregate·list 는 차트를 만들지 않는다.
+  // count·aggregate·list 는 차트를 만들지 않음
   return null;
 }

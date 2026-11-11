@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { pushSupported, currentSubscription, enablePush, disablePush } from "../push-client";
 
-// 알림(특수 방) 헤더에 붙는 푸시 켜기/끄기 토글.
-// 앱을 닫아둔 상태에서도 알림을 받으려면 이 구독이 있어야 한다.
+// 프로필 알림 탭의 푸시 켜기/끄기 토글.
+// 앱을 닫아둔 상태에서도 알림을 받으려면 이 구독이 있어야 함
 type State = "loading" | "off" | "on" | "denied" | "unsupported";
 
 export default function PushToggle() {

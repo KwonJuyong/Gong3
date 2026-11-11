@@ -1,9 +1,9 @@
 // 앵커링 비네트 기반 평가자 척도사용 편차 보정.
 // 방법론: King, Murray, Salomon & Tandon (2004); King & Wand (2007) 비모수(non-parametric) C.
 //
-// 아이디어: 모든 평가자가 동일한 고정 시나리오(비네트)를 같은 척도로 평가한다.
+// 아이디어: 모든 평가자가 동일한 고정 시나리오(비네트)를 같은 척도로 평가함
 // 평가자의 자기응답 y 를, 그 평가자 자신의 비네트 평가 z(=개인 기준점)에 상대적으로
-// 재코딩하면(C), 평가자마다 다른 관대함/엄격함이 제거되어 서비스·회차 간 비교가 가능해진다.
+// 재코딩하면(C), 평가자마다 다른 관대함/엄격함이 제거되어 서비스·회차 간 비교가 가능해짐
 
 export type Corrected = {
   c: number; // 보정된 순서형 범주 (1 .. 2K+1)
@@ -29,7 +29,7 @@ export function correctedCategory(y: number, z: number[]): Corrected {
   const K = z.length;
   const maxC = 2 * K + 1;
 
-  // 일관성(약단조 증가) 검사 — 위반 응답자는 censoring 대상 후보
+  // 일관성(약단조 증가) 검사: 위반 응답자는 censoring 대상 후보
   let consistent = true;
   for (let k = 1; k < K; k++) {
     if (z[k] < z[k - 1]) {
@@ -66,7 +66,7 @@ export type ConstructScore = {
 
 /**
  * 한 구성개념에 대한 여러 평가자 응답을 비교가능 점수로 집계.
- * 일관성 위반 응답자는 보정 집계에서 제외(dropped)하되 rawMean에는 포함하지 않음.
+ * 일관성 위반 응답자는 보정 집계에서 제외(dropped)하되 rawMean에는 포함하지 않음
  */
 export function aggregateConstruct(responses: RaterResponse[]): ConstructScore {
   if (responses.length === 0) {

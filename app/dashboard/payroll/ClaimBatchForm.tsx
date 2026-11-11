@@ -1,6 +1,5 @@
 "use client";
 
-
 import SubmitButton from "@/app/components/SubmitButton";
 import { useState, useMemo } from "react";
 import { createClaimBatch } from "./actions";
@@ -36,7 +35,6 @@ export default function ClaimBatchForm({ projects }: { projects: FinishedProject
     <section className="bg-white rounded-[var(--radius-xl)] p-5 space-y-4">
       <h3 className="text-sm font-semibold text-[var(--foreground)]">청구 회차 생성</h3>
 
-      {/* 평가 검색/선택 */}
       <div className="space-y-1">
         <label className="text-xs text-[var(--muted)]">종료된 평가 검색</label>
         <input
@@ -49,7 +47,6 @@ export default function ClaimBatchForm({ projects }: { projects: FinishedProject
           className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--gray-200)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors"
         />
 
-        {/* 드롭다운 목록 */}
         {query.trim() && !selected && (
           <div className="border border-[var(--gray-200)] rounded-[var(--radius-md)] divide-y divide-[var(--gray-100)] max-h-52 overflow-y-auto bg-white shadow-[var(--shadow-sm)]">
             {filtered.length === 0 ? (
@@ -73,7 +70,6 @@ export default function ClaimBatchForm({ projects }: { projects: FinishedProject
         )}
       </div>
 
-      {/* 선택된 평가 미리보기 */}
       {selected && (
         <div className="rounded-[var(--radius-md)] bg-[var(--surface)] px-3 py-2.5 text-sm">
           <p className="font-medium text-[var(--foreground)]">{selected.title}</p>
@@ -83,7 +79,6 @@ export default function ClaimBatchForm({ projects }: { projects: FinishedProject
         </div>
       )}
 
-      {/* 생성 폼 */}
       {selected && (
         <form action={createClaimBatch} className="flex items-end gap-3">
           <input type="hidden" name="title" value={selected.title} />

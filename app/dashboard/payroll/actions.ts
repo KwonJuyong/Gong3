@@ -1,5 +1,6 @@
 "use server";
 
+import { logPersonalData } from "@/app/lib/accessLog";
 import { getSessionUserId } from "@/app/session-server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -31,17 +32,6 @@ function seoulDate(d: Date) {
   const get = (t: string) => parts.find((p) => p.type === t)?.value || "";
   return `${get("year")}.${get("month")}.${get("day")}`;
 }
-function seoulTime(d: Date) {
-  return new Intl.DateTimeFormat("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Seoul",
-  })
-    .format(d)
-    .replace(/\s/g, "");
-}
-
 interface ClaimEntry {
   date: string;
   start: string;
@@ -84,7 +74,7 @@ function parseEntries(raw: string): ClaimEntry[] {
     const parsed = JSON.parse(raw || "[]");
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .map((e: any) => ({
+      .map((e: Record<string, unknown>) => ({
         date: String(e?.date || "").trim(),
         start: String(e?.start || "").trim(),
         end: String(e?.end || "").trim(),
@@ -97,9 +87,9 @@ function parseEntries(raw: string): ClaimEntry[] {
   }
 }
 
-// 개인 정산 정보 저장은 app/dashboard/profile/actions.ts 의 saveMyProfileSettlementAction 에서 한다.
+// 개인 정산 정보 저장은 app/dashboard/profile/actions.ts 의 saveMyProfileSettlementAction 에서 함
 
-/** [연구책임자(근무확인) 서명 저장: ADMIN] 모든 서류에 공통으로 쓴다. */
+/** 모든 서류에 공통으로 씀 */
 export async function saveDirectorSignature(formData: FormData) {
   const me = await getMe();
   if (!me || !isAdmin(me.role)) return;
@@ -115,13 +105,14 @@ export async function saveDirectorSignature(formData: FormData) {
   redirect(`${PAYROLL_PATH}?signSaved=1`);
 }
 
-/** 연구책임자 단일 고정 서명 URL 조회 (전역 설정) */
+/** 연구책임자 단일 고정 서명 URL 조회 (전역 설정). 서버 액션이라 외부에서도 호출 가능 */
 export async function getDirectorSignUrl(): Promise<string> {
+  const me = await getMe();
+  if (!me || !isAdmin(me.role)) return "";
   const setting = await prisma.appSetting.findUnique({ where: { key: "directorSignUrl" } });
   return setting?.value || "";
 }
 
-/** [청구 회차 생성: ADMIN] */
 export async function createClaimBatch(formData: FormData) {
   const me = await getMe();
   if (!me || !isAdmin(me.role)) return;
@@ -147,7 +138,6 @@ export async function createClaimBatch(formData: FormData) {
   redirect(PAYROLL_PATH);
 }
 
-/** [회차 마감/재개: ADMIN] */
 export async function setBatchStatus(formData: FormData) {
   const me = await getMe();
   if (!me || !isAdmin(me.role)) return;
@@ -161,7 +151,7 @@ export async function setBatchStatus(formData: FormData) {
   redirect(`${PAYROLL_PATH}/admin/${batchId}`);
 }
 
-/** [참여자 서류 자동 생성: ADMIN] 기간 내 참여자별 청구서를 자동 생성(누락분만). */
+/** 기간 내 참여자별 청구서를 자동 생성(누락분만). */
 export async function generateClaims(formData: FormData) {
   const me = await getMe();
   if (!me || !isAdmin(me.role)) return;
@@ -223,7 +213,6 @@ export async function generateClaims(formData: FormData) {
   redirect(`${PAYROLL_PATH}/admin/${batchId}`);
 }
 
-/** [한 청구서의 개인정보·근무내역을 최신 프로필/참여기록으로 재생성: ADMIN] */
 export async function regenerateClaim(formData: FormData) {
   const me = await getMe();
   if (!me || !isAdmin(me.role)) return;
@@ -261,7 +250,7 @@ export async function regenerateClaim(formData: FormData) {
   redirect(`${PAYROLL_PATH}/admin/${claim.batchId}/${claimId}`);
 }
 
-/** [청구서 편집/확정: ADMIN] 자동 생성된 서류의 틀을 수동 수정 */
+/** 자동 생성된 서류의 틀을 수동 수정 */
 export async function saveClaim(formData: FormData) {
   const me = await getMe();
   if (!me || !isAdmin(me.role)) return;
@@ -282,8 +271,9 @@ export async function saveClaim(formData: FormData) {
   const bankName = ((formData.get("bankName") as string) || "").trim();
   const accountNumber = ((formData.get("accountNumber") as string) || "").trim();
   const signatureUrl = ((formData.get("signatureUrl") as string) || "").trim() || null;
-  const rrnRaw = ((formData.get("rrn") as string) || "").trim();
-  const rrnEnc = rrnRaw ? encryptRRN(rrnRaw) : claim.rrnEnc;
+  // 정산 프로필과 같이 숫자 13자리만 저장함. 형식이 다르면 기존 값을 유지함
+  const rrnDigits = ((formData.get("rrn") as string) || "").replace(/[^0-9]/g, "");
+  const rrnEnc = rrnDigits.length === 13 ? encryptRRN(rrnDigits) : claim.rrnEnc;
 
   const consent = {
     personal: formData.get("consentPersonal") === "on",
@@ -311,12 +301,13 @@ export async function saveClaim(formData: FormData) {
       confirmedAt: confirm ? new Date() : null,
     },
   });
+  // 접속기록: 다른 사람의 청구서(주민번호·계좌) 변경
+  await logPersonalData(me.id, "UPDATE", "노무비 청구서 수정", claim.userId);
 
   revalidatePath(`${PAYROLL_PATH}/admin/${claim.batchId}`);
   redirect(`${PAYROLL_PATH}/admin/${claim.batchId}`);
 }
 
-/** [청구서 삭제: ADMIN] */
 export async function deleteClaim(formData: FormData) {
   const me = await getMe();
   if (!me || !isAdmin(me.role)) return;
@@ -327,6 +318,7 @@ export async function deleteClaim(formData: FormData) {
   if (!claim) return;
 
   await prisma.laborClaim.delete({ where: { id: claimId } });
+  await logPersonalData(me.id, "DELETE", "노무비 청구서 삭제", claim.userId);
   revalidatePath(`${PAYROLL_PATH}/admin/${claim.batchId}`);
   redirect(`${PAYROLL_PATH}/admin/${claim.batchId}`);
 }

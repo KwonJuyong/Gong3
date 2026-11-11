@@ -52,7 +52,7 @@ function SignatureUpload({
   async function handleFile(file: File) {
     setUploading(true);
     try {
-      // 서명은 민감 첨부 저장소에 올린다. 교체하지 않고 쌓으므로 확정된 청구서의 서명은 그대로 남는다.
+      // 서명은 민감 첨부 저장소에 올림. 교체하지 않고 쌓으므로 확정된 청구서의 서명은 그대로 남음
       const r = await uploadSensitiveImage(file, "SIGNATURE");
       if (r.ok) onChange(r.url);
     } finally {
@@ -125,7 +125,6 @@ export default function ClaimEditor({
       <input type="hidden" name="entries" value={JSON.stringify(entries)} />
       <input type="hidden" name="signatureUrl" value={signatureUrl} />
 
-      {/* 인적사항 */}
       <section className="bg-white rounded-[var(--radius-xl)] p-5">
         <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4">인적사항</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -165,7 +164,6 @@ export default function ClaimEditor({
         </div>
       </section>
 
-      {/* 근무내역 */}
       <section className="bg-white rounded-[var(--radius-xl)] p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-[var(--foreground)]">근무내역</h3>
@@ -227,7 +225,6 @@ export default function ClaimEditor({
         </div>
       </section>
 
-      {/* 서명 */}
       <section className="bg-white rounded-[var(--radius-xl)] p-5 space-y-4">
         <h3 className="text-sm font-semibold text-[var(--foreground)]">서명</h3>
         <SignatureUpload label="청구확인 (근무자)" value={signatureUrl} onChange={setSignatureUrl} />
@@ -236,7 +233,6 @@ export default function ClaimEditor({
         </p>
       </section>
 
-      {/* 동의 및 확정 */}
       <section className="bg-white rounded-[var(--radius-xl)] p-5 space-y-2">
         <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">개인정보 수집·이용 동의</h3>
         <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">

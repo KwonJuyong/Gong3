@@ -2,18 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { submitResponseAction } from "./actions";
-import { questionKey } from "../lib/projectQuestions";
-import { Likert5Field, Semantic7Field, StarRating, ImageUploadField } from "./EvalFields";
+import { questionKey, MAX_TEXT_ANSWER } from "../lib/projectQuestions";
+import { Likert5Field, Semantic7Field, ScaleField, StarRating, ImageUploadField } from "./EvalFields";
 import SubmitButton from "../components/SubmitButton";
 
 /**
  * 평가 응답 화면.
  *
- * - 상단에 응답한 문항 수를 표시해 비어 있는 문항을 알려준다.
- * - 작성 중인 응답은 이 기기의 localStorage 에만 임시 저장하고, 제출하면 지운다(공용 PC 대비).
- * - 빈 문항은 제출 시 문항 옆에 표시하고 첫 빈 문항으로 이동한다.
- * - 응답 키는 서버·리포트와 같은 questionKey() 로 만든다.
- * - 필수 여부는 화면에서만 검사한다(이미지·개선 의견은 선택).
+ * - 상단에 응답한 문항 수를 표시해 비어 있는 문항을 알려줌
+ * - 작성 중인 응답은 이 기기의 localStorage 에만 임시 저장하고, 제출하면 지움(공용 PC 대비).
+ * - 빈 문항은 제출 시 문항 옆에 표시하고 첫 빈 문항으로 이동함
+ * - 응답 키는 서버·리포트와 같은 questionKey() 로 만듦
+ * - 필수 여부는 화면에서만 검사함(이미지·개선 의견은 선택).
  */
 
 type AnyQ = {
@@ -25,6 +25,8 @@ type AnyQ = {
   sectionHint?: string;
   leftLabel?: string;
   rightLabel?: string;
+  scaleMin?: number;
+  scaleMax?: number;
   comment?: boolean;
 };
 
@@ -43,11 +45,11 @@ function writeDraft(key: string, v: Record<string, unknown> | null) {
     if (v) window.localStorage.setItem(key, JSON.stringify(v));
     else window.localStorage.removeItem(key);
   } catch {
-    /* 사생활 보호 모드 등 — 임시 저장은 편의 기능이라 조용히 넘어간다 */
+    /* 사생활 보호 모드 등: 임시 저장은 편의 기능이라 조용히 넘어감 */
   }
 }
 
-/** 폼의 answer_* 값을 `{ questionKey: 값 }` 으로 모은다(서버 저장 형식과 같다). */
+/** 폼의 answer_* 값을 `{ questionKey: 값 }` 으로 모음(서버 저장 형식과 같음). */
 function collect(form: HTMLFormElement): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [name, val] of new FormData(form).entries()) {
@@ -93,7 +95,7 @@ export default function EvalForm({
   const [values, setValues] = useState<Record<string, unknown>>(prevAnswers);
   const [missing, setMissing] = useState<Set<number>>(new Set());
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  // 폼은 비제어(defaultValue)라 임시 저장을 불러오거나 지울 때 다시 그려야 값이 바뀐다.
+  // 폼은 비제어(defaultValue)라 임시 저장을 불러오거나 지울 때 다시 그려야 값이 바뀜
   const [formVersion, setFormVersion] = useState(0);
 
   useEffect(() => {
@@ -101,7 +103,7 @@ export default function EvalForm({
     setDraft(d);
     if (d) setValues({ ...prevAnswers, ...d });
     setLoaded(true);
-    // prevAnswers 는 서버에서 온 고정값이라 키가 바뀔 때만 다시 읽는다
+    // prevAnswers 는 서버에서 온 고정값이라 키가 바뀔 때만 다시 읽음
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
@@ -136,7 +138,7 @@ export default function EvalForm({
       el?.querySelector<HTMLElement>("input, textarea, select")?.focus({ preventScroll: true });
       return;
     }
-    // 공용 PC 에 응답을 남기지 않는다
+    // 공용 PC 에 응답을 남기지 않음
     writeDraft(key, null);
   }
 
@@ -200,7 +202,7 @@ export default function EvalForm({
           const k = keys[i];
           const prev = initial[k];
           const prevArr = Array.isArray(prev) ? (prev as string[]) : prev != null ? [String(prev)] : [];
-          // 구획이 바뀌는 첫 문항에만 제목을 그린다(설문 원본 문항만 구획을 가진다).
+          // 구획이 바뀌는 첫 문항에만 제목을 그림(설문 원본 문항만 구획을 가짐).
           const prevSection = i > 0 ? questions[i - 1]?.section : undefined;
           const newSection = q.section && q.section !== prevSection ? q.section : null;
           const err = missing.has(i);
@@ -241,7 +243,19 @@ export default function EvalForm({
                 {q.type === "semantic7" && (
                   <Semantic7Field name={name} left={q.leftLabel || ""} right={q.rightLabel || ""} defaultValue={num || undefined} onPick={sync} />
                 )}
-                {/* 드롭다운도 폰에서 고르기 쉽도록 같은 값을 보내는 라디오 목록으로 그린다. */}
+                {q.type === "scale" && (
+                  <ScaleField
+                    name={name}
+                    min={q.scaleMin ?? 1}
+                    max={q.scaleMax ?? 7}
+                    left={q.leftLabel || ""}
+                    right={q.rightLabel || ""}
+                    // 0점이 유효한 척도라 빈 값과 0을 구분함
+                    defaultValue={prev != null && prev !== "" && Number.isFinite(num) ? num : undefined}
+                    onPick={sync}
+                  />
+                )}
+                {/* 드롭다운도 폰에서 고르기 쉽도록 같은 값을 보내는 라디오 목록으로 그림 */}
                 {(q.type === "dropdown" || q.type === "checkbox") && (
                   <div className="space-y-2">
                     {(q.options || []).map((opt, idx) => (
@@ -262,12 +276,15 @@ export default function EvalForm({
                     {q.type === "checkbox" && <p className="text-xs text-[var(--muted)]">해당하는 것을 모두 고르세요 (1개 이상)</p>}
                   </div>
                 )}
-                {q.type === "image" && <ImageUploadField name={name} onPick={sync} />}
+                {q.type === "image" && (
+                  <ImageUploadField name={name} defaultValue={typeof prev === "string" ? prev : undefined} onPick={sync} />
+                )}
                 {q.type === "text" && (
                   <textarea
                     name={name}
                     defaultValue={prev != null ? String(prev) : ""}
                     rows={4}
+                    maxLength={MAX_TEXT_ANSWER}
                     className="w-full px-3.5 py-2.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm resize-y outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors"
                   />
                 )}
@@ -285,6 +302,7 @@ export default function EvalForm({
                     placeholder="개선 의견 (선택)"
                     aria-label={`${i + 1}번 문항 개선 의견 (선택)`}
                     defaultValue={String(initial[`text:${q.itemKey}`] ?? "")}
+                    maxLength={MAX_TEXT_ANSWER}
                     className="w-full px-3 py-2.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-200)] text-sm outline-none focus:border-[var(--accent)] transition-colors"
                   />
                 )}

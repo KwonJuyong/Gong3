@@ -13,8 +13,8 @@ import {
 export const metadata = { title: "평가 찾기" };
 
 const ERR: Record<string, string> = {
-  unavailable: "해당 설문을 사용할 수 없습니다.",
-  duplicate: "이미 응답한 설문입니다.",
+  unavailable: "해당 평가를 사용할 수 없습니다.",
+  duplicate: "이미 응답한 평가입니다.",
 };
 
 export default async function SurveysPage({
@@ -29,8 +29,16 @@ export default async function SurveysPage({
 
   const { submitted, error } = await searchParams;
 
-  // 학생의 「평가 참여」 목록. 공개 조건은 approvals.ts 에서 정한다.
-  // 응답은 대시보드 상세에서 하므로 여기서는 링크만 건다.
+  const myResponses = await prisma.response.findMany({
+    where: { userId },
+    select: { project: { select: { id: true, title: true, status: true, startTime: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  // 한 평가에 응답이 여러 개일 수 있어 중복을 제거함
+  const participated = [...new Map(myResponses.flatMap((r) => (r.project ? [[r.project.id, r.project] as const] : []))).values()];
+
+  // 학생의 「평가 참여」 목록. 공개 조건은 approvals.ts 에서 정함
+  // 응답은 대시보드 상세에서 하므로 여기서는 링크만 걸기
   const projects = await prisma.project.findMany({
     where: openProjectWhere,
     orderBy: { startTime: "desc" },
@@ -48,7 +56,7 @@ export default async function SurveysPage({
     include: {
       service: { select: { name: true, preset: true } },
       responses: { where: { userId }, select: { id: true } },
-      // 무료 평가도 있으므로 보상 유무를 표시한다.
+      // 무료 평가도 있으므로 보상 유무를 표시함
       order: { select: { rewardPerPerson: true } },
     },
   });
@@ -88,12 +96,12 @@ export default async function SurveysPage({
               const capacity = capacityOf(p);
               const left = Math.max(0, capacity - p._count.responses);
               const unit = rewardPerPersonOf(p);
-              // 보상액은 플랫폼이 지급하는 건에만 표시한다(연구비 건은 산학협력단이 지급).
+              // 보상액은 플랫폼이 지급하는 건에만 표시함(연구비 건은 산학협력단이 지급).
               const reward = isPayerUs(p.fundingType) && unit > 0 ? `${unit.toLocaleString("ko-KR")}원` : null;
               const action = done
                 ? { text: "응답 완료", strong: false }
                 : enrolled === "ACCEPTED"
-                  ? { text: "평가하기", strong: true }
+                  ? { text: "응답하기", strong: true }
                   : enrolled === "REMOVED"
                     ? { text: "제외됨", strong: false }
                     : enrolled
@@ -126,7 +134,7 @@ export default async function SurveysPage({
             })}
             {versions.map((v) => {
               const done = v.responses.length > 0;
-              // 공개된 회차는 결제된 발주가 있다(legacySurveyWhere). 보상액을 표시한다.
+              // 공개된 회차는 결제된 발주가 있음(legacySurveyWhere). 보상액을 표시함
               const reward = v.order ? `${v.order.rewardPerPerson.toLocaleString("ko-KR")}원` : null;
               return (
                 <li key={v.id}>
@@ -140,7 +148,7 @@ export default async function SurveysPage({
                         {v.service.name} <span className="text-[var(--muted)] font-normal">· {v.round}회차</span>
                       </span>
                       <span className="block text-sm text-[var(--muted)] mt-0.5 truncate">
-                        {[reward, v.service.preset || null].filter(Boolean).join(" · ") || "설문"}
+                        {[reward, v.service.preset || null].filter(Boolean).join(" · ") || "평가"}
                       </span>
                     </span>
                     <span
@@ -148,7 +156,7 @@ export default async function SurveysPage({
                         done ? "bg-[var(--gray-100)] text-[var(--gray-600)]" : "bg-[var(--accent)] text-white"
                       }`}
                     >
-                      {done ? "응답 완료" : "평가하기"}
+                      {done ? "응답 완료" : "응답하기"}
                     </span>
                   </Link>
                 </li>
@@ -156,6 +164,40 @@ export default async function SurveysPage({
             })}
           </ul>
         </section>
+
+        {participated.length > 0 && (
+          <section id="participated" aria-labelledby="participated-h" className="scroll-mt-20 bg-white rounded-[var(--radius-xl)] px-5 pt-5">
+            <h2 id="participated-h" className="text-[17px] font-bold text-[var(--foreground)]">
+              참여한 평가 ({participated.length})
+            </h2>
+            <ul className="divide-y divide-[var(--gray-100)]">
+              {participated.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    href={`/dashboard?view=detail&p=${p.id}`}
+                    className="flex items-center gap-3 py-4 -mx-2 px-2 rounded-[var(--radius-md)] hover:bg-[var(--gray-50)]"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15px] font-semibold text-[var(--foreground)] truncate">{p.title}</span>
+                      <span className="block text-sm text-[var(--muted)] mt-0.5">
+                        {p.startTime.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Seoul" })}
+                      </span>
+                    </span>
+                    <span
+                      className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${
+                        p.status === "FINISHED"
+                          ? "bg-[var(--gray-100)] text-[var(--gray-600)]"
+                          : "bg-[var(--success-light)] text-[var(--success)]"
+                      }`}
+                    >
+                      {p.status === "FINISHED" ? "종료" : "진행 중"}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </main>
     </div>
   );

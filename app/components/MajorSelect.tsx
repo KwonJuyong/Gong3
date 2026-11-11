@@ -4,11 +4,11 @@ import { useMemo, useRef, useState } from "react";
 import { MAJOR_OPTIONS } from "../lib/majors";
 
 /**
- * 전공 선택(검색형 콤보박스). 전공이 100개가 넘어 <select> 로는 찾기 어렵다.
+ * 전공 선택(검색형 콤보박스). 전공이 100개가 넘어 <select> 로는 찾기 어려움
  *
- * 입력한 글자로 전공명과 단과대학을 함께 검색한다. 고르면 확정되고 다시 누르면 목록이 열린다.
- * 제출값은 숨은 칸이지만, 브라우저가 hidden 을 검증하지 않으므로 required 는 보이는 칸에 건다.
- * 목록에 없는 값은 서버(isKnownMajor)에서 거른다.
+ * 입력한 글자로 전공명과 단과대학을 함께 검색함. 고르면 확정되고 다시 누르면 목록이 열림
+ * 제출값은 숨은 칸이지만, 브라우저가 hidden 을 검증하지 않으므로 required 는 보이는 칸에 걸기
+ * 목록에 없는 값은 서버(isKnownMajor)에서 거름
  */
 export default function MajorSelect({
   name = "major",
@@ -29,7 +29,7 @@ export default function MajorSelect({
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return MAJOR_OPTIONS;
-    // 전공명과 단과대학을 모두 검색한다.
+    // 전공명과 단과대학을 모두 검색함
     return MAJOR_OPTIONS.filter(
       (o) =>
         o.major.toLowerCase().includes(q) || o.college.toLowerCase().includes(q),
@@ -49,13 +49,13 @@ export default function MajorSelect({
     <div
       ref={boxRef}
       className="relative"
-      // 목록을 클릭하는 동안 닫히지 않도록 포커스가 컨테이너 밖으로 나갈 때만 닫는다.
+      // 목록을 클릭하는 동안 닫히지 않도록 포커스가 컨테이너 밖으로 나갈 때만 닫음
       onBlur={(e) => {
         if (!boxRef.current?.contains(e.relatedTarget as Node)) setOpen(false);
       }}
     >
       {selected && !open ? (
-        // 확정 상태. 다시 누르면 검색으로 돌아간다.
+        // 확정 상태. 다시 누르면 검색으로 돌아감
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -74,7 +74,7 @@ export default function MajorSelect({
           }}
           onFocus={() => setOpen(true)}
           placeholder={placeholder}
-          // 확정된 값이 있으면 이 칸은 비어도 된다(숨은 칸에 값이 있다).
+          // 확정된 값이 있으면 이 칸은 비어도 됨(숨은 칸에 값이 있음).
           required={required && !selected}
           autoComplete="off"
           className={inputCls}
@@ -98,7 +98,7 @@ export default function MajorSelect({
                   }`}
                 >
                   <span className="text-sm text-[var(--gray-900)]">{o.major}</span>
-                  {/* 이름이 비슷한 전공을 구분하도록 소속도 보여준다 */}
+                  {/* 이름이 비슷한 전공을 구분하도록 소속도 보여줌 */}
                   <span className="block text-xs text-[var(--muted)]">{o.college}</span>
                 </button>
               </li>

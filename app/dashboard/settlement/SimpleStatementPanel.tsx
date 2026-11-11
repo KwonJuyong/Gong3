@@ -5,8 +5,8 @@ import { useState } from "react";
 /**
  * 간이지급명세서(기타소득) 국세청 일괄등록 양식 내려받기.
  *
- * 주민번호가 없는 소득자는 가산세 대상이 되므로 먼저 점검(?check=1, 이름만 받는다)하고
- * 그 뒤에 다운로드를 연다. 주민번호는 xlsx 다운로드에만 들어가고 AuditLog 에 남는다.
+ * 주민번호가 없는 소득자는 가산세 대상이 되므로 먼저 점검(?check=1, 이름만 받음)하고
+ * 그 뒤에 다운로드를 열기. 주민번호는 xlsx 다운로드에만 들어가고 AuditLog 에 남음
  */
 
 interface CheckResult {
@@ -25,7 +25,7 @@ interface CheckResult {
   ready: boolean;
 }
 
-const won = (n: number) => "₩" + n.toLocaleString("ko-KR");
+import { won } from "../../lib/money";
 
 export default function SimpleStatementPanel({
   defaultYear,
@@ -58,7 +58,7 @@ export default function SimpleStatementPanel({
     }
   }
 
-  // 연·월을 바꾸면 이전 점검 결과를 지운다.
+  // 연·월을 바꾸면 이전 점검 결과를 지움
   function reset<T>(setter: (v: T) => void) {
     return (v: T) => {
       setter(v);
@@ -72,7 +72,7 @@ export default function SimpleStatementPanel({
   return (
     <div className="mt-3 pt-3 border-t border-[var(--gray-100)]">
       <p className="text-xs font-medium text-[var(--foreground)]">
-        간이지급명세서 — 홈택스 일괄등록 양식
+        간이지급명세서: 홈택스 일괄등록 양식
         <span className="text-[var(--muted)] font-normal">
           {" "}
           · 소득자 1명당 1행 · 소득구분 76(인적용역)
@@ -157,7 +157,7 @@ export default function SimpleStatementPanel({
               <strong className="text-[var(--foreground)]">
                 {result.missingRrn.map((m) => m.name).join(", ")}
               </strong>
-              {" — "}아래 「평가단 정산정보」에서 확인·대리입력할 수 있습니다.
+              {": "}아래 「평가자 정산 정보」에서 확인·대리입력할 수 있습니다.
             </p>
           )}
 

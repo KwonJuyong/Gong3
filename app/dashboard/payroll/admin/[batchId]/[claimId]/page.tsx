@@ -6,6 +6,7 @@ import Link from "next/link";
 import { prisma } from "../../../../../db";
 import { regenerateClaim } from "../../../actions";
 import ClaimEditor, { type FormEntry } from "./ClaimEditor";
+import AttachmentsPanel, { type AttachmentView } from "../../../AttachmentsPanel";
 
 export const metadata = { title: "청구서 검토" };
 
@@ -30,7 +31,7 @@ export default async function ClaimEditPage({
   await logPersonalData(me.id, "VIEW", "노무비 청구서 검토", claim.userId);
 
   const entries: FormEntry[] = Array.isArray(claim.entries)
-    ? (claim.entries as any[]).map((e) => ({
+    ? (claim.entries as Partial<FormEntry>[]).map((e) => ({
         date: String(e?.date || ""),
         start: String(e?.start || ""),
         end: String(e?.end || ""),
@@ -42,7 +43,14 @@ export default async function ClaimEditPage({
     entries.push({ date: "", start: "", end: "", content: "", amount: 0 });
   }
 
-  const consent = (claim.consent as any) || { personal: true, unique: true, thirdParty: true };
+  // storedName 은 클라이언트에 보내지 않음
+  const attachments = await prisma.attachment.findMany({
+    where: { ownerId: claim.userId, kind: { in: ["ID_CARD", "BANKBOOK"] } },
+    select: { id: true, kind: true, origName: true, mime: true, size: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const consent = (claim.consent as { personal: boolean; unique: boolean; thirdParty: boolean } | null) || { personal: true, unique: true, thirdParty: true };
 
   return (
     <div className="min-h-screen bg-[var(--surface)]">
@@ -89,6 +97,20 @@ export default async function ClaimEditPage({
             confirmed: claim.status === "CONFIRMED",
           }}
         />
+
+        <div className="mt-5">
+          <AttachmentsPanel
+            ownerId={claim.userId}
+            initial={attachments.map((a) => ({
+              id: a.id,
+              kind: a.kind as AttachmentView["kind"],
+              origName: a.origName,
+              mime: a.mime,
+              size: a.size,
+              createdAt: a.createdAt.toISOString(),
+            }))}
+          />
+        </div>
       </main>
     </div>
   );

@@ -1,25 +1,25 @@
 /**
- * 정산 정보(계좌·주소·주민번호) 조회·저장. 저장 대상은 PayrollProfile 이고 노무비와 공유한다.
+ * 정산 정보(계좌·주소·주민번호) 조회·저장. 저장 대상은 PayrollProfile 이고 노무비와 공유함
  *
- * 계좌(은행+번호)만 있으면 이체할 수 있다. 주민번호는 지급명세서 신고용이라 이체를 막지 않는다.
+ * 계좌(은행+번호)만 있으면 이체할 수 있음. 주민번호는 지급명세서 신고용이라 이체를 막지 않음
  */
 
 import { prisma } from "../db";
 import { encryptRRN, decryptRRN, maskRRN } from "./crypto";
 
-/** 화면에 내려보내는 형태. 주민번호는 마스킹 값만 담는다. */
+/** 화면에 내려보내는 형태. 주민번호는 마스킹 값만 담음 */
 export interface SettlementProfileView {
   bankName: string;
   accountNumber: string;
-  /** 예금주. 비어 있으면 본인 이름을 쓴다(generatePayouts). */
+  /** 예금주. 비어 있으면 본인 이름을 씀(generatePayouts). */
   holderName: string;
   address: string;
-  /** 전자서명 이미지 URL. 노무비 청구 확인서(PDF)에만 쓴다. */
+  /** 전자서명 이미지 URL. 노무비 청구 확인서(PDF)에만 씀 */
   signatureUrl: string;
-  /** 주민번호 등록 여부 + 마스킹 표시. 평문은 지급명세서 API(ADMIN)에서만 복호화한다. */
+  /** 주민번호 등록 여부 + 마스킹 표시. 평문은 지급명세서 API(ADMIN)에서만 복호화함 */
   hasRrn: boolean;
   rrnMasked: string;
-  /** 계좌가 다 있어 이체가 가능한가. generatePayouts() 의 통과 조건과 같다. */
+  /** 계좌가 다 있어 이체가 가능한가. generatePayouts() 의 통과 조건과 같음 */
   payoutReady: boolean;
   /** 지급명세서를 낼 수 있는가 (주민번호 필요) */
   withholdingReady: boolean;
@@ -57,8 +57,8 @@ type Row = {
 };
 
 /**
- * DB 행 → 화면용. 주민번호는 마스킹을 만들 때만 복호화한다.
- * 복호화에 실패하면 "등록됨"으로만 표시한다.
+ * DB 행 → 화면용. 주민번호는 마스킹을 만들 때만 복호화함
+ * 복호화에 실패하면 "등록됨"으로만 표시함
  */
 export function toView(row: Row | null): SettlementProfileView {
   if (!row) return EMPTY;
@@ -116,30 +116,30 @@ export async function getSettlementProfile(userId: string): Promise<SettlementPr
 export interface SaveInput {
   bankName: string;
   accountNumber: string;
-  /** 빈 문자열이면 "본인 이름과 같다"로 저장한다(NULL). */
+  /** 빈 문자열이면 "본인 이름과 같다"로 저장함(NULL). */
   holderName: string;
   address: string;
-  /** 빈 문자열이면 기존 값을 유지한다 */
+  /** 빈 문자열이면 기존 값을 유지함 */
   rrn: string;
   /** 본인이 저장할 때만 true */
   consented: boolean;
   /**
-   * 전자서명 이미지 URL. undefined 면 유지하고 빈 문자열이면 지운다.
-   * 서명 칸이 없는 관리자 대리입력 폼이 기존 서명을 지우지 않게 하려는 것이다.
+   * 전자서명 이미지 URL. undefined 면 유지하고 빈 문자열이면 지움
+   * 서명 칸이 없는 관리자 대리입력 폼이 기존 서명을 지우지 않게 하려는 것임
    */
   signatureUrl?: string;
 }
 
-/** 저장. byAdminId 가 있으면 대리입력으로 기록하고, 본인이 저장하면 대리입력 표시를 지운다. */
+/** 저장. byAdminId 가 있으면 대리입력으로 기록하고, 본인이 저장하면 대리입력 표시를 지움 */
 export async function saveSettlementProfile(
   userId: string,
   input: SaveInput,
   byAdminId?: string,
 ): Promise<void> {
   const bankName = input.bankName.trim();
-  // 계좌번호는 숫자만 저장한다.
+  // 계좌번호는 숫자만 저장함
   const accountNumber = input.accountNumber.replace(/[^0-9]/g, "");
-  // 빈 값은 NULL(예금주 = 본인)로 저장한다.
+  // 빈 값은 NULL(예금주 = 본인)로 저장함
   const holderName = input.holderName.trim() || null;
   const address = input.address.trim();
   const rrnDigits = input.rrn.replace(/[^0-9]/g, "");
@@ -163,13 +163,13 @@ export async function saveSettlementProfile(
     updatedByAdminAt: byAdminId ? new Date() : null,
   };
 
-  // 13자리를 모두 입력했을 때만 덮어쓴다.
+  // 13자리를 모두 입력했을 때만 덮어씀
   if (rrnDigits.length === 13) data.rrnEnc = encryptRRN(rrnDigits);
 
-  // 폼이 서명 칸을 보냈을 때만 바꾼다.
+  // 폼이 서명 칸을 보냈을 때만 바꿈
   if (input.signatureUrl !== undefined) data.signatureUrl = input.signatureUrl.trim() || null;
 
-  // 동의는 본인이 체크했을 때만 기록한다(대리입력으로는 채우지 않는다).
+  // 동의는 본인이 체크했을 때만 기록함(대리입력으로는 채우지 않음).
   if (!byAdminId && input.consented) data.consentAt = new Date();
 
   await prisma.payrollProfile.upsert({
@@ -185,14 +185,14 @@ export interface ProfileStatusRow {
   name: string;
   studentId: string;
   profile: SettlementProfileView;
-  /** 아직 지급되지 않은 보상 건수(정렬에 쓴다) */
+  /** 아직 지급되지 않은 보상 건수(정렬에 씀) */
   pendingRewards: number;
-  /** 보상이 한 번이라도 있었나 (없으면 아직 지급 대상이 아니다) */
+  /** 보상이 한 번이라도 있었나 (없으면 아직 지급 대상이 아님) */
   hasRewards: boolean;
 }
 
 /**
- * [ADMIN] 정산 정보 관리 명단.
+ * 정산 정보 관리 명단.
  * 대상: 평가단(role=USER) 전원 ∪ 보상이 있는 사람 ∪ 정산 정보를 입력한 사람
  */
 export async function listProfileStatus(): Promise<ProfileStatusRow[]> {

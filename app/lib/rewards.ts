@@ -6,17 +6,18 @@
  *   승인분 → Payout 생성 → 관리자가 한 건씩 이체 → 건별로 완료·실패 기록
  *          → 완료분만 원장에 PAYOUT_OUT + TAX_WITHHELD, Reward 는 PAID
  *
- * 이체는 건별로 실패할 수 있어 지급 확인도 건별(confirmPayoutPaid)로 한다.
- * 계좌·주민번호는 노무비와 같은 PayrollProfile 을 쓴다.
+ * 이체는 건별로 실패할 수 있어 지급 확인도 건별(confirmPayoutPaid)로 함
+ * 계좌·주민번호는 노무비와 같은 PayrollProfile 을 씀
  */
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import * as ledger from "./ledger";
 import { createNotifications } from "./notify";
 import { computeWithholding, nominalRateBp, type IncomeType } from "./withholding";
 import { isPayerUs, capacityOf } from "./approvals";
 
-/** 계좌번호는 숫자만 남긴다. */
+/** 계좌번호는 숫자만 남김 */
 const digits = (v: string | null | undefined) => (v ?? "").replace(/[^0-9]/g, "");
 
 const INCOME_TYPE_KEY = "reward_income_type";
@@ -36,8 +37,32 @@ export async function setIncomeType(value: IncomeType): Promise<void> {
 }
 
 /**
- * [응답 제출 시 호출] 유상 평가면 보상을 만든다. 멱등.
- * 원천징수는 이 시점에 계산해 저장하므로 이후 설정이 바뀌어도 이 건은 변하지 않는다.
+ * 정원 안에서만 보상 한 건을 만듦. 만들었으면 true.
+ * 발주 단위 트랜잭션 잠금으로 세기와 만들기를 묶어 마지막 자리에 동시 제출이 와도 정원을 넘지 않음
+ * 직렬화 격리는 다른 발주끼리도 충돌 오류가 나 보상이 빠질 수 있어 쓰지 않음
+ * 같은 응답의 보상이 이미 있으면(P2002) false.
+ */
+async function createRewardWithinCapacity(
+  orderId: string,
+  capacity: number,
+  data: Prisma.RewardUncheckedCreateInput,
+): Promise<boolean> {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${orderId}))`;
+      if ((await tx.reward.count({ where: { orderId } })) >= capacity) return false;
+      await tx.reward.create({ data });
+      return true;
+    });
+  } catch (e) {
+    if ((e as { code?: string }).code === "P2002") return false;
+    throw e;
+  }
+}
+
+/**
+ * 응답 제출 시 호출. 유상 평가면 보상을 만듦. 멱등.
+ * 원천징수는 이 시점에 계산해 저장하므로 이후 설정이 바뀌어도 이 건은 변하지 않음
  * SurveyVersion 에 직접 응답하던 이전 방식은 createRewardForSurveyResponse.
  */
 export async function createRewardForResponse(responseId: string): Promise<boolean> {
@@ -49,55 +74,48 @@ export async function createRewardForResponse(responseId: string): Promise<boole
 
   const project = response.project;
 
-  // 연구비 건은 산학협력단이 지급하므로 Reward 를 만들지 않는다.
+  // 연구비 건은 산학협력단이 지급하므로 Reward 를 만들지 않음
   if (!isPayerUs(project.fundingType)) return false;
 
   const order = project.order;
-  // 발주가 없으면 보상 재원이 없다. 입금 전 응답은 입금 확인 때 backfillRewardsForOrder 가 만든다.
+  // 발주가 없으면 보상 재원이 없음. 입금 전 응답은 입금 확인 때 backfillRewardsForOrder 가 만듦
   if (!order) return false;
-  // 학교 건은 후불이라 입금 전에도 보상을 만든다. 업체 건은 입금 후에만 만든다.
+  // 정산 마감·취소·환불된 발주에는 만들지 않음. 마감 때 확정한 환불액과 어긋남(학교 건도 마찬가지).
+  if (order.status === "SETTLED" || order.status === "CANCELLED" || order.status === "REFUNDED") return false;
+  // 학교 건은 후불이라 입금 전에도 보상을 만듦. 업체 건은 입금 후에만 만듦
   if (project.fundingType === "COMPANY" && order.status !== "PAID" && order.status !== "IN_PROGRESS") {
     return false;
   }
 
-  // 정원을 넘는 보상은 만들지 않는다. 응답 제출에서도 막지만 동시 제출로 넘칠 수 있다.
+  // 정원을 넘는 보상은 만들지 않음. 응답 제출에서도 막지만 동시 제출로 넘칠 수 있음
   const capacity = capacityOf({ maxParticipants: project.maxParticipants, order });
-  const existing = await prisma.reward.count({ where: { orderId: order.id } });
-  if (existing >= capacity) return false;
 
   const gross = order.rewardPerPerson;
   const incomeType = await getIncomeType();
   const w = computeWithholding(gross, incomeType);
 
-  try {
-    await prisma.reward.create({
-      data: {
-        orderId: order.id,
-        userId: response.userId,
-        responseId: response.id,
-        grossAmount: gross,
-        incomeType,
-        taxRateBp: nominalRateBp(incomeType),
-        taxAmount: w.taxAmount,
-        taxExempt: w.exempt,
-        netAmount: w.netAmount,
-        status: "PENDING",
-      },
-    });
-    // 첫 응답이 들어오면 발주를 진행 중으로
-    if (order.status === "PAID") {
-      await prisma.order.update({ where: { id: order.id }, data: { status: "IN_PROGRESS" } });
-    }
-    return true;
-  } catch (e) {
-    if ((e as { code?: string }).code !== "P2002") throw e; // 이미 있으면 무시
-    return false;
+  const made = await createRewardWithinCapacity(order.id, capacity, {
+    orderId: order.id,
+    userId: response.userId,
+    responseId: response.id,
+    grossAmount: gross,
+    incomeType,
+    taxRateBp: nominalRateBp(incomeType),
+    taxAmount: w.taxAmount,
+    taxExempt: w.exempt,
+    netAmount: w.netAmount,
+    status: "PENDING",
+  });
+  // 첫 응답이 들어오면 발주를 진행 중으로
+  if (made && order.status === "PAID") {
+    await prisma.order.update({ where: { id: order.id }, data: { status: "IN_PROGRESS" } });
   }
+  return made;
 }
 
 /**
- * [입금 확인 시 호출] 입금 전에 들어온 응답의 보상을 소급 생성한다. 멱등.
- * 무통장입금은 확인까지 며칠 걸릴 수 있어 그 사이 응답에는 Reward 가 없다.
+ * 입금 확인 시 호출. 입금 전에 들어온 응답의 보상을 소급 생성함. 멱등.
+ * 무통장입금은 확인까지 며칠 걸릴 수 있어 그 사이 응답에는 Reward 가 없음
  */
 export async function backfillRewardsForOrder(orderId: string): Promise<number> {
   const order = await prisma.order.findUnique({
@@ -136,7 +154,7 @@ export async function backfillRewardsForOrder(orderId: string): Promise<number> 
 
 /**
  * 이전 방식(SurveyVersion 직접 응답)의 보상 생성.
- * 새 발주는 Order.projectId 로 연결되므로 기존 건의 소급 생성에만 쓰인다.
+ * 새 발주는 Order.projectId 로 연결되므로 기존 건의 소급 생성에만 쓰임
  */
 export async function createRewardForSurveyResponse(surveyResponseId: string): Promise<boolean> {
   const response = await prisma.surveyResponse.findUnique({
@@ -149,47 +167,37 @@ export async function createRewardForSurveyResponse(surveyResponseId: string): P
   if (!order) return false;
   if (order.status !== "PAID" && order.status !== "IN_PROGRESS") return false;
 
-  // 정원 초과 방어는 새 경로와 동일하게 건다.
-  const existing = await prisma.reward.count({ where: { orderId: order.id } });
-  if (existing >= order.panelSize) return false;
-
+  // 정원 초과 방어는 새 경로와 동일하게 걸기
   const gross = order.rewardPerPerson;
   const incomeType = await getIncomeType();
   const w = computeWithholding(gross, incomeType);
 
-  try {
-    await prisma.reward.create({
-      data: {
-        orderId: order.id,
-        userId: response.userId,
-        surveyResponseId: response.id,
-        grossAmount: gross,
-        incomeType,
-        taxRateBp: nominalRateBp(incomeType),
-        taxAmount: w.taxAmount,
-        taxExempt: w.exempt,
-        netAmount: w.netAmount,
-        status: "PENDING",
-      },
-    });
-    if (order.status === "PAID") {
-      await prisma.order.update({ where: { id: order.id }, data: { status: "IN_PROGRESS" } });
-    }
-    return true;
-  } catch (e) {
-    if ((e as { code?: string }).code !== "P2002") throw e;
-    return false;
+  const made = await createRewardWithinCapacity(order.id, order.panelSize, {
+    orderId: order.id,
+    userId: response.userId,
+    surveyResponseId: response.id,
+    grossAmount: gross,
+    incomeType,
+    taxRateBp: nominalRateBp(incomeType),
+    taxAmount: w.taxAmount,
+    taxExempt: w.exempt,
+    netAmount: w.netAmount,
+    status: "PENDING",
+  });
+  if (made && order.status === "PAID") {
+    await prisma.order.update({ where: { id: order.id }, data: { status: "IN_PROGRESS" } });
   }
+  return made;
 }
 
 /**
- * [금액 조정: ADMIN] 개인 보상액을 바꾼다. PENDING 만 대상이다.
+ * 개인 보상액을 바꿈. PENDING 만 대상임
  *
  * 발주는 모두에게 같은 단가를 주지만 같은 회차 안에서도 참여 시간이 사람마다 다를 수 있어
- * 검수 단계에서 개인별로 조정한다. 금액이 바뀌면 과세최저한 판정이 달라질 수 있어 세금도
- * 다시 계산한다. 지급 후에는 원장·신고와 어긋나므로 바꿀 수 없다.
+ * 검수 단계에서 개인별로 조정함. 금액이 바뀌면 과세최저한 판정이 달라질 수 있어 세금도
+ * 다시 계산함. 지급 후에는 원장·신고와 어긋나므로 바꿀 수 없음
  *
- * @returns 바뀐 건수. 0 이면 PENDING 이 아니었다.
+ * @returns 바뀐 건수. 0 이면 PENDING 이 아니었음
  */
 export async function adjustRewardAmount(
   rewardId: string,
@@ -222,7 +230,7 @@ export async function adjustRewardAmount(
   return r.count;
 }
 
-/** [검수: ADMIN] 승인/반려. PENDING 만 대상. */
+/** 승인/반려. PENDING 만 대상. */
 export async function reviewReward(
   rewardId: string,
   adminId: string,
@@ -259,8 +267,8 @@ export interface GenerateResult {
 }
 
 /**
- * [지급 생성: ADMIN] 승인된 보상 → Payout(PENDING) 생성.
- * 계좌정보(PayrollProfile)가 없는 학생은 만들지 않고 목록으로 돌려준다(안내용).
+ * 승인된 보상 → Payout(PENDING) 생성.
+ * 계좌정보(PayrollProfile)가 없는 학생은 만들지 않고 목록으로 돌려줌(안내용).
  */
 export async function generatePayouts(orderId: string): Promise<GenerateResult> {
   const rewards = await prisma.reward.findMany({
@@ -277,27 +285,32 @@ export async function generatePayouts(orderId: string): Promise<GenerateResult> 
       missingProfile.push({ userId: r.userId, userName: r.user.name });
       continue;
     }
-    await prisma.payout.create({
-      data: {
-        rewardId: r.id,
-        driver: "manual",
-        payoutKey: `payout-${r.id}`,
-        bankName: p.bankName,
-        accountNumber: digits(p.accountNumber),
-        // 예금주가 없으면 본인 이름을 쓴다.
-        holderName: p.holderName?.trim() || r.user.name,
-        amount: r.netAmount,
-        status: "PENDING",
-      },
-    });
-    created++;
+    try {
+      await prisma.payout.create({
+        data: {
+          rewardId: r.id,
+          driver: "manual",
+          payoutKey: `payout-${r.id}`,
+          bankName: p.bankName,
+          accountNumber: digits(p.accountNumber),
+          // 예금주가 없으면 본인 이름을 씀
+          holderName: p.holderName?.trim() || r.user.name,
+          amount: r.netAmount,
+          status: "PENDING",
+        },
+      });
+      created++;
+    } catch (e) {
+      // 두 번 누른 경우 다른 요청이 먼저 만들었음(rewardId unique).
+      if ((e as { code?: string }).code !== "P2002") throw e;
+    }
   }
   return { created, missingProfile };
 }
 
 /**
  * 이체할 목록: 아직 보내지 않은 것(PENDING)과 재이체할 것(FAILED).
- * PROCESSING 은 지급대행 API 를 붙일 때 쓰는 상태라 지금은 쓰지 않는다.
+ * PROCESSING 은 지급대행 API 를 붙일 때 쓰는 상태라 지금은 쓰지 않음
  */
 export async function listPayoutRows(orderId: string): Promise<PayoutRow[]> {
   const payouts = await prisma.payout.findMany({
@@ -319,8 +332,8 @@ export async function listPayoutRows(orderId: string): Promise<PayoutRow[]> {
 }
 
 /**
- * [지급 완료 확인: ADMIN] 한 건의 이체를 마친 뒤 호출한다. 멱등.
- * 원장에 PAYOUT_OUT·TAX_WITHHELD 를 쌓는 유일한 곳이다. 재이체에 성공한 FAILED 건도 대상이다.
+ * 한 건의 이체를 마친 뒤 호출함. 멱등.
+ * 원장에 PAYOUT_OUT·TAX_WITHHELD 를 쌓는 유일한 곳임. 재이체에 성공한 FAILED 건도 대상임
  */
 export async function confirmPayoutPaid(payoutId: string): Promise<boolean> {
   const p = await prisma.payout.findUnique({
@@ -343,13 +356,13 @@ export async function confirmPayoutPaid(payoutId: string): Promise<boolean> {
       orderId: p.reward.orderId,
       netAmount: p.reward.netAmount,
       taxAmount: p.reward.taxAmount,
-      memo: `평가단 보상 지급 (${p.holderName})`,
+      memo: `참여 보상 지급 (${p.holderName})`,
     });
     return true;
   });
 
   if (done) {
-    // 지급은 이미 커밋됐으므로 알림 실패는 무시한다.
+    // 지급은 이미 커밋됐으므로 알림 실패는 무시함
     try {
       await createNotifications(
         [
@@ -362,16 +375,16 @@ export async function confirmPayoutPaid(payoutId: string): Promise<boolean> {
         { link: "/dashboard" },
       );
     } catch {
-      /* 무시 — 지급은 확정됐다 */
+      /* 무시: 지급은 확정됐음 */
     }
   }
   return done;
 }
 
 /**
- * [이체 실패 기록: ADMIN] 계좌 오류·예금주 불일치로 실패한 건.
- * 돈이 나가지 않았으므로 원장에는 쌓지 않고, Reward 를 FAILED 로 두어 미지급 부채로 남긴다.
- * 이미 PAID 인 건은 바꾸지 않는다.
+ * 계좌 오류·예금주 불일치로 실패한 건.
+ * 돈이 나가지 않았으므로 원장에는 쌓지 않고, Reward 를 FAILED 로 두어 미지급 부채로 남김
+ * 이미 PAID 인 건은 바꾸지 않음
  */
 export async function markPayoutFailed(payoutId: string, reason: string): Promise<boolean> {
   const p = await prisma.payout.findUnique({
@@ -391,7 +404,7 @@ export async function markPayoutFailed(payoutId: string, reason: string): Promis
     return true;
   });
 
-  // 계좌 정보를 고치도록 학생에게 알린다.
+  // 계좌 정보를 고치도록 학생에게 알림
   if (done) {
     try {
       await createNotifications(
@@ -405,15 +418,15 @@ export async function markPayoutFailed(payoutId: string, reason: string): Promis
         { link: "/dashboard" },
       );
     } catch {
-      /* 무시 — 실패 기록은 이미 확정됐다 */
+      /* 무시: 실패 기록은 이미 확정됐음 */
     }
   }
   return done;
 }
 
 /**
- * [재이체 대기로: ADMIN] 계좌를 고친 뒤 다시 이체 목록에 올린다.
- * FAILED 건은 이체가 일어나지 않았으므로 새 계좌로 Payout 을 갱신한다(rewardId 가 unique 라 새로 만들 수 없다).
+ * 계좌를 고친 뒤 다시 이체 목록에 올림
+ * FAILED 건은 이체가 일어나지 않았으므로 새 계좌로 Payout 을 갱신함(rewardId 가 unique 라 새로 만들 수 없음).
  */
 export async function retryPayout(payoutId: string): Promise<boolean> {
   const p = await prisma.payout.findUnique({
@@ -426,8 +439,9 @@ export async function retryPayout(payoutId: string): Promise<boolean> {
   if (!prof?.bankName || !digits(prof.accountNumber)) return false; // 계좌가 아직 없음
 
   return prisma.$transaction(async (tx) => {
-    await tx.payout.update({
-      where: { id: payoutId },
+    // 조회 뒤 지급 완료로 바뀌었으면 되돌리지 않음(되돌리면 원장에 기록된 건이 다시 이체 대상이 됨).
+    const swap = await tx.payout.updateMany({
+      where: { id: payoutId, status: "FAILED" },
       data: {
         status: "PENDING",
         failReason: null,
@@ -436,12 +450,13 @@ export async function retryPayout(payoutId: string): Promise<boolean> {
         holderName: prof.holderName?.trim() || p.reward.user.name,
       },
     });
+    if (swap.count === 0) return false;
     await tx.reward.update({ where: { id: p.rewardId }, data: { status: "APPROVED" } });
     return true;
   });
 }
 
-/** [전체 지급 완료 확인: ADMIN] 모두 이체에 성공했을 때만 쓴다. PENDING 만 대상이다. */
+/** 모두 이체에 성공했을 때만 씀. PENDING 만 대상임 */
 export async function confirmPayoutsPaid(orderId: string): Promise<number> {
   const payouts = await prisma.payout.findMany({
     where: { reward: { orderId }, status: "PENDING" },

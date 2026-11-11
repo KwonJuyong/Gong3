@@ -1,4 +1,4 @@
-/** 한림대 단과대학 → 전공 목록. 가입 화면과 프로필이 함께 쓴다. */
+/** 한림대 단과대학 → 전공 목록. 가입 화면과 프로필이 함께 씀 */
 
 export const HALLYM_MAJORS: Record<string, string[]> = {
   "인문대학": ["인문학부", "영어영문학과", "중국학과", "일본학과", "러시아학과", "인문콘텐츠융합전공", "로컬시너지융합전공"],
@@ -18,14 +18,14 @@ export const HALLYM_MAJORS: Record<string, string[]> = {
   "자유전공학부": ["자유전공학부"],
 };
 
-/** 검색용 평탄화 목록. `MajorSelect` 가 이걸로 필터링한다. */
+/** 검색용 평탄화 목록. `MajorSelect` 가 이걸로 필터링함 */
 export const MAJOR_OPTIONS: { college: string; major: string }[] = Object.entries(
   HALLYM_MAJORS,
 ).flatMap(([college, majors]) => majors.map((major) => ({ college, major })));
 
 /**
  * 목록에 있는 전공인지(서버 검증용).
- * 빈 값 처리는 화면마다 필수 여부가 달라 호출부가 정한다.
+ * 빈 값 처리는 화면마다 필수 여부가 달라 호출부가 정함
  */
 export function isKnownMajor(v: string): boolean {
   return MAJOR_OPTIONS.some((o) => o.major === v);

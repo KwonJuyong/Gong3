@@ -8,8 +8,9 @@ import { won, DEFAULT_FEE_RATE_BP } from "../../lib/money";
 import OrderForm from "./OrderForm";
 import { getBizProfile, canTransact } from "../../lib/bizProfile";
 import { syncDepositsAction, syncInvoiceStatesAction } from "./actions";
+import ReauthField from "@/app/components/ReauthField";
 
-export const metadata = { title: "평가 발주" };
+export const metadata = { title: "평가 의뢰" };
 
 const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   DRAFT: { text: "작성 중", cls: "bg-[var(--gray-100)] text-[var(--gray-500)]" },
@@ -37,11 +38,11 @@ export default async function OrdersPage({
   if (!userId) redirectToLogin();
   const me = await prisma.user.findUnique({ where: { id: userId } });
   if (!me) redirectToLogin();
-  // 사업자등록번호가 없으면 프로필의 기업 정보 탭으로 보낸다(프로필이 읽는 ?error= 사용).
+  // 사업자등록번호가 없으면 프로필의 기업 정보 탭으로 보냄(프로필이 읽는 ?error= 사용).
   if (!(await canTransact(me))) {
     redirect(
       `/dashboard/profile?tab=biz&error=${encodeURIComponent(
-        "발주·견적서를 이용하려면 사업자등록번호를 먼저 등록해 주세요.",
+        "의뢰·견적서를 이용하려면 사업자등록번호를 먼저 등록해 주세요.",
       )}`,
     );
   }
@@ -82,9 +83,9 @@ export default async function OrdersPage({
       <main className="max-w-[1100px] mx-auto px-4 sm:px-6 py-8 space-y-6">
         <ClearQueryParams keys={["error", "synced", "ambiguous", "ntsChecked", "ntsFailed"]} />
         <div>
-          <h1 className="text-xl font-bold text-[var(--foreground)]">평가 발주</h1>
+          <h1 className="text-xl font-bold text-[var(--foreground)]">평가 의뢰</h1>
           <p className="text-sm text-[var(--muted)] mt-1">
-            평가단 인원과 보상을 정해 발주하면, 결제 확인 후 모집이 시작됩니다.
+            모집 인원과 보상을 정해 의뢰하면, 결제 확인 후 모집이 시작됩니다.
           </p>
         </div>
         {q.error && (
@@ -101,7 +102,7 @@ export default async function OrdersPage({
         {q.ntsChecked != null &&
           (Number(q.ntsFailed) > 0 ? (
             <p className="text-sm text-[var(--danger)] bg-[var(--danger-light)] px-4 py-3 rounded-[var(--radius-md)]">
-              ⚠ 국세청 전송실패 {q.ntsFailed}건 — 발주 상세에서 확인하세요 ({q.ntsChecked}건 조회)
+              국세청 전송실패 {q.ntsFailed}건: 의뢰 상세에서 확인하세요 ({q.ntsChecked}건 조회)
             </p>
           ) : (
             <p className="text-sm text-[var(--success)] bg-[var(--success-light)] px-4 py-3 rounded-[var(--radius-md)]">
@@ -109,14 +110,14 @@ export default async function OrdersPage({
             </p>
           ))}
 
-        {/* 관리자: 동기화 작업(입금계좌 등 설정은 프로필 > 조직 설정) */}
+        {/* 관리자: 동기화 작업(입금계좌 등 설정은 조직 설정) */}
         {admin && (
           <section className="bg-white rounded-[var(--radius-xl)] border border-[var(--gray-300)] p-5">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="min-w-0">
                 <h3 className="text-sm font-semibold text-[var(--foreground)]">관리자 작업</h3>
                 <p className="text-xs text-[var(--muted)] mt-1">
-                  입금내역 동기화로 대기 발주를 자동 확인·발행합니다.
+                  입금내역 동기화로 대기 의뢰를 자동 확인·발행합니다.
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -125,13 +126,14 @@ export default async function OrdersPage({
                     국세청 전송결과 확인
                   </SubmitButton>
                 </form>
-                <form action={syncDepositsAction}>
+                <form action={syncDepositsAction} className="flex items-center gap-1.5">
+                  <ReauthField className="w-40 py-1.5 text-xs" />
                   <SubmitButton className="px-3 py-1.5 text-xs font-medium border border-[var(--gray-300)] rounded-[var(--radius-md)] hover:bg-[var(--gray-50)]">
                     입금내역 동기화
                   </SubmitButton>
                 </form>
                 <Link
-                  href="/dashboard/profile?tab=org"
+                  href="/dashboard/org"
                   className="px-3 py-1.5 text-xs font-medium border border-[var(--gray-300)] rounded-[var(--radius-md)] hover:bg-[var(--gray-50)]"
                 >
                   입금계좌·공급자 설정 →
@@ -143,16 +145,16 @@ export default async function OrdersPage({
 
         {/* 새 발주(견적서도 같은 폼에서 발급) */}
         <section className="bg-white rounded-[var(--radius-xl)] p-5">
-          <h3 className="text-sm font-semibold text-[var(--foreground)]">새 발주 · 견적서</h3>
+          <h3 className="text-sm font-semibold text-[var(--foreground)]">새 의뢰 · 견적서</h3>
           <p className="text-xs text-[var(--muted)] mt-0.5 mb-4">
-            한 번 입력하면 결재용 견적서(PDF)와 발주를 모두 진행할 수 있습니다.
+            한 번 입력하면 결재용 견적서(PDF)와 의뢰를 모두 진행할 수 있습니다.
           </p>
 
-          {/* 서비스가 없어도 견적서는 낼 수 있도록 폼을 보여준다(발주 버튼은 잠긴다). */}
+          {/* 서비스가 없어도 견적서는 낼 수 있도록 폼을 보여줌(발주 버튼은 잠김). */}
           {services.length === 0 && (
             <p className="text-xs text-[var(--muted)] bg-[var(--gray-50)] px-3 py-2.5 rounded-[var(--radius-md)] mb-4 leading-relaxed">
               등록된 서비스가 없습니다. 아래에서 <strong>평가명을 직접 입력해 견적서만</strong>{" "}
-              발급할 수 있습니다. 발주까지 하려면 먼저{" "}
+              발급할 수 있습니다. 의뢰까지 하려면 먼저{" "}
               <Link href="/dashboard/services" className="underline text-[var(--foreground)]">
                 서비스를 등록
               </Link>
@@ -167,16 +169,15 @@ export default async function OrdersPage({
           />
         </section>
 
-        {/* 발주 목록 */}
         <section className="bg-white rounded-[var(--radius-xl)] overflow-hidden">
           <div className="px-5 py-4 border-b border-[var(--gray-100)] flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">발주 내역</h3>
+            <h3 className="text-sm font-semibold text-[var(--foreground)]">의뢰 내역</h3>
             <span className="text-xs text-[var(--muted)]">총 {orders.length}건</span>
           </div>
 
           {orders.length === 0 ? (
             <p className="text-sm text-[var(--gray-500)] text-center py-12">
-              아직 발주가 없습니다.
+              아직 의뢰가 없습니다.
             </p>
           ) : (
             <div className="overflow-x-auto">

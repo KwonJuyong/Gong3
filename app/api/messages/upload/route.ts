@@ -3,10 +3,12 @@ import { getSessionUserId } from "@/app/session-server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
+import { checkRateLimit } from "@/app/rate-limit";
+import { checkUploadQuota } from "@/app/lib/uploadGuard";
 
 export const runtime = "nodejs";
 
-// 메시지 첨부 업로드. 이미지는 인라인 표시, 문서는 다운로드로 제공한다.
+// 메시지 첨부 업로드. 이미지는 인라인 표시, 문서는 다운로드로 제공함
 
 const MAX_SIZE = 20 * 1024 * 1024; // 20MB
 
@@ -38,6 +40,16 @@ export async function POST(request: Request) {
     if (!userId) {
       return NextResponse.json({ error: "인증이 필요합니다." }, { status: 401 });
     }
+
+    // formData() 는 본문 전체를 메모리에 올리므로 크기를 먼저 봄
+    const declared = Number(request.headers.get("content-length") ?? "");
+    if (!Number.isFinite(declared) || declared > MAX_SIZE + 64 * 1024) {
+      return NextResponse.json({ error: "파일 크기는 20MB 이하만 가능합니다." }, { status: 413 });
+    }
+    const rl = checkRateLimit(`msg-upload:${userId}`, 60, 10 * 60 * 1000);
+    if (rl) return NextResponse.json({ error: rl }, { status: 429 });
+    const quotaErr = await checkUploadQuota(userId, "message", declared);
+    if (quotaErr) return NextResponse.json({ error: quotaErr }, { status: 429 });
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;

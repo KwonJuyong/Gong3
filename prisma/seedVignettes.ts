@@ -2,10 +2,10 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-// 앵커링 비네트 시드 — 평가자 척도사용 편차 보정용 고정 시나리오.
+// 앵커링 비네트 시드: 평가자 척도사용 편차 보정용 고정 시나리오.
 // 각 구성개념마다 의도된 품질 오름차순 3단계(level 1=낮음, 2=중간, 3=높음).
 // 검증도구(verbatim)와 달리 비네트는 플랫폼이 직접 저작하는 고정 템플릿.
-// 평가단은 실제 문항과 동일한 5점 척도로 각 시나리오를 평가한다.
+// 평가단은 실제 문항과 동일한 5점 척도로 각 시나리오를 평가함
 const vignettes: { constructId: string; level: number; text: string }[] = [
   // 기능 적합성
   { constructId: 'func_suitability', level: 1, text: '핵심 기능 중 상당수가 동작하지 않거나, 수행해도 결과가 자주 틀린다.' },
@@ -34,7 +34,7 @@ const vignettes: { constructId: string; level: number; text: string }[] = [
 ]
 
 async function main() {
-  console.log('🌱 앵커링 비네트 시드 시작...')
+  console.log('앵커링 비네트 시드 시작...')
 
   // 시드 대상 구성개념이 실제로 존재하는지 확인(무결성)
   const ids = Array.from(new Set(vignettes.map((v) => v.constructId)))
@@ -66,7 +66,7 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error('❌ 비네트 시드 실패:', e)
+    console.error('비네트 시드 실패:', e)
     process.exit(1)
   })
   .finally(async () => {

@@ -1,19 +1,20 @@
 import "server-only";
 import OpenAI from "openai";
+import { LLM_LONG_TIMEOUT_MS, LLM_MAX_RETRIES } from "../limits";
 
-// 수집 항목의 한국어 요약. 기존 OPENAI_* 설정을 쓴다.
-// 원문을 대체하지 않도록 1~2문장으로 짧게 만든다.
+// 수집 항목의 한국어 요약. 기존 OPENAI_* 설정을 씀
+// 원문을 대체하지 않도록 1~2문장으로 짧게 만듦
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-// 한 번에 넘기는 항목 수. 항목당 1회 호출하면 호출 수가 그대로 비용이라 묶어서 보낸다.
+// 한 번에 넘기는 항목 수. 항목당 1회 호출하면 호출 수가 그대로 비용이라 묶어서 보냄
 const BATCH_SIZE = 8;
 
 let _client: OpenAI | null = null;
 function client(): OpenAI {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY 환경변수가 설정되지 않았습니다.");
-  if (!_client) _client = new OpenAI({ apiKey });
+  if (!_client) _client = new OpenAI({ apiKey, timeout: LLM_LONG_TIMEOUT_MS, maxRetries: LLM_MAX_RETRIES });
   return _client;
 }
 
@@ -31,7 +32,7 @@ export type SummarizeInput = { id: string; title: string; abstract: string };
 
 /**
  * 항목별 한국어 요약. 반환은 id → 요약 맵.
- * 배치 하나가 실패해도 예외를 던지지 않고 그 배치만 비운다(항목은 제목·링크로 표시된다).
+ * 배치 하나가 실패해도 예외를 던지지 않고 그 배치만 비움(항목은 제목·링크로 표시됨).
  */
 export async function summarizeItems(
   items: SummarizeInput[],
@@ -86,7 +87,7 @@ export async function summarizeItems(
       const parsed = JSON.parse(resp.choices[0]?.message?.content || "{}") as {
         summaries?: { id: string; summaryKo: string }[];
       };
-      // 요청하지 않은 id 는 버린다
+      // 요청하지 않은 id 는 버림
       for (const s of parsed.summaries || []) {
         if (allowed.has(s.id) && s.summaryKo?.trim()) {
           result.set(s.id, s.summaryKo.trim());

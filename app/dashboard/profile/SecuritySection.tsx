@@ -1,6 +1,5 @@
 "use client";
 
-
 import SubmitButton from "@/app/components/SubmitButton";
 import ConfirmButton from "@/app/components/ConfirmButton";
 import { useActionState } from "react";
@@ -13,8 +12,8 @@ type ActionState = { error: string | null; success: boolean } | null;
  * 보안: 학번·사번, 비밀번호, 로그인 기록, 다른 기기 로그아웃.
  *
  * 학번·사번은 로그인 ID 가 아니지만 이메일 등록(migrateToEmailLoginAction)의 본인 확인에 쓰여
- * 바꿀 때 현재 비밀번호를 받는다. 폼은 두 개이고, updateProfileAction 이 제출된 필드만
- * 갱신하므로 서로 값을 지우지 않는다.
+ * 바꿀 때 현재 비밀번호를 받음. 폼은 두 개이고, updateProfileAction 이 제출된 필드만
+ * 갱신하므로 서로 값을 지우지 않음
  */
 export type LoginHistoryRow = {
   id: string;
@@ -34,9 +33,9 @@ export default function SecuritySection({
 }: {
   userType: string;
   studentId: string;
-  /** 이 계정의 세션 수명(시간). 권한별로 달라 서버가 계산한다. */
+  /** 이 계정의 세션 수명(시간). 권한별로 달라 서버가 계산함 */
   sessionTtlHours: number;
-  /** 최근 로그인·보안 기록(서버가 한국 시각 문자열로 만들어 내려준다) */
+  /** 최근 로그인·보안 기록(서버가 한국 시각 문자열로 만들어 내려줌) */
   loginHistory?: LoginHistoryRow[];
 }) {
   const [idState, idAction, idPending] = useActionState<ActionState, FormData>(
@@ -52,7 +51,7 @@ export default function SecuritySection({
     null,
   );
 
-  // 24시간 단위로 떨어지면 "일", 아니면 "시간"으로 표시한다.
+  // 24시간 단위로 떨어지면 "일", 아니면 "시간"으로 표시함
   const ttlLabel =
     sessionTtlHours >= 24 ? `${Math.round(sessionTtlHours / 24)}일` : `${sessionTtlHours}시간`;
 
@@ -63,7 +62,7 @@ export default function SecuritySection({
 
   return (
     <div className="space-y-5">
-      {/* 본인 로그인 기록. 모르는 기기가 보이면 아래에서 바로 조치할 수 있게 맨 위에 둔다. */}
+      {/* 본인 로그인 기록. 모르는 기기가 보이면 아래에서 바로 조치할 수 있게 맨 위에 둠 */}
       <Card
         title="최근 로그인 기록"
         desc="이 계정으로 로그인한 시각·접속 IP·기기입니다. 기억에 없는 기록이 있으면 비밀번호를 바꾸고 다른 기기에서 로그아웃하세요."
@@ -104,7 +103,7 @@ export default function SecuritySection({
         desc={
           userType === "DEVELOPER"
             ? "이메일이 곧 로그인 ID 입니다. 바꾸면 다음 로그인부터 새 주소로 접속합니다. 본인 확인을 위해 현재 비밀번호가 필요합니다."
-            : `${idLabel}는 로그인에 쓰이지 않습니다 — 로그인 ID는 「기본 정보」 탭의 이메일입니다. 다만 이메일을 잃어버렸을 때 본인 확인에 쓰이므로 변경에 현재 비밀번호가 필요합니다.`
+            : `${idLabel}는 로그인에 쓰이지 않습니다. 로그인 ID는 「기본 정보」 탭의 이메일입니다. 다만 이메일을 잃어버렸을 때 본인 확인에 쓰이므로 변경에 현재 비밀번호가 필요합니다.`
         }
       >
         <form action={idAction} className="space-y-4">
@@ -177,7 +176,7 @@ export default function SecuritySection({
         </form>
       </Card>
 
-      {/* 다른 기기 로그아웃. 세션을 끊는 조작이라 현재 비밀번호를 받지 않는다. */}
+      {/* 다른 기기 로그아웃. 세션을 끊는 조작이라 현재 비밀번호를 받지 않음 */}
       <Card
         title="로그인 중인 다른 기기 로그아웃"
         desc={`실습실·공용 PC 처럼 로그아웃하지 않고 나온 기기가 있다면 여기서 한 번에 끊습니다. 지금 보고 계신 이 기기는 그대로 유지됩니다.`}

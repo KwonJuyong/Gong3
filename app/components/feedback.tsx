@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 /**
- * 앱 공용 토스트와 확인 대화상자(alert·confirm 대신 쓴다).
+ * 앱 공용 토스트와 확인 대화상자(alert·confirm 대신 씀).
  *
  * 사용: toast("저장했습니다", "success"), await confirmDialog("…"),
- * 폼이면 onSubmit={(e) => confirmSubmit(e, "…")}. 호스트(<FeedbackHost/>)는 루트 레이아웃에 하나 있다.
- * 호스트가 없으면 네이티브 confirm/alert 를 쓴다. 확인창은 실수 방지용이며 권한 검사는 서버에서 한다.
+ * 폼이면 onSubmit={(e) => confirmSubmit(e, "…")}. 호스트(<FeedbackHost/>)는 루트 레이아웃에 하나 있음
+ * 호스트가 없으면 네이티브 confirm/alert 를 씀. 확인창은 실수 방지용이며 권한 검사는 서버에서 함
  */
 
 export type ToastTone = "info" | "success" | "error";
@@ -43,8 +43,8 @@ export function confirmDialog(opts: string | ConfirmOptions): Promise<boolean> {
 }
 
 /**
- * <form onSubmit={(e) => confirmSubmit(e, "…")}>: 확인을 받은 뒤에만 제출한다.
- * 제출을 먼저 막고, 확인되면 같은 제출 버튼으로 다시 제출한다(버튼마다 formAction 이 다를 수 있다).
+ * <form onSubmit={(e) => confirmSubmit(e, "…")}>: 확인을 받은 뒤에만 제출함
+ * 제출을 먼저 막고, 확인되면 같은 제출 버튼으로 다시 제출함(버튼마다 formAction 이 다를 수 있음).
  */
 export function confirmSubmit(e: FormEvent<HTMLFormElement>, opts: string | ConfirmOptions) {
   const form = e.currentTarget;
@@ -76,7 +76,7 @@ export function FeedbackHost() {
       const { message, tone } = (e as CustomEvent).detail as { message: string; tone: ToastTone };
       const id = ++seq.current;
       setToasts((t) => [...t.slice(-2), { id, message, tone }]);
-      // 오류는 읽고 대처할 시간이 더 필요하다
+      // 오류는 읽고 대처할 시간이 더 필요함
       window.setTimeout(() => dismiss(id), tone === "error" ? 7000 : 4000);
     };
     const onConfirm = (e: Event) => setReq((e as CustomEvent).detail as ConfirmRequest);
@@ -89,7 +89,7 @@ export function FeedbackHost() {
     };
   }, [dismiss]);
 
-  // <dialog>.showModal() 이 포커스 가두기·Esc·배경 비활성을 브라우저 기본으로 해 준다.
+  // <dialog>.showModal() 이 포커스 가두기·Esc·배경 비활성을 브라우저 기본으로 해 줌
   useEffect(() => {
     const d = dialogRef.current;
     if (!d) return;

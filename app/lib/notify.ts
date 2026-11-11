@@ -13,12 +13,12 @@ export type NotifyOptions = {
   link?: string;
   /**
    * 푸시로도 보낼지. 기본 true.
-   * 참여 신청처럼 자주 생기는 이벤트는 false 로 두고 인앱 알림에만 쌓는다.
+   * 참여 신청처럼 자주 생기는 이벤트는 false 로 두고 인앱 알림에만 쌓음
    */
   push?: boolean;
 };
 
-/** 인앱 알림 저장 + 웹 푸시 발송. 푸시 실패는 무시한다. */
+/** 인앱 알림 저장 + 웹 푸시 발송. 푸시 실패는 무시함 */
 export async function createNotifications(rows: NotificationRow[], options: NotifyOptions = {}) {
   if (rows.length === 0) return;
 
@@ -27,7 +27,7 @@ export async function createNotifications(rows: NotificationRow[], options: Noti
   if (options.push === false) return;
   const link = options.link ?? "/dashboard";
 
-  // 같은 문구를 여러 명에게 보내는 경우가 많아 내용별로 묶어 발송한다.
+  // 같은 문구를 여러 명에게 보내는 경우가 많아 내용별로 묶어 발송함
   const byContent = new Map<string, string[]>();
   for (const row of rows) {
     const users = byContent.get(row.content) ?? [];

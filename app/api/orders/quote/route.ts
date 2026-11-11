@@ -1,8 +1,9 @@
 /**
- * 견적서 PDF. 발주를 만들지 않고 입력값만으로 렌더한다(결재 전에 받는 문서라 저장하지 않는다).
- * 금액은 발주 생성과 같은 함수로 계산한다.
+ * 견적서 PDF. 발주를 만들지 않고 입력값만으로 렌더함(결재 전에 받는 문서라 저장하지 않음).
+ * 금액은 발주 생성과 같은 함수로 계산함
  */
 import { type NextRequest, NextResponse } from "next/server";
+import { checkLimit } from "@/app/lib/limits";
 import { getSessionUserId } from "@/app/session-server";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
@@ -24,7 +25,7 @@ const seoulDate = (d: Date) =>
     timeZone: "Asia/Seoul",
   }).format(d);
 
-/** 견적번호 — 저장하지 않으므로 날짜+시각으로 유일성을 만든다 */
+/** 견적번호: 저장하지 않으므로 날짜+시각으로 유일성을 만듦 */
 function quoteNo(now: Date): string {
   const p = new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -45,24 +46,27 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "인증 필요" }, { status: 401 });
   const me = await prisma.user.findUnique({ where: { id: userId } });
   // 발주 화면과 같은 조건: 유효한 사업자등록번호가 있거나 ADMIN.
-  // canTransact 가 타입을 좁히지 않으므로 me 의 null 검사도 따로 한다.
+  // canTransact 가 타입을 좁히지 않으므로 me 의 null 검사도 따로 함
   if (!me || !(await canTransact(me))) {
     return NextResponse.json({ error: "권한 없음" }, { status: 403 });
   }
+  // 우리 상호·직인이 찍히는 문서라 발급 빈도를 제한함
+  const rl = checkLimit("quotePdf", me.id);
+  if (rl) return NextResponse.json({ error: rl }, { status: 429 });
 
   const sp = req.nextUrl.searchParams;
   const int = (k: string) => Number.parseInt((sp.get(k) ?? "").replace(/[^0-9]/g, ""), 10);
   const str = (k: string) => (sp.get(k) ?? "").trim();
 
-  // 서비스명은 임의 문자열이 찍히지 않도록 id 로 받아 DB 에서 읽는다.
+  // 서비스명은 임의 문자열이 찍히지 않도록 id 로 받아 DB 에서 읽음
   const serviceId = str("serviceId");
   const service = serviceId
     ? await prisma.service.findUnique({ where: { id: serviceId }, select: { name: true } })
     : null;
   const serviceName = service?.name || str("serviceName") || "AI 평가";
 
-  // 보상 항목은 여러 줄을 받는다(회차마다 단가·인원이 다를 수 있다).
-  // 같은 이름의 input 이 반복되므로 getAll 로 짝지어 읽는다.
+  // 보상 항목은 여러 줄을 받음(회차마다 단가·인원이 다를 수 있음).
+  // 같은 이름의 input 이 반복되므로 getAll 로 짝지어 읽음
   const labels = sp.getAll("itemLabel");
   const tiers = sp.getAll("itemTier");
   const qtys = sp.getAll("itemQty");
@@ -80,17 +84,17 @@ export async function GET(req: NextRequest) {
         tierKey,
         tierLabel: tierKey ? tierOf(tierKey).label : "",
         qty: num(q),
-        // 회차 수는 생략 가능하다(대부분 1회). 비면 1로 본다.
+        // 회차 수는 생략 가능함(대부분 1회). 비면 1로 봄
         rounds: Number.isInteger(num(rounds[i])) && num(rounds[i]) > 0 ? num(rounds[i]) : 1,
-        // 단가 하한은 서버에서도 적용한다.
+        // 단가 하한은 서버에서도 적용함
         unitPrice: tierKey ? enforceFloor(tierKey, num(units[i])) : num(units[i]),
       };
     })
     .filter((it) => Number.isInteger(it.qty) && it.qty > 0 && Number.isInteger(it.unitPrice) && it.unitPrice > 0)
     .map((it, i) => ({
       ...it,
-      // 라벨이 비면 서비스명으로 채운다. 여러 줄일 땐 몇 번째인지가 보여야 한다.
-      label: it.label || `${serviceName} 평가${qtys.length > 1 ? ` · ${i + 1}회차` : " · 평가단 보상"}`,
+      // 라벨이 비면 서비스명으로 채움. 여러 줄일 땐 몇 번째인지가 보여야 함
+      label: it.label || `${serviceName} 평가${qtys.length > 1 ? ` · ${i + 1}회차` : " · 참여 보상"}`,
     }));
 
   if (items.length === 0) {
@@ -102,12 +106,17 @@ export async function GET(req: NextRequest) {
 
   const subtotal = items.reduce((s, it) => s + it.qty * it.rounds * it.unitPrice, 0);
 
-  const feeRateBp = Number.isInteger(int("feeRateBp")) ? int("feeRateBp") : DEFAULT_FEE_RATE_BP;
-  // 수수료·부가세는 발주와 같은 함수로 계산한다.
+  // 수수료율은 발주와 같이 ADMIN 만 정함. 아니면 직인이 찍힌 견적서에 임의 수수료가 들어감
+  const rawFeeRateBp = int("feeRateBp");
+  const feeRateBp =
+    me.role === "ADMIN" && Number.isInteger(rawFeeRateBp) && rawFeeRateBp >= 0 && rawFeeRateBp <= 10000
+      ? rawFeeRateBp
+      : DEFAULT_FEE_RATE_BP;
+  // 수수료·부가세는 발주와 같은 함수로 계산함
   const amounts = computeAmountsFromSubtotal(subtotal, feeRateBp);
 
   const [supplier, account] = await Promise.all([getQuoteSupplier(), getPlatformAccount()]);
-  // 직인은 없어도 발급된다 — readImageForPdf 가 실패 시 null 을 준다.
+  // 직인은 없어도 발급됨: readImageForPdf 가 실패 시 null 을 줌
   const sealImg = await readImageForPdf(supplier.sealUrl);
 
   const now = new Date();
@@ -134,7 +143,7 @@ export async function GET(req: NextRequest) {
     sealImg,
   };
 
-  // 래퍼 컴포넌트라 renderToBuffer 의 타입과 맞지 않아 단언한다.
+  // 래퍼 컴포넌트라 renderToBuffer 의 타입과 맞지 않아 단언함
   const element = createElement(QuotePdf, { d: data }) as never;
   const buffer = await renderToBuffer(element);
 

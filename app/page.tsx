@@ -25,7 +25,7 @@ import { EMAIL_UNVERIFIED_ERROR, LEGACY_ID_ERROR } from "./lib/authMessages";
  *        │                                     └─ 이메일 등록(학번만)   → migrate
  *        └─ 회원가입 ── 1 유형 선택 ── 2 정보 입력 ── 3 인증 메일 안내
  *
- * 복구 경로는 로그인에 실패하지 않아도 help 화면에서 항상 고를 수 있게 둔다.
+ * 복구 경로는 로그인에 실패하지 않아도 help 화면에서 항상 고를 수 있게 둠
  */
 
 type Mode =
@@ -42,20 +42,20 @@ type Mode =
 type RegType = "STUDENT" | "DEVELOPER" | "STAFF";
 
 /**
- * 가입 유형. 유형에 따라 입력 칸이 달라지므로 이 선택만 별도 단계로 둔다.
- * 나머지 칸은 한 폼에 둔다. 단계를 더 나누면 중간 상태 보관과 단계별 중복 검사(계정 열거)가 필요해진다.
+ * 가입 유형. 유형에 따라 입력 칸이 달라지므로 이 선택만 별도 단계로 둠
+ * 나머지 칸은 한 폼에 둠. 단계를 더 나누면 중간 상태 보관과 단계별 중복 검사(계정 열거)가 필요해짐
  */
 const REG_TYPES: { key: RegType; label: string; desc: string; icon: string }[] = [
   {
     key: "STUDENT",
-    label: "평가단원",
+    label: "학생 평가자",
     desc: "AI 서비스를 평가하고 보상을 받는 한림대 학생",
     icon: "M22 10v6M2 10l10-5 10 5-10 5zM6 12v5c3 3 9 3 12 0v-5",
   },
   {
     key: "DEVELOPER",
-    label: "기업 · 외부 참여자",
-    desc: "평가를 발주하거나 자사 서비스를 등록하려는 분",
+    label: "기업 · 외부 기관",
+    desc: "평가를 의뢰하거나 자사 서비스를 등록하려는 분",
     icon: "M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M15 9h.01M15 13h.01",
   },
   {
@@ -76,7 +76,7 @@ const Req = () => <span className="text-[var(--danger)]">*</span>;
 
 /**
  * 시작·유형·도움말 화면의 선택 카드.
- * 렌더 함수 안에서 정의하면 매번 리마운트되므로 모듈 레벨에 둔다.
+ * 렌더 함수 안에서 정의하면 매번 리마운트되므로 모듈 레벨에 둠
  */
 function ChoiceCard({
   label,
@@ -91,7 +91,7 @@ function ChoiceCard({
   onClick: () => void;
   primary?: boolean;
 }) {
-  // 회색 면 한 줄. 권하는 선택(primary)은 아이콘 칸만 강조색으로 칠한다.
+  // 회색 면 한 줄. 권하는 선택(primary)은 아이콘 칸만 강조색으로 칠함
   return (
     <button
       type="button"
@@ -193,13 +193,13 @@ function Alert({ tone, children }: { tone: "error" | "success" | "info"; childre
   );
 }
 
-/** ?mode= 로 바로 열 수 있는 화면. 성공 화면은 제외한다. */
+/** ?mode= 로 바로 열 수 있는 화면. 성공 화면은 제외함 */
 const URL_MODES: Mode[] = ["login", "help", "reset", "resend", "migrate", "register"];
 
 export default function Page() {
   const [mode, setModeState] = useState<Mode>("start");
-  // 화면 단계를 ?mode= 에 실어 뒤로가기·새로고침이 동작하게 한다.
-  // 성공 화면은 replace 로 바꿔 뒤로가기로 제출한 폼에 돌아가지 않게 한다.
+  // 화면 단계를 ?mode= 에 실어 뒤로가기·새로고침이 동작하게 함
+  // 성공 화면은 replace 로 바꿔 뒤로가기로 제출한 폼에 돌아가지 않게 함
   const setMode = useCallback((m: Mode) => {
     setModeState(m);
     const url = new URL(window.location.href);
@@ -217,7 +217,7 @@ export default function Page() {
     window.addEventListener("popstate", read);
     return () => window.removeEventListener("popstate", read);
   }, []);
-  // null = 유형 선택(1단계). 고르면 정보 입력(2단계)으로 넘어간다.
+  // null = 유형 선택(1단계). 고르면 정보 입력(2단계)으로 넘어감
   const [regType, setRegType] = useState<RegType | null>(null);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
 
@@ -226,31 +226,30 @@ export default function Page() {
   const [resetState, resetFormAction] = useActionState<ActionState, FormData>(requestPasswordResetAction, null);
   const [migrateState, migrateFormAction] = useActionState<ActionState, FormData>(migrateToEmailLoginAction, null);
 
-  // 세션 만료로 튕겨나온 경우 middleware 가 `?next=<원래 경로>` 를 붙여 보낸다.
-  // 이를 로그인 폼에 실어 보내 로그인 후 그 화면으로 복귀시킨다.
-  // (useSearchParams 는 프리렌더 시 Suspense 경계를 요구하므로 마운트 후 직접 읽는다)
+  // 세션 만료로 튕겨나온 경우 middleware 가 `?next=<원래 경로>` 를 붙여 보냄
+  // 이를 로그인 폼에 실어 보내 로그인 후 그 화면으로 복귀시킴
+  // (useSearchParams 는 프리렌더 시 Suspense 경계를 요구하므로 마운트 후 직접 읽음)
   const [next, setNext] = useState("");
-  // /session-expired 를 거쳐 오면 ?expired=1 이 붙는다. 만료 안내를 띄우는 데 쓴다.
+  // /session-expired 를 거쳐 오면 ?expired=1 이 붙음. 만료 안내를 띄우는 데 씀
   const [expired, setExpired] = useState(false);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const n = q.get("next");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNext(n ?? "");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setExpired(q.get("expired") === "1");
-    // 세션 만료로 돌아온 사람은 바로 로그인 화면으로 보낸다.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // 세션 만료로 돌아온 사람은 바로 로그인 화면으로 보냄
     if (n || q.get("expired") === "1") setModeState("login");
   }, []);
 
-  // 가입·이메일 등록에 성공하면 안내 화면으로 넘어간다.
-  // 의존성을 success 불리언으로 두면 두 번째 성공(true → true)에서 효과가 돌지 않으므로 상태 객체를 쓴다.
+  // 가입·이메일 등록에 성공하면 안내 화면으로 넘어감
+  // 의존성을 success 불리언으로 두면 두 번째 성공(true → true)에서 효과가 돌지 않으므로 상태 객체를 씀
   useEffect(() => {
     if (registerState?.success) setMode("registered");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registerState]);
   useEffect(() => {
     if (migrateState?.success) setMode("migrated");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [migrateState]);
 
   const back = (to: Mode, label: string) => (
@@ -276,14 +275,13 @@ export default function Page() {
   };
 
   return (
-    // 폰에서 하단의 앱 설치 안내가 폼 끝을 가리지 않도록 아래 여백을 둔다.
+    // 폰에서 하단의 앱 설치 안내가 폼 끝을 가리지 않도록 아래 여백을 둠
     <main className="min-h-screen bg-[var(--surface)] flex items-center justify-center px-4 pt-6 pb-28 sm:p-6">
       <div className="w-full max-w-[440px]">
         <div className="bg-white rounded-[var(--radius-xl)] p-6 sm:p-8">
           <h1 className="text-2xl font-bold text-[var(--gray-900)] mb-1 tracking-tight">AI 평가단</h1>
           <p className="text-sm text-[var(--muted)] mb-7">{SUBTITLE[mode]}</p>
 
-          {/* 시작 */}
           {mode === "start" && (
             <div className="space-y-2.5">
               <ChoiceCard
@@ -314,7 +312,6 @@ export default function Page() {
             </div>
           )}
 
-          {/* 로그인 */}
           {mode === "login" && (
             <>
               {back("start", "처음으로")}
@@ -334,11 +331,11 @@ export default function Page() {
                   <label htmlFor="login-email" className={LABEL}>
                     이메일
                   </label>
-                  {/* 로그인 ID 는 이메일이다. 학번·사번은 loginAction 이 안내 문구와 함께 거절한다. */}
+                  {/* 로그인 ID 는 이메일임. 학번·사번은 loginAction 이 안내 문구와 함께 거절함 */}
                   <input
                     id="login-email"
                     name="studentId"
-                    // type="email" 이면 브라우저가 @ 없는 값을 막아 서버의 학번 안내가 뜨지 않는다.
+                    // type="email" 이면 브라우저가 @ 없는 값을 막아 서버의 학번 안내가 뜨지 않음
                     type="text"
                     inputMode="email"
                     required
@@ -365,7 +362,7 @@ export default function Page() {
                 {loginState?.error && (
                   <div className="text-sm text-[var(--danger)] bg-[var(--danger-light)] px-3 py-2.5 rounded-[var(--radius-md)] leading-relaxed">
                     <p>{loginState.error}</p>
-                    {/* 오류에 맞는 복구 화면으로 바로 가는 버튼(help 화면에도 같은 경로가 있다) */}
+                    {/* 오류에 맞는 복구 화면으로 바로 가는 버튼(help 화면에도 같은 경로가 있음) */}
                     {loginState.error === LEGACY_ID_ERROR && (
                       <button
                         type="button"
@@ -402,7 +399,6 @@ export default function Page() {
             </>
           )}
 
-          {/* 도움말: 복구 경로 선택 */}
           {mode === "help" && (
             <div className="space-y-2.5">
               {back("login", "로그인으로")}
@@ -426,17 +422,16 @@ export default function Page() {
                 onClick={() => setMode("migrate")}
               />
               <p className="text-xs text-[var(--gray-500)] leading-relaxed pt-2">
-                비밀번호도 이메일도 없으시면 관리자에게 문의해 주세요 — 본인 확인 후 임시
+                비밀번호도 이메일도 없으시면 관리자에게 문의해 주세요. 본인 확인 후 임시
                 비밀번호를 발급해 드립니다.
               </p>
             </div>
           )}
 
-          {/* 비밀번호 재설정 */}
           {mode === "reset" && (
             <>
               {back("help", "도움말로")}
-              {/* 인증 메일 재발송 화면과 생김새가 같아서 어떤 메일인지 먼저 밝힌다. */}
+              {/* 인증 메일 재발송 화면과 생김새가 같아서 어떤 메일인지 먼저 밝힘 */}
               <Alert tone="info">
                 <strong>새 비밀번호를 정하는 링크</strong>를 가입 이메일로 보냅니다. 링크는{" "}
                 <strong>30분</strong> 동안 유효합니다. 비밀번호는 링크를 눌러야 바뀝니다.
@@ -471,7 +466,6 @@ export default function Page() {
             </>
           )}
 
-          {/* 인증 메일 재발송 */}
           {mode === "resend" && (
             <>
               {back("help", "도움말로")}
@@ -485,7 +479,7 @@ export default function Page() {
             </>
           )}
 
-          {/* 이메일 등록(학번·사번만 있는 기존 회원). 본인 확인은 비밀번호로 한다. */}
+          {/* 이메일 등록(학번·사번만 있는 기존 회원). 본인 확인은 비밀번호로 함 */}
           {mode === "migrate" && (
             <>
               {back("help", "도움말로")}
@@ -564,7 +558,6 @@ export default function Page() {
             </>
           )}
 
-          {/* 회원가입 1단계: 유형 선택 */}
           {mode === "register" && regType === null && (
             <>
               {back("start", "처음으로")}
@@ -586,7 +579,6 @@ export default function Page() {
             </>
           )}
 
-          {/* 회원가입 2단계: 정보 입력 */}
           {mode === "register" && regType !== null && (
             <>
               <button
@@ -656,7 +648,7 @@ export default function Page() {
                         <label className={LABEL}>
                           전공 <Req />
                         </label>
-                        {/* 항목이 100개가 넘어 검색형으로 고른다 */}
+                        {/* 항목이 100개가 넘어 검색형으로 고름 */}
                         <MajorSelect name="major" required />
                       </div>
                     </>
@@ -698,7 +690,7 @@ export default function Page() {
                   {regType === "DEVELOPER" && (
                     <div>
                       <label htmlFor="reg-companyName" className={LABEL}>
-                        업체명 <Req />
+                        기업명 <Req />
                       </label>
                       <input
                         id="reg-companyName"
@@ -709,14 +701,14 @@ export default function Page() {
                         className={INPUT}
                       />
                       <p className="text-xs text-[var(--gray-500)] mt-1">
-                        사업자등록번호는 나중에 프로필에서 등록합니다 — 발주·견적서에 필요합니다.
+                        사업자등록번호는 나중에 프로필에서 등록합니다. 의뢰·견적서에 필요합니다.
                       </p>
                     </div>
                   )}
                 </Group>
 
                 <Group title="로그인 정보">
-                  {/* 게스트는 devEmail 로 받고 registerAction 이 email 에도 넣는다. */}
+                  {/* 게스트는 devEmail 로 받고 registerAction 이 email 에도 넣음 */}
                   <div>
                     <label
                       htmlFor={regType === "DEVELOPER" ? "reg-devEmail" : "reg-email"}
@@ -757,7 +749,6 @@ export default function Page() {
                   </div>
                 </Group>
 
-                {/* 개인정보 동의 */}
                 <div className="border-t border-[var(--gray-200)] pt-5 space-y-3">
                   <div className="text-xs text-[var(--gray-500)] leading-relaxed space-y-1">
                     <p>
@@ -765,7 +756,7 @@ export default function Page() {
                       전화번호, 이메일
                       {regType === "STUDENT" && ", 학번, 전공"}
                       {regType === "STAFF" && ", 사번, 소속"}
-                      {regType === "DEVELOPER" && ", 업체명"}
+                      {regType === "DEVELOPER" && ", 기업명"}
                     </p>
                     <p>
                       <strong className="text-[var(--gray-700)]">수집 목적</strong> · 서비스 이용,
@@ -776,7 +767,7 @@ export default function Page() {
                       <strong className="text-[var(--gray-700)]">보유 기간</strong> · 회원 탈퇴
                       시까지
                     </p>
-                    {/* 접속기록은 법령에 따른 수집이라 동의 대상이 아니다. 보관기간은 accessLog.ts 와 맞춘다. */}
+                    {/* 접속기록은 법령에 따른 수집이라 동의 대상이 아님. 보관기간은 accessLog.ts 와 맞춤 */}
                     <p>
                       <strong className="text-[var(--gray-700)]">자동 수집(안내)</strong> · 로그인·개인정보
                       처리 시 접속 IP·일시·브라우저 정보를 접속기록으로 남기며, 관련 법령에 따라 2년간
@@ -814,7 +805,6 @@ export default function Page() {
             </>
           )}
 
-          {/* 완료 화면: 인증 메일 확인 안내 */}
           {(mode === "registered" || mode === "migrated") && (
             <div className="space-y-4">
               {mode === "registered" && <Steps current={3} />}
@@ -869,7 +859,6 @@ export default function Page() {
           )}
         </div>
 
-        {/* 카드 아래 보조 링크 */}
         <div className="text-center mt-4">
           {mode === "login" && (
             <button
@@ -904,11 +893,11 @@ export default function Page() {
           )}
         </div>
 
-        {/* 1320px 미만에서는 카드 아래 접힌 목록으로 보인다(스테이징 전용). */}
+        {/* 1320px 미만에서는 카드 아래 접힌 목록으로 보임(스테이징 전용). */}
         <DemoAccountsPanel compact />
       </div>
 
-      {/* 스테이징 전용. 운영에서는 아무것도 렌더되지 않는다. */}
+      {/* 스테이징 전용. 운영에서는 아무것도 렌더되지 않음 */}
       <DemoAccountsPanel />
     </main>
   );

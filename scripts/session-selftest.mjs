@@ -1,9 +1,9 @@
 /**
  * 세션 쿠키 자체 점검. 실행: npm run test:session
  *
- * 서명, 만료, 갱신 상한은 시간을 움직여 봐야 확인되므로 Date.now 를 바꿔 가며 검사한다.
- * 유휴 만료와 별도로 절대 만료가 있어야 한다(OWASP Session Management Cheat Sheet).
- * 상수는 복제하지 않고 원본 모듈에서 import 한다.
+ * 서명, 만료, 갱신 상한은 시간을 움직여 봐야 확인되므로 Date.now 를 바꿔 가며 검사함
+ * 유휴 만료와 별도로 절대 만료가 있어야 함(OWASP Session Management Cheat Sheet).
+ * 상수는 복제하지 않고 원본 모듈에서 import 함
  */
 import path from "node:path";
 import crypto from "node:crypto";
@@ -43,7 +43,7 @@ function t(id, label, ok, detail) {
   }
 }
 
-// 시간 조작. 초 단위로 앞으로 감는다.
+// 시간 조작. 초 단위로 앞으로 감음
 const realNow = Date.now;
 let offsetMs = 0;
 Date.now = () => realNow() + offsetMs;
@@ -54,11 +54,10 @@ const resetClock = () => {
   offsetMs = 0;
 };
 
-const UID = "ckq1x2y3z0000abcdefghijkl"; // cuid 모양(점이 없어야 한다)
+const UID = "ckq1x2y3z0000abcdefghijkl"; // cuid 모양(점이 없어야 함)
 
 console.log("\n세션 쿠키 자체 점검\n");
 
-// ── 1. 기본 왕복 ───────────────────────────────────────────────
 {
   const abs = absoluteDeadline(3600);
   const v = await signSessionValue(UID, 7, 1800, abs);
@@ -68,7 +67,6 @@ console.log("\n세션 쿠키 자체 점검\n");
   t("T-01b", "절대 만료가 그대로 실려 온다", !!s && s.abs === abs);
 }
 
-// ── 2. 위조 ────────────────────────────────────────────────────
 {
   const v = await signSessionValue(UID, 0, 1800, absoluteDeadline(3600));
   const parts = v.split(".");
@@ -91,16 +89,15 @@ console.log("\n세션 쿠키 자체 점검\n");
     (await verifySessionValue("")) === null && (await verifySessionValue("garbage")) === null);
 }
 
-// ── 3. ttl 상한 ────────────────────────────────────────────────
 {
   // 서명은 유효하지만 ttl 이 상한을 넘는 값. 서버 코드가 만들 일은 없지만,
-  // 상한 검사가 실제로 도는지 확인한다(넘으면 거부해야 한다).
+  // 상한 검사가 실제로 도는지 확인함(넘으면 거부해야 함).
   const v = await signSessionValue(UID, 0, SESSION_TTL_CEILING + 1, absoluteDeadline(3600));
   t("T-03", "ttl 이 상한을 넘으면 거부(서명이 유효해도)", (await verifySessionValue(v)) === null);
 
   /**
-   * ttl 상한은 역할별 수명 중 큰 값이어야 한다. 기본 수명(SESSION_MAX_AGE)으로 두면
-   * 관리자 쿠키가 발급 직후 거부된다.
+   * ttl 상한은 역할별 수명 중 큰 값이어야 함. 기본 수명(SESSION_MAX_AGE)으로 두면
+   * 관리자 쿠키가 발급 직후 거부됨
    */
   const admin = await signSessionValue(
     UID, 0, sessionTtlFor("ADMIN"), absoluteDeadline(sessionAbsoluteTtlFor("ADMIN")));
@@ -111,7 +108,6 @@ console.log("\n세션 쿠키 자체 점검\n");
           absoluteDeadline(sessionAbsoluteTtlFor("USER"))))) !== null);
 }
 
-// ── 4. 유휴 만료 ───────────────────────────────────────────────
 {
   resetClock();
   const v = await signSessionValue(UID, 0, 60, absoluteDeadline(86400));
@@ -121,10 +117,9 @@ console.log("\n세션 쿠키 자체 점검\n");
   resetClock();
 }
 
-// ── 5. 절대 만료: 갱신을 반복해도 밀리지 않는다 ─────────────────
 //
-// middleware 의 슬라이딩 갱신을 흉내 내 유휴 만료 직전마다 재서명한다.
-// abs 를 갱신 때 다시 계산하면 끝나지 않으므로, 어느 시점에 반드시 끊겨야 한다.
+// middleware 의 슬라이딩 갱신을 흉내 내 유휴 만료 직전마다 재서명함
+// abs 를 갱신 때 다시 계산하면 끝나지 않으므로, 어느 시점에 반드시 끊겨야 함
 {
   resetClock();
   const IDLE = 600; // 10분
@@ -141,7 +136,7 @@ console.log("\n세션 쿠키 자체 점검\n");
       break;
     }
     alive++;
-    // middleware 와 같이 abs 는 이어받고 exp 만 민다.
+    // middleware 와 같이 abs 는 이어받고 exp 만 미룸
     value = await signSessionValue(s.userId, s.epoch, s.ttl, s.abs);
   }
 
@@ -151,9 +146,8 @@ console.log("\n세션 쿠키 자체 점검\n");
   resetClock();
 }
 
-// ── 6. 갱신이 abs 를 다시 계산하면 뚫린다 (역검증) ─────────────
 //
-// 틀린 구현이 실제로 뚫리는지 확인해 T-05 가 의미 있는 검사임을 보인다.
+// 틀린 구현이 실제로 뚫리는지 확인해 T-05 가 의미 있는 검사임을 보임
 {
   resetClock();
   const IDLE = 600;
@@ -166,7 +160,7 @@ console.log("\n세션 쿠키 자체 점검\n");
     const s = await verifySessionValue(value);
     if (!s) break;
     survived++;
-    // 틀린 구현: 갱신할 때마다 절대 만료를 다시 계산한다.
+    // 틀린 구현: 갱신할 때마다 절대 만료를 다시 계산함
     value = await signSessionValue(s.userId, s.epoch, s.ttl, absoluteDeadline(ABS));
   }
 
@@ -175,13 +169,12 @@ console.log("\n세션 쿠키 자체 점검\n");
   resetClock();
 }
 
-// ── 7. 옛 형식 하위호환 ────────────────────────────────────────
 //
-// 배포 시점에 살아 있는 쿠키가 계속 통과하는지 본다.
+// 배포 시점에 살아 있는 쿠키가 계속 통과하는지 봄
 {
   /**
-   * 비밀은 app/session.ts 의 getSecret() 과 같은 규칙으로 고른다.
-   * 환경에 SESSION_SECRET 이 있으면 그 값을 써야 앱과 같은 키로 서명된다.
+   * 비밀은 app/session.ts 의 getSecret() 과 같은 규칙으로 고름
+   * 환경에 SESSION_SECRET 이 있으면 그 값을 써야 앱과 같은 키로 서명됨
    */
   const env = process.env.SESSION_SECRET;
   const SECRET =
@@ -204,7 +197,6 @@ console.log("\n세션 쿠키 자체 점검\n");
     !!s2 && s2.abs === undefined && !!s3 && s3.abs === undefined);
 }
 
-// ── 8. 권한별 수명 ─────────────────────────────────────────────
 {
   t("T-08", "관리자·개발사는 권한용 수명을 받는다",
     sessionTtlFor("ADMIN") === SESSION_MAX_AGE_PRIVILEGED &&
@@ -221,8 +213,8 @@ console.log("\n세션 쿠키 자체 점검\n");
       absoluteTtlForTtl(sessionTtlFor("USER")) === sessionAbsoluteTtlFor("USER"));
 
   /**
-   * 학생 수명이 관리자보다 짧아야 한다. 학생은 공용 PC 에서 접속하는 경우가 많고
-   * 계정에 주민등록번호·계좌가 있다. 숫자는 바꿔도 되지만 부등호는 유지한다.
+   * 학생 수명이 관리자보다 짧아야 함. 학생은 공용 PC 에서 접속하는 경우가 많고
+   * 계정에 주민등록번호·계좌가 있음. 숫자는 바꿔도 되지만 부등호는 유지함
    */
   t("T-08e", "학생 유휴 수명 < 관리자 유휴 수명",
     sessionTtlFor("USER") < sessionTtlFor("ADMIN"),
@@ -234,17 +226,15 @@ console.log("\n세션 쿠키 자체 점검\n");
     `${sessionTtlFor("USER") / 3600}시간`);
 }
 
-// ── 9. 쿠키 속성 ───────────────────────────────────────────────
 {
   const o = cookieOptionsFor(1800);
   t("T-09", "httpOnly·sameSite·path·maxAge 가 정책대로",
     o.httpOnly === true && o.sameSite === "lax" && o.path === "/" && o.maxAge === 1800,
     JSON.stringify(o));
-  // secure 는 NODE_ENV 에 따라 다르므로 값만 기록한다.
+  // secure 는 NODE_ENV 에 따라 다르므로 값만 기록함
   console.log(`       (참고: secure=${o.secure} — 운영 빌드에서만 true)`);
 }
 
-// ── 10. 로그인 후 복귀 경로 (오픈 리다이렉트) ──────────────────
 {
   t("T-10", "외부 오리진으로 새지 않는다",
     safeNext("//evil.example") === "/dashboard" &&
@@ -254,12 +244,11 @@ console.log("\n세션 쿠키 자체 점검\n");
   t("T-10c", "빈 값은 기본 경로", safeNext(null) === "/dashboard" && safeNext("") === "/dashboard");
 }
 
-// ── 11. 무한 리다이렉트 회귀 ───────────────────────────────────
 //
-// middleware(Edge)는 서명과 만료만 보고, getSessionUserId() 는 DB epoch 까지 대조한다.
+// middleware(Edge)는 서명과 만료만 보고, getSessionUserId() 는 DB epoch 까지 대조함
 // 서명은 맞고 epoch 이 다르면 두 층의 판정이 엇갈려, 페이지가 "/" 로 보내면
-// middleware 가 다시 "/dashboard" 로 보내는 루프가 된다.
-// DB 없이 소스를 읽어, 세션 부재 시 /dashboard 아래에서 redirect("/") 를 쓰지 않는지 확인한다.
+// middleware 가 다시 "/dashboard" 로 보내는 루프가 됨
+// DB 없이 소스를 읽어, 세션 부재 시 /dashboard 아래에서 redirect("/") 를 쓰지 않는지 확인함
 {
   const { readdirSync, readFileSync, statSync, existsSync } = await import("node:fs");
 
@@ -272,7 +261,7 @@ console.log("\n세션 쿠키 자체 점검\n");
   const sources = [...walk("app/dashboard"), "app/email-setup/page.tsx"].filter((f) =>
     f.endsWith(".ts") || f.endsWith(".tsx"));
 
-  // 세션 부재 가드가 "/" 로 나가는 형태만 찾는다. 권한·상태 검사는 대상이 아니다.
+  // 세션 부재 가드가 "/" 로 나가는 형태만 찾음. 권한·상태 검사는 대상이 아님
   const BAD = /if \(!(userId|me|meId|userRaw)\) redirect\("\/"\)/;
   const offenders = sources.filter((f) => BAD.test(readFileSync(f, "utf8")));
 
@@ -283,8 +272,8 @@ console.log("\n세션 쿠키 자체 점검\n");
     existsSync("app/session-expired/route.ts") &&
       /cookies\.delete/.test(readFileSync("app/session-expired/route.ts", "utf8")));
 
-  // 이 출구가 middleware matcher 에 들어가면 쿠키를 지우기 전에 다시 루프가 된다.
-  // matcher 배열의 문자열만 검사한다(주석은 제외). matcher 를 못 찾으면 실패로 본다.
+  // 이 출구가 middleware matcher 에 들어가면 쿠키를 지우기 전에 다시 루프가 됨
+  // matcher 배열의 문자열만 검사함(주석은 제외). matcher 를 못 찾으면 실패로 봄
   const mwSrc = readFileSync("middleware.ts", "utf8");
   const arr = mwSrc.match(/matcher:\s*\[([\s\S]*?)\]/);
   const patterns = arr ? [...arr[1].matchAll(/["'`]([^"'`]+)["'`]/g)].map((m) => m[1]) : [];
@@ -292,7 +281,7 @@ console.log("\n세션 쿠키 자체 점검\n");
     patterns.length > 0 && !patterns.some((x) => x.includes("session-expired")),
     patterns.length ? patterns.join(" ") : "middleware.ts 에서 matcher 배열을 못 찾았다");
 
-  // 로그인 화면이 ?expired=1 을 읽어 만료 안내를 보여주는지 확인한다.
+  // 로그인 화면이 ?expired=1 을 읽어 만료 안내를 보여주는지 확인함
   t("T-11d", "로그인 화면이 만료 안내를 띄운다",
     /expired/.test(readFileSync("app/page.tsx", "utf8")));
 }

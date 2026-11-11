@@ -1,17 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { lookup } from "dns/promises";
-import { isIP } from "net";
+import { lookup as lookupCb, type LookupAddress } from "dns";
+import { request as httpRequest, type IncomingHttpHeaders } from "http";
+import { request as httpsRequest } from "https";
+import { isIP, type LookupFunction } from "net";
 import { prisma } from "@/app/db";
 import { getSessionUserId } from "@/app/session-server";
+import { checkLimit } from "@/app/lib/limits";
 
 /**
- * 평가할 서비스를 iframe 으로 띄울 수 있는지 판정한다.
+ * 평가할 서비스를 iframe 으로 띄울 수 있는지 판정함
  *
  * X-Frame-Options·CSP frame-ancestors 로 막힌 서비스는 브라우저가 거부 사실을 페이지에
- * 알려주지 않으므로 서버에서 응답 헤더를 확인한다. 판단할 수 없으면 null.
+ * 알려주지 않으므로 서버에서 응답 헤더를 확인함. 판단할 수 없으면 null.
  *
- * SSRF 를 막기 위해 URL 이 아니라 평가 id 만 받고, 사설·예약 주소는 리다이렉트마다 다시 확인한다.
- * 상대 서버의 헤더나 본문은 돌려주지 않는다.
+ * SSRF 를 막기 위해 URL 이 아니라 평가 id 만 받고, 사설·예약 주소는 리다이렉트마다 다시 확인함
+ * 상대 서버의 헤더나 본문은 돌려주지 않음
  */
 
 const TIMEOUT_MS = 4000;
@@ -48,12 +52,51 @@ async function isPublicHost(url: URL): Promise<boolean> {
   }
 }
 
+/**
+ * 연결할 때 쓰는 주소를 그 자리에서 검사함. 미리 확인한 뒤 fetch 가 다시 조회하면
+ * 그 사이 DNS 응답을 내부 주소로 바꾸는 방식(DNS 리바인딩)으로 검사를 피할 수 있음
+ */
+const publicOnlyLookup: LookupFunction = (hostname, options, callback) => {
+  lookupCb(hostname, { all: true }, (err, addrs: LookupAddress[]) => {
+    if (err) return callback(err, "", 0);
+    if (addrs.length === 0 || addrs.some((a) => isPrivateAddress(a.address))) {
+      return callback(new Error("private address"), "", 0);
+    }
+    if ((options as { all?: boolean }).all) {
+      return (callback as unknown as (e: null, a: LookupAddress[]) => void)(null, addrs);
+    }
+    callback(null, addrs[0].address, addrs[0].family);
+  });
+};
+
+/** 본문은 읽지 않고 상태·헤더만 받음 */
+function fetchHead(url: URL): Promise<{ status: number; headers: IncomingHttpHeaders } | null> {
+  return new Promise((resolve) => {
+    const req = (url.protocol === "https:" ? httpsRequest : httpRequest)(
+      url,
+      { method: "GET", lookup: publicOnlyLookup, timeout: TIMEOUT_MS },
+      (res) => {
+        resolve({ status: res.statusCode ?? 0, headers: res.headers });
+        res.destroy();
+      },
+    );
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => resolve(null));
+    req.end();
+  });
+}
+
+const headerValue = (h: IncomingHttpHeaders, name: string): string | undefined => {
+  const v = h[name];
+  return Array.isArray(v) ? v.join(", ") : v;
+};
+
 /** 응답 헤더로 판정. 우리 오리진을 명시적으로 허용한 경우만 true. */
-function allowsFraming(headers: Headers, ourHost: string): boolean {
-  const xfo = headers.get("x-frame-options")?.trim().toLowerCase();
+function allowsFraming(headers: IncomingHttpHeaders, ourHost: string): boolean {
+  const xfo = headerValue(headers, "x-frame-options")?.trim().toLowerCase();
   if (xfo && xfo !== "allowall") return false; // DENY·SAMEORIGIN·ALLOW-FROM(폐기) 전부 교차 출처 차단
 
-  const csp = headers.get("content-security-policy");
+  const csp = headerValue(headers, "content-security-policy");
   if (csp) {
     for (const directive of csp.split(/[;,]/)) {
       const [name, ...values] = directive.trim().split(/\s+/);
@@ -73,15 +116,11 @@ async function check(link: string, ourHost: string): Promise<boolean | null> {
     return null;
   }
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    // IP 를 직접 적은 주소는 lookup 을 거치지 않으므로 여기서도 봄
     if (!(await isPublicHost(url))) return null;
-    let res: Response;
-    try {
-      res = await fetch(url, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS) });
-    } catch {
-      return null;
-    }
-    await res.body?.cancel().catch(() => {});
-    const loc = res.headers.get("location");
+    const res = await fetchHead(url);
+    if (!res) return null;
+    const loc = headerValue(res.headers, "location");
     if (res.status >= 300 && res.status < 400 && loc) {
       url = new URL(loc, url);
       continue;
@@ -92,7 +131,7 @@ async function check(link: string, ourHost: string): Promise<boolean | null> {
 }
 
 export async function GET(req: NextRequest) {
-  // /api/* 는 middleware 밖이라 여기서 직접 본다. 존재를 알리지 않도록 404.
+  // /api/* 는 middleware 밖이라 여기서 직접 봄. 존재를 알리지 않도록 404.
   const userId = await getSessionUserId();
   const projectId = req.nextUrl.searchParams.get("p");
   if (!userId || !projectId) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -112,6 +151,8 @@ export async function GET(req: NextRequest) {
   if (hit && Date.now() - hit.at < CACHE_MS) {
     embeddable = hit.embeddable;
   } else {
+    // 외부 서버로 요청이 나가는 경로. 판단 불가(null)면 화면은 버튼만 숨김
+    if (checkLimit("frameCheck", userId)) return NextResponse.json({ embeddable: null });
     embeddable = await check(project.link, req.nextUrl.host);
     cache.set(project.link, { at: Date.now(), embeddable });
   }

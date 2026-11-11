@@ -3,7 +3,7 @@ import type { Completion } from "../../lib/profileCompletion";
 
 /**
  * 프로필 상단: 아바타·이름·역할과 완성도 게이지.
- * 비어 있으면 지급이 막히는 항목(blocking)은 따로 링크로 보여준다.
+ * 비어 있으면 지급이 막히는 항목(blocking)은 따로 링크로 보여줌
  */
 
 export default function ProfileHeader({
@@ -58,7 +58,7 @@ export default function ProfileHeader({
           </div>
         </div>
 
-        {/* 지급·서류가 막히는 항목만 따로 표시하고, 나머지는 탭의 점으로 표시한다. */}
+        {/* 지급·서류가 막히는 항목만 따로 표시하고, 나머지는 탭의 점으로 표시함 */}
         {blocking.length > 0 && (
           <div className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--radius-md)] bg-[var(--warning-light)] px-4 py-3 text-sm">
             <span className="text-[var(--gray-800)]">입력하지 않아 진행이 막히는 항목:</span>

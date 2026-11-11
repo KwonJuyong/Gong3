@@ -1,13 +1,13 @@
 import { logPersonalData } from "@/app/lib/accessLog";
 import { type NextRequest, NextResponse } from "next/server";
-import { readFile } from "node:fs/promises";
+import { checkLimit } from "@/app/lib/limits";
 import { getSessionUserId } from "@/app/session-server";
 import { ZipArchive } from "archiver";
 import { prisma } from "../../../../db";
 import { renderClaimPdfBuffer } from "../../../../dashboard/payroll/pdfData";
 import {
   ATTACHMENT_KINDS,
-  attachmentPath,
+  readAttachmentFile,
   type AttachmentKind,
 } from "../../../../lib/attachments";
 
@@ -32,6 +32,8 @@ export async function GET(
     if (!me || me.role !== "ADMIN") {
       return NextResponse.json({ error: "내보내기 권한이 없습니다." }, { status: 403 });
     }
+    const rl = checkLimit("adminDocument", me.id);
+    if (rl) return NextResponse.json({ error: rl }, { status: 429 });
 
     const { batchId } = await params;
     const batch = await prisma.claimBatch.findUnique({
@@ -58,10 +60,11 @@ export async function GET(
       archive.on("error", (e: Error) => reject(e));
     });
 
-    // 첨부(신분증·통장사본)를 한 번에 읽어둔다. 청구자마다 쿼리하면 N+1 이다.
+    // 첨부(신분증·통장사본)를 한 번에 읽어둠. 청구자마다 쿼리하면 N+1 임
     const ownerIds = batch.claims.map((c) => c.user?.id).filter((v): v is string => !!v);
     const attachments = await prisma.attachment.findMany({
-      where: { ownerId: { in: ownerIds } },
+      // 서명·직인은 청구서 PDF 안에 이미 들어가므로 묶지 않음
+      where: { ownerId: { in: ownerIds }, kind: { in: ["ID_CARD", "BANKBOOK"] } },
       select: { ownerId: true, kind: true, storedName: true },
     });
     const byOwner = new Map<string, typeof attachments>();
@@ -71,25 +74,25 @@ export async function GET(
       else byOwner.set(a.ownerId, [a]);
     }
 
-    // 사람마다 폴더 하나: 학번_이름/청구확인서.pdf, 신분증, 통장사본
+    // 사람마다 폴더 하나. 파일만 따로 메일에 첨부해도 구분되도록 파일명에도 학번_이름을 붙임
     for (const claim of batch.claims) {
       const base = safeFileName(`${claim.user?.studentId || ""}_${claim.user?.name || claim.name}`);
       const pdf = await renderClaimPdfBuffer(claim);
-      archive.append(pdf, { name: `${base}/청구확인서.pdf` });
+      archive.append(pdf, { name: `${base}/${base}_청구확인서.pdf` });
 
       for (const a of byOwner.get(claim.user?.id ?? "") ?? []) {
         const label = ATTACHMENT_KINDS[a.kind as AttachmentKind] ?? a.kind;
         const ext = a.storedName.split(".").pop() ?? "bin";
         try {
-          // 첨부는 디스크에서 직접 읽는다.
-          archive.append(await readFile(attachmentPath(a.storedName)), {
-            name: `${base}/${label}.${ext}`,
+          // 첨부는 디스크에서 직접 읽음
+          archive.append(await readAttachmentFile(a.storedName), {
+            name: `${base}/${base}_${label}.${ext}`,
           });
         } catch {
-          // 파일이 없어도 ZIP 전체를 실패시키지 않고, 빠졌다는 메모를 넣는다.
+          // 파일이 없어도 ZIP 전체를 실패시키지 않고, 빠졌다는 메모를 넣음
           archive.append(
             `이 파일을 읽지 못했습니다 (${a.storedName}). 관리자에게 재업로드를 요청하세요.\n`,
-            { name: `${base}/${label}_없음.txt` },
+            { name: `${base}/${base}_${label}_없음.txt` },
           );
         }
       }

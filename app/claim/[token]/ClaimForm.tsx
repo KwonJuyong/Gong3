@@ -1,14 +1,13 @@
 "use client";
 
-
 import SubmitButton from "@/app/components/SubmitButton";
 import { useActionState } from "react";
 import { claimAccountAction } from "../actions";
 import { ActionState } from "../../db";
 
 /**
- * 계정 인계 폼. 인증 메일을 보내지 않으므로 오타를 막으려고 이메일을 두 번 받는다.
- * 서버 액션은 URL 을 볼 수 없어 token 을 hidden 으로 보낸다.
+ * 계정 인계 폼. 인증 메일을 보내지 않으므로 오타를 막으려고 이메일을 두 번 받음
+ * 서버 액션은 URL 을 볼 수 없어 token 을 hidden 으로 보냄
  */
 export default function ClaimForm({ token }: { token: string }) {
   const [state, formAction] = useActionState<ActionState, FormData>(claimAccountAction, null);

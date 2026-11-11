@@ -7,14 +7,14 @@ import {
 } from "../staging-actions";
 
 /**
- * 로그인 화면의 스테이징 계정 안내. SHOW_DEMO_ACCOUNTS=true 일 때만 서버 액션이 목록을 돌려준다.
+ * 로그인 화면의 스테이징 계정 안내. SHOW_DEMO_ACCOUNTS=true 일 때만 서버 액션이 목록을 돌려줌
  *
- * - 로그인 카드 위치가 바뀌지 않도록 레이아웃 흐름 밖(fixed)에 둔다.
+ * - 로그인 카드 위치가 바뀌지 않도록 레이아웃 흐름 밖(fixed)에 둠
  *   left-[calc(50%_+_252px)] = 카드 절반(220) + 여백(32). 가입 화면처럼 카드가 길어져도
- *   화면 기준으로 가운데에 오도록 absolute 대신 fixed 를 쓴다.
+ *   화면 기준으로 가운데에 오도록 absolute 대신 fixed 를 씀
  * - 패널 오른쪽 끝이 50vw + 632px 이라 1320px 이상에서만 옆에 두고,
- *   그보다 좁으면 compact(카드 아래 접힌 목록)를 쓴다. 두 기준은 서로 반대로 맞춘다.
- *   폭이나 여백을 바꾸면 이 숫자들도 함께 고친다.
+ *   그보다 좁으면 compact(카드 아래 접힌 목록)를 씀. 두 기준은 서로 반대로 맞춤
+ *   폭이나 여백을 바꾸면 이 숫자들도 함께 고침
  */
 export default function DemoAccountsPanel({
   compact = false,
@@ -25,7 +25,7 @@ export default function DemoAccountsPanel({
   const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
-    // 실패해도 로그인 화면에 영향이 없도록 무시한다.
+    // 실패해도 로그인 화면에 영향이 없도록 무시함
     getDemoAccountsAction()
       .then(setGroups)
       .catch(() => setGroups(null));
@@ -98,7 +98,7 @@ export default function DemoAccountsPanel({
     </>
   );
 
-  // 좁은 화면: 카드 아래 접힌 목록. 옆 패널과 같은 내용이다.
+  // 좁은 화면: 카드 아래 접힌 목록. 옆 패널과 같은 내용임
   if (compact) {
     return (
       <details className="min-[1320px]:hidden mt-4 rounded-[var(--radius-xl)] bg-white overflow-hidden group">
@@ -137,7 +137,6 @@ export default function DemoAccountsPanel({
   return (
     <aside className="hidden min-[1320px]:block fixed top-1/2 -translate-y-1/2 left-[calc(50%_+_252px)] w-[380px]">
       <div className="rounded-[var(--radius-xl)] bg-white overflow-hidden">
-        {/* 머리말: 환경 안내 */}
         <div className="px-5 pt-5 pb-3">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center rounded-full bg-[var(--warning-light)] px-2 py-0.5 text-xs font-semibold text-[var(--warning)]">

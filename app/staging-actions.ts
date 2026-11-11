@@ -3,9 +3,9 @@
 /**
  * 스테이징 로그인 화면의 테스트 계정 안내.
  *
- * NEXT_PUBLIC_ 빌드 변수 대신 런타임 env 를 서버에서 읽는다. 그래야 같은 이미지를
- * 쓰면서 운영에서는 확실히 꺼 둘 수 있다.
- * 계정 열거가 되지 않도록 DB 는 조회하지 않고 시드 목록만 돌려준다.
+ * NEXT_PUBLIC_ 빌드 변수 대신 런타임 env 를 서버에서 읽음. 그래야 같은 이미지를
+ * 쓰면서 운영에서는 확실히 꺼 둘 수 있음
+ * 계정 열거가 되지 않도록 DB 는 조회하지 않고 시드 목록만 돌려줌
  */
 
 import {
@@ -21,7 +21,7 @@ import {
 export type DemoAccountRow = { email: string; name: string; role: string; desc: string };
 export type DemoAccountGroup = { title: string; caption: string; password: string; rows: DemoAccountRow[] };
 
-/** 화면에 보일 역할 이름. 역할 칸이 좁아 영문 코드 값은 넘친다. */
+/** 화면에 보일 역할 이름. 역할 칸이 좁아 영문 코드 값은 넘침 */
 const ROLE_LABEL: Record<string, string> = { ADMIN: "관리자", DEVELOPER: "교수", USER: "학생" };
 
 /** 켜져 있으면 안내할 계정 그룹들, 꺼져 있으면 `null`. */
@@ -42,10 +42,10 @@ export async function getDemoAccountsAction(): Promise<DemoAccountGroup[] | null
     },
     {
       title: "시연용 계정",
-      caption: "발주·정산 시나리오용 · 배포 시 함께 심긴다",
+      caption: "의뢰·정산 시나리오용 · 배포 시 함께 심긴다",
       password: DEMO_PASSWORD,
       rows: [
-        { email: DEMO_BUYER_EMAIL, name: "(주)시연테크", role: "기업", desc: "평가 발주 · 견적서 · 세금계산서" },
+        { email: DEMO_BUYER_EMAIL, name: "(주)시연테크", role: "기업", desc: "평가 의뢰 · 견적서 · 세금계산서" },
         ...DEMO_STUDENT_EMAILS.map((email, i) => ({
           email,
           name: `시연학생${i + 1}`,

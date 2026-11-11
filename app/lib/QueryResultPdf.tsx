@@ -1,7 +1,7 @@
 import path from "path";
 import { Document, Page, View, Text, Font, StyleSheet } from "@react-pdf/renderer";
 
-// 한글 폰트 등록(public/fonts). 모듈 로드 시 한 번 실행된다.
+// 한글 폰트 등록(public/fonts). 모듈 로드 시 한 번 실행됨
 Font.register({
   family: "NanumGothic",
   fonts: [
@@ -42,7 +42,7 @@ const cell = (v: unknown): string => {
   return String(v);
 };
 
-/** 조회 결과 PDF. 12열을 넘으면 가로 방향으로 출력한다. */
+/** 조회 결과 PDF. 12열을 넘으면 가로 방향으로 출력함 */
 export function QueryResultPdf({ data }: { data: QueryPdfData }) {
   const landscape = data.columns.length > 6;
   return (

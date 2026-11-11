@@ -1,9 +1,10 @@
 import "server-only";
 import { zipSync, strToU8 } from "fflate";
+import { csvCell } from "./csv";
 
 /**
- * 조회 결과 내보내기(xlsx·CSV). xlsx 는 zip 이므로 이미 쓰고 있는 fflate 로 직접 만든다.
- * 문자열은 모두 inlineStr 로 써서 학번 같은 숫자 모양 문자열이 숫자로 바뀌지 않게 한다.
+ * 조회 결과 내보내기(xlsx·CSV). xlsx 는 zip 이므로 이미 쓰고 있는 fflate 로 직접 만듦
+ * 문자열은 모두 inlineStr 로 써서 학번 같은 숫자 모양 문자열이 숫자로 바뀌지 않게 함
  */
 
 export type Cell = string | number | boolean | null | undefined;
@@ -37,9 +38,9 @@ function cellXml(col: number, row: number, v: Cell): string {
 }
 
 /**
- * 표 하나를 담은 최소 xlsx 바이트를 만든다.
+ * 표 하나를 담은 최소 xlsx 바이트를 만듦
  *
- * 시트 이름에 `: \ / ? * [ ]` 가 있으면 엑셀이 열지 못하고, 31자 제한이 있다.
+ * 시트 이름에 `: \ / ? * [ ]` 가 있으면 엑셀이 열지 못하고, 31자 제한이 있음
  */
 export function buildXlsx(columns: string[], rows: Array<Record<string, Cell>>, sheetName = "조회결과"): Uint8Array {
   const safeName = (sheetName || "Sheet1").replace(/[:\\/?*[\]]/g, "_").slice(0, 31);
@@ -90,19 +91,15 @@ export function buildXlsx(columns: string[], rows: Array<Record<string, Cell>>, 
   return zipSync(files, { level: 6 });
 }
 
-/** CSV. 엑셀이 UTF-8 을 알아보도록 BOM 을 붙인다(안 붙이면 한글이 깨진다). */
+/** CSV. 엑셀이 UTF-8 을 알아보도록 BOM 을 붙임(안 붙이면 한글이 깨짐). */
 export function buildCsv(columns: string[], rows: Array<Record<string, Cell>>): string {
-  const cell = (v: Cell): string => {
-    if (v === null || v === undefined) return "";
-    const s = typeof v === "boolean" ? (v ? "예" : "아니오") : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
+  const cell = (v: Cell): string => csvCell(typeof v === "boolean" ? (v ? "예" : "아니오") : v);
   const lines = [columns.map(cell).join(",")];
   for (const r of rows) lines.push(columns.map((c) => cell(r[c] as Cell)).join(","));
   return "﻿" + lines.join("\r\n");
 }
 
-/** 다운로드 파일명. 한글 파일명이 깨지지 않도록 RFC 5987 형식도 같이 낸다. */
+/** 다운로드 파일명. 한글 파일명이 깨지지 않도록 RFC 5987 형식도 같이 냄 */
 export function contentDisposition(filename: string): string {
   const ascii = filename.replace(/[^\x20-\x7E]/g, "_");
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;

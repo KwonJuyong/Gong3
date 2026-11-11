@@ -1,14 +1,13 @@
 import { logPersonalData } from "@/app/lib/accessLog";
 import ClearQueryParams from "@/app/components/ClearQueryParams";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { prisma } from "../../db";
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import MembersTable, { type MemberRow } from "./MembersTable";
 
 export const metadata = { title: "회원 관리" };
 
-/** 회원 관리(ADMIN). 관리자 전용 화면이라 학번·이메일을 가리지 않는다. */
+/** 회원 관리(ADMIN). 관리자 전용 화면이라 학번·이메일을 가리지 않음 */
 export default async function MembersPage({
   searchParams,
 }: {
@@ -75,7 +74,6 @@ export default async function MembersPage({
 
   return (
     <div className="min-h-screen bg-[var(--surface)]">
-
 
       <main className="max-w-[1100px] mx-auto px-4 sm:px-6 py-8 space-y-4">
         <ClearQueryParams keys={["ok", "error"]} />

@@ -5,10 +5,10 @@ import ClaimForm from "./ClaimForm";
 export const metadata = { title: "청구 확인서 서명" };
 
 /**
- * 계정 인계 화면(/claim/<토큰>). 이메일이 없는 기존 계정을 복구하는 경로다(app/lib/accountClaim.ts).
+ * 계정 인계 화면(/claim/<토큰>). 이메일이 없는 기존 계정을 복구하는 경로임(app/lib/accountClaim.ts).
  *
- * 로그인을 요구하지 않고 URL 의 토큰으로 판정한다(DB 에는 해시만 저장).
- * 토큰은 추측할 수 없는 난수라 실패 사유를 구분해 보여준다.
+ * 로그인을 요구하지 않고 URL 의 토큰으로 판정함(DB 에는 해시만 저장).
+ * 토큰은 추측할 수 없는 난수라 실패 사유를 구분해 보여줌
  */
 export default async function ClaimPage({
   params,
@@ -46,6 +46,10 @@ export default async function ClaimPage({
         head: "이미 사용된 링크입니다.",
         desc: "등록을 이미 마치셨다면 로그인 화면에서 등록하신 이메일로 로그인해 주세요. 본인이 쓴 기억이 없다면 관리자에게 알려 주세요.",
       },
+      inactive: {
+        head: "지금은 이용할 수 없는 계정입니다.",
+        desc: "정지 또는 탈퇴 처리된 계정이라 등록을 진행할 수 없어요. 관리자에게 문의해 주세요.",
+      },
       done: {
         head: "이미 이메일이 등록된 계정입니다.",
         desc: "로그인 화면에서 등록된 이메일로 로그인해 주세요. 비밀번호가 기억나지 않으면 「로그인이 안 되시나요?」에서 재설정할 수 있습니다.",
@@ -69,7 +73,7 @@ export default async function ClaimPage({
     );
   }
 
-  // 본인 계정인지 확인할 수 있게 학번은 뒤 3자리만 가린다.
+  // 본인 계정인지 확인할 수 있게 학번은 뒤 3자리만 가림
   const masked =
     found.studentId.length > 3
       ? found.studentId.slice(0, -3) + "***"

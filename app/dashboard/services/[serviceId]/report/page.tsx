@@ -21,7 +21,7 @@ function bar(score: number) {
 const METHOD_LABEL: Record<string, string> = {
   anchored: "앵커링 보정",
   raw: "원점수",
-  instrument: "검증도구",
+  instrument: "검증된 측정 문항",
 };
 
 export default async function ReportPage({
@@ -45,7 +45,7 @@ export default async function ReportPage({
     orderBy: { round: "desc" },
     include: {
       responses: { include: { items: true } },
-      // 이 회차로 만든 평가(Project)의 응답도 함께 읽는다.
+      // 이 회차로 만든 평가(Project)의 응답도 함께 읽음
       sourcedProjects: {
         select: {
           questions: true,
@@ -68,7 +68,7 @@ export default async function ReportPage({
     return { userId: r.userId, scores, texts };
   });
 
-  // 평가 응답: Response.answers(JSON). itemKey 가 없는 수동 문항은 answersToRater 가 건너뛴다.
+  // 평가 응답: Response.answers(JSON). itemKey 가 없는 수동 문항은 answersToRater 가 건너뜀
   const projectRaters: RaterRaw[] = (version?.sourcedProjects || []).flatMap((p) => {
     const qs = (p.questions as unknown as ProjectQuestion[]) || [];
     return p.responses.map((r) =>
@@ -85,26 +85,25 @@ export default async function ReportPage({
 
       <main className="max-w-[1100px] mx-auto px-4 sm:px-6 py-8 space-y-6">
         <Link href={`/dashboard/services/${serviceId}`} className="inline-flex items-center gap-1 text-sm text-[var(--muted)] hover:text-[var(--foreground)] mb-4">
-          ← 설문 관리
+          ← 평가문항 관리
         </Link>
         <div>
-          <h1 className="text-xl font-bold text-[var(--foreground)]">{service.name} 진단 리포트</h1>
+          <h1 className="text-xl font-bold text-[var(--foreground)]">{service.name} 평가 리포트</h1>
           <p className="text-sm text-[var(--muted)] mt-1">
-            {version ? `회차 ${version.round} · 응답 ${report?.responseCount ?? 0}명` : "확정된 설문이 없습니다."}
+            {version ? `회차 ${version.round} · 응답 ${report?.responseCount ?? 0}명` : "확정된 평가문항이 없습니다."}
           </p>
         </div>
 
         {!version && (
-          <p className="text-sm text-[var(--gray-500)] text-center py-10">먼저 설문을 최종 확정해야 리포트가 생성됩니다.</p>
+          <p className="text-sm text-[var(--gray-500)] text-center py-10">먼저 평가문항을 최종 확정해야 리포트가 생성됩니다.</p>
         )}
 
         {version && report && report.responseCount === 0 && (
-          <p className="text-sm text-[var(--gray-500)] text-center py-10">아직 응답이 없습니다. 평가단 응답이 모이면 점수가 표시됩니다.</p>
+          <p className="text-sm text-[var(--gray-500)] text-center py-10">아직 응답이 없습니다. 평가자 응답이 모이면 점수가 표시됩니다.</p>
         )}
 
         {version && report && report.responseCount > 0 && (
           <>
-            {/* 개선 우선순위 */}
             <section className="bg-white rounded-[var(--radius-xl)] p-5">
               <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">개선 우선순위 (약점 순)</h3>
               <div className="space-y-3">
@@ -125,7 +124,6 @@ export default async function ReportPage({
               </div>
             </section>
 
-            {/* 전체 항목 점수 */}
             <section className="bg-white rounded-[var(--radius-xl)] p-5">
               <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">전체 평가 항목</h3>
               <div className="space-y-3">
@@ -156,7 +154,6 @@ export default async function ReportPage({
               </div>
             </section>
 
-            {/* UEQ 차원 */}
             {report.ueq && report.ueq.length > 0 && (
               <section className="bg-white rounded-[var(--radius-xl)] p-5">
                 <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">사용자 경험 (UEQ, -3 ~ +3)</h3>
@@ -173,7 +170,6 @@ export default async function ReportPage({
               </section>
             )}
 
-            {/* 서술형 의견 */}
             <section className="bg-white rounded-[var(--radius-xl)] p-5">
               <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">개선 의견 (서술형)</h3>
               {report.constructs.filter((c) => c.comments.length > 0).length === 0 ? (

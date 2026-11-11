@@ -9,10 +9,11 @@ import { getSessionUserId } from "@/app/session-server";
 import { requestPasswordReset } from "../../lib/passwordReset";
 import { issueClaimTokens } from "../../lib/accountClaim";
 import { siteUrl } from "../../lib/mail";
+import { checkReauth } from "../../lib/reauth";
 
 /**
  * 회원 관리 액션(ADMIN 전용). role 과 userType 을 함께 바꾸는 등의 규칙을 코드로 지키고,
- * 모든 조작은 AuditLog 에 남긴다.
+ * 모든 조작은 AuditLog 에 남김
  */
 
 const PATH = "/dashboard/members";
@@ -29,7 +30,7 @@ function str(formData: FormData, key: string): string {
   return ((formData.get(key) as string) || "").trim();
 }
 
-/** 감사 로그. 기록에 실패해도 이미 끝난 조작은 되돌리지 않는다. */
+/** 감사 로그. 기록에 실패해도 이미 끝난 조작은 되돌리지 않음 */
 async function audit(actorId: string, targetId: string, action: string, summary: string) {
   try {
     await prisma.auditLog.create({ data: { actorId, targetId, action, summary } });
@@ -47,8 +48,8 @@ function fail(msg: string): never {
 }
 
 /**
- * [정보 수정] 이름·전공/업체·연락처·이메일.
- * 이메일을 바꾸면 인증 상태를 초기화해 본인이 다시 인증하게 한다(프로필 화면과 같은 규칙).
+ * 이름·전공/업체·연락처·이메일.
+ * 이메일을 바꾸면 인증 상태를 초기화해 본인이 다시 인증하게 함(프로필 화면과 같은 규칙).
  */
 export async function updateMemberAction(formData: FormData) {
   const me = await requireAdmin();
@@ -63,13 +64,23 @@ export async function updateMemberAction(formData: FormData) {
   if (!name) fail("이름은 비울 수 없습니다.");
 
   const major = str(formData, "major");
-  const phone = str(formData, "phone") || null;
+  // 프로필 화면과 같이 숫자만 저장함. 하이픈이 섞이면 unique 검사를 비껴감
+  const phone = str(formData, "phone").replace(/\D/g, "") || null;
   const email = str(formData, "email") || null;
 
   const emailChanged = (email ?? "") !== (target.email ?? "");
+  if (emailChanged && email) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail("이메일 형식이 올바르지 않습니다.");
+    // unique 는 대소문자를 구분하므로 직접 확인함(가입·프로필과 같은 규칙).
+    const taken = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" }, id: { not: id } },
+      select: { id: true },
+    });
+    if (taken) fail("이미 다른 회원이 사용 중인 이메일입니다.");
+  }
   const changes: string[] = [];
   if (name !== target.name) changes.push(`이름 ${target.name} → ${name}`);
-  if (major !== (target.major ?? "")) changes.push(`전공/업체 ${target.major || "-"} → ${major || "-"}`);
+  if (major !== (target.major ?? "")) changes.push(`전공/기업 ${target.major || "-"} → ${major || "-"}`);
   if (phone !== target.phone) changes.push(`연락처 ${target.phone || "-"} → ${phone || "-"}`);
   if (emailChanged) changes.push(`이메일 ${target.email || "-"} → ${email || "-"} (인증 해제)`);
   if (changes.length === 0) done("변경된 내용이 없습니다.");
@@ -82,12 +93,12 @@ export async function updateMemberAction(formData: FormData) {
         major,
         phone,
         email,
-        // 이메일이 바뀌면 인증을 풀어 본인 확인을 다시 받는다.
+        // 이메일이 바뀌면 인증을 풀어 본인 확인을 다시 받음
         ...(emailChanged ? { emailVerifiedAt: null } : {}),
       },
     });
   } catch (e) {
-    // phone·email 은 unique 다. 다른 회원이 쓰는 값이면 여기서 걸린다.
+    // phone·email 은 unique 다. 다른 회원이 쓰는 값이면 여기서 걸림
     if ((e as { code?: string }).code === "P2002") {
       fail("연락처 또는 이메일이 다른 회원과 중복됩니다.");
     }
@@ -97,17 +108,17 @@ export async function updateMemberAction(formData: FormData) {
   await audit(me.id, id, "MEMBER_UPDATE", changes.join(" · "));
   done(
     emailChanged
-      ? "저장했습니다. 이메일이 바뀌어 인증이 해제되었습니다 — 본인이 인증 메일을 받아야 로그인됩니다."
+      ? "저장했습니다. 이메일이 바뀌어 인증이 해제되었습니다. 본인이 인증 메일을 받아야 로그인됩니다."
       : "저장했습니다.",
   );
 }
 
 /**
- * [역할 변경] role(권한: USER|DEVELOPER|ADMIN)과 userType(표시: STUDENT|DEVELOPER|STAFF)을
- * 프리셋으로 함께 바꾼다. 교직원은 userType=STAFF, role=DEVELOPER 다.
+ * role(권한: USER|DEVELOPER|ADMIN)과 userType(표시: STUDENT|DEVELOPER|STAFF)을
+ * 프리셋으로 함께 바꿈. 교직원은 userType=STAFF, role=DEVELOPER 다.
  */
 const ROLE_PRESETS: Record<string, { role: "USER" | "DEVELOPER" | "ADMIN"; userType: string; label: string }> = {
-  student: { role: "USER", userType: "STUDENT", label: "학생(평가단)" },
+  student: { role: "USER", userType: "STUDENT", label: "학생 평가자" },
   company: { role: "DEVELOPER", userType: "DEVELOPER", label: "기업" },
   staff: { role: "DEVELOPER", userType: "STAFF", label: "교직원/조교" },
   admin: { role: "ADMIN", userType: "STAFF", label: "관리자" },
@@ -124,7 +135,10 @@ export async function changeMemberRoleAction(formData: FormData) {
   const target = await prisma.user.findUnique({ where: { id } });
   if (!target) fail("대상 회원을 찾을 수 없습니다.");
 
-  // 마지막 관리자를 강등하면 아무도 이 화면에 못 들어온다.
+  const reauthErr = await checkReauth(me, formData);
+  if (reauthErr) fail(reauthErr);
+
+  // 마지막 관리자를 강등하면 아무도 이 화면에 못 들어옴
   if (target.role === "ADMIN" && preset.role !== "ADMIN") {
     const admins = await prisma.user.count({ where: { role: "ADMIN", status: "ACTIVE" } });
     if (admins <= 1) fail("마지막 관리자입니다. 다른 관리자를 먼저 지정해 주세요.");
@@ -135,7 +149,7 @@ export async function changeMemberRoleAction(formData: FormData) {
     data: {
       role: preset.role,
       userType: preset.userType,
-      // 권한이 바뀌면 세션을 끊는다. 세션 수명이 권한별로 다르므로 새 권한으로 다시 발급받게 한다.
+      // 권한이 바뀌면 세션을 끊음. 세션 수명이 권한별로 다르므로 새 권한으로 다시 발급받게 함
       sessionEpoch: { increment: 1 },
     },
   });
@@ -149,8 +163,8 @@ export async function changeMemberRoleAction(formData: FormData) {
 }
 
 /**
- * [상태 변경] 활성 · 정지 · 탈퇴.
- * 탈퇴해도 행은 남긴다. 보상·노무비·원장이 userId 를 참조하고 지급명세서의 근거가 된다.
+ * 활성 · 정지 · 탈퇴.
+ * 탈퇴해도 행은 남김. 보상·노무비·원장이 userId 를 참조하고 지급명세서의 근거가 됨
  */
 const STATUS_LABEL: Record<string, string> = {
   ACTIVE: "활성",
@@ -181,8 +195,8 @@ export async function setMemberStatusAction(formData: FormData) {
     data: {
       status,
       withdrawnAt: status === "WITHDRAWN" ? new Date() : null,
-      // 이미 로그인된 세션도 끊는다(loginAction 은 로그인 시점만 막는다).
-      // ACTIVE 로 되돌릴 때도 정지 전 세션이 살아나지 않도록 올린다.
+      // 이미 로그인된 세션도 끊음(loginAction 은 로그인 시점만 막음).
+      // ACTIVE 로 되돌릴 때도 정지 전 세션이 살아나지 않도록 올림
       sessionEpoch: { increment: 1 },
     },
   });
@@ -196,7 +210,7 @@ export async function setMemberStatusAction(formData: FormData) {
 }
 
 /**
- * [비밀번호 재설정 메일 발송] 관리자가 비밀번호 값을 알지 않도록 본인에게 재설정 링크를 보낸다.
+ * 관리자가 비밀번호 값을 알지 않도록 본인에게 재설정 링크를 보냄
  */
 export async function sendResetMailAction(formData: FormData) {
   const me = await requireAdmin();
@@ -216,8 +230,8 @@ export async function sendResetMailAction(formData: FormData) {
 }
 
 /**
- * 계정의 활동 건수. 하나라도 있으면 삭제하지 않는다(보상·노무비·발주는 보관 의무가 있다).
- * FK 도 삭제를 막지만 사유를 보여주려고 먼저 확인한다.
+ * 계정의 활동 건수. 하나라도 있으면 삭제하지 않음(보상·노무비·발주는 보관 의무가 있음).
+ * FK 도 삭제를 막지만 사유를 보여주려고 먼저 확인함
  */
 async function activityOf(userId: string) {
   const [responses, surveyResponses, rewards, laborClaims, orders, services, projects, enrollments, messages] =
@@ -236,7 +250,7 @@ async function activityOf(userId: string) {
     { label: "응답", n: responses + surveyResponses },
     { label: "보상", n: rewards },
     { label: "노무비", n: laborClaims },
-    { label: "발주", n: orders },
+    { label: "의뢰", n: orders },
     { label: "서비스", n: services },
     { label: "개설평가", n: projects },
     { label: "신청", n: enrollments },
@@ -246,9 +260,9 @@ async function activityOf(userId: string) {
 }
 
 /**
- * [계정 삭제] 활동이 없는 계정(잘못 가입·테스트 계정)만 지운다. 활동이 있으면 탈퇴로 처리한다.
- * 알림과 메신저 참여 행은 FK 때문에 함께 지운다. 토큰·푸시구독·프로필은 Cascade 로 지워진다.
- * 응답·보상·발주는 삭제 대상에 넣지 않는다.
+ * 활동이 없는 계정(잘못 가입·테스트 계정)만 지움. 활동이 있으면 탈퇴로 처리함
+ * 알림과 메신저 참여 행은 FK 때문에 함께 지움. 토큰·푸시구독·프로필은 Cascade 로 지워짐
+ * 응답·보상·발주는 삭제 대상에 넣지 않음
  */
 export async function deleteMemberAction(formData: FormData) {
   const me = await requireAdmin();
@@ -271,21 +285,21 @@ export async function deleteMemberAction(formData: FormData) {
   await prisma.conversationMember.deleteMany({ where: { userId: id } });
   await prisma.user.delete({ where: { id } });
 
-  // 감사 로그는 계정 삭제 후에도 남는다(AuditLog 에 FK 를 두지 않았다).
+  // 감사 로그는 계정 삭제 후에도 남음(AuditLog 에 FK 를 두지 않았음).
   await audit(me.id, id, "MEMBER_DELETE", `계정 삭제 (${target.studentId} · ${target.name})`);
   done(`«${target.name}» 계정을 삭제했습니다.`);
 }
 
-/** 임시 비밀번호용 문자 집합. 헷갈리는 글자(0/O, 1/l/I)는 뺐다. */
+/** 임시 비밀번호용 문자 집합. 헷갈리는 글자(0/O, 1/l/I)는 뺐음 */
 const TEMP_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 /**
- * [임시 비밀번호 발급] 메일을 받을 수 없는 계정의 복구 수단.
+ * 메일을 받을 수 없는 계정의 복구 수단.
  *
- * - 값은 난수로 만들고 관리자가 정하지 않는다.
- * - URL 에 싣지 않고 반환값으로 화면에 한 번만 보여준다.
- * - AuditLog 에 남긴다.
- * 다음 로그인 때 변경을 강제하는 기능은 아직 없다.
+ * - 값은 난수로 만들고 관리자가 정하지 않음
+ * - URL 에 싣지 않고 반환값으로 화면에 한 번만 보여줌
+ * - AuditLog 에 남김
+ * 다음 로그인 때 변경을 강제하는 기능은 아직 없음
  */
 export interface TempPwState {
   password?: string;
@@ -305,6 +319,9 @@ export async function issueTempPasswordAction(
   const target = await prisma.user.findUnique({ where: { id } });
   if (!target) return { error: "대상 회원을 찾을 수 없습니다." };
 
+  const reauthErr = await checkReauth(me, formData);
+  if (reauthErr) return { error: reauthErr };
+
   let pw = "";
   for (let i = 0; i < 12; i++) pw += TEMP_CHARS[randomInt(TEMP_CHARS.length)];
 
@@ -312,12 +329,12 @@ export async function issueTempPasswordAction(
     where: { id },
     data: {
       password: await bcrypt.hash(pw, 10),
-      // 기존 세션도 끊는다.
+      // 기존 세션도 끊음
       sessionEpoch: { increment: 1 },
     },
   });
 
-  // 기존 재설정 링크를 무효화한다.
+  // 기존 재설정 링크를 무효화함
   await prisma.passwordResetToken.deleteMany({ where: { userId: id } });
 
   await audit(me.id, id, "MEMBER_TEMP_PW", `임시 비밀번호 발급 (${target.studentId})`);
@@ -326,10 +343,10 @@ export async function issueTempPasswordAction(
 }
 
 /**
- * [계정 인계 링크 발급] 이메일이 없는 기존 계정에 1회용 링크를 발급한다(app/lib/accountClaim.ts).
+ * 이메일이 없는 기존 계정에 1회용 링크를 발급함(app/lib/accountClaim.ts).
  *
- * 토큰 원본은 반환값으로 한 번만 보여준다(DB 에는 해시만 남는다).
- * 대상은 화면이 보낸 id 를 그대로 믿지 않고 서버에서 이메일이 없는 활성 계정만 고른다.
+ * 토큰 원본은 반환값으로 한 번만 보여줌(DB 에는 해시만 남음).
+ * 대상은 화면이 보낸 id 를 그대로 믿지 않고 서버에서 이메일이 없는 활성 계정만 고름
  */
 export interface ClaimLinkRow {
   name: string;
@@ -349,7 +366,7 @@ export async function issueClaimLinksAction(
   const me = await requireAdmin();
   if (!me) return { error: "권한이 없습니다." };
 
-  // 화면에서 고른 id 가 있으면 그 안에서, 없으면 전체에서 고른다.
+  // 화면에서 고른 id 가 있으면 그 안에서, 없으면 전체에서 고름
   const picked = str(formData, "userIds")
     .split(",")
     .map((s) => s.trim())
@@ -382,7 +399,7 @@ export async function issueClaimLinksAction(
     rows: issued.map((it) => ({
       name: it.name,
       studentId: it.studentId,
-      // 링크는 문자로 전달하므로 번호가 없으면 표시한다.
+      // 링크는 문자로 전달하므로 번호가 없으면 표시함
       phone: it.phone || "(번호 없음)",
       url: `${base}/claim/${it.token}`,
     })),

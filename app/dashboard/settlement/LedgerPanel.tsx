@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 /**
- * [ADMIN] 원장 내역(통장 대사용). 잔액 열은 그 줄까지의 누적 잔액이다. 기본은 접혀 있다.
+ * 원장 내역(통장 대사용). 잔액 열은 그 줄까지의 누적 잔액임. 기본은 접혀 있음
  */
 
 export interface LedgerRowView {
@@ -12,7 +12,7 @@ export interface LedgerRowView {
   amount: number;
   liability: number;
   memo: string;
-  /** 서버에서 포맷한 문자열 (Date 를 클라이언트로 넘기지 않는다) */
+  /** 서버에서 포맷한 문자열 (Date 를 클라이언트로 넘기지 않음) */
   occurredAt: string;
   orderNo: string;
   balance: number;
@@ -72,7 +72,7 @@ export default function LedgerPanel({ rows }: { rows: LedgerRowView[] }) {
                   <th className={`${TH} text-right`}>현금</th>
                   <th className={`${TH} text-right`}>부채</th>
                   <th className={`${TH} text-right`}>잔액</th>
-                  <th className={TH}>발주</th>
+                  <th className={TH}>의뢰</th>
                   <th className={TH}>메모</th>
                 </tr>
               </thead>
