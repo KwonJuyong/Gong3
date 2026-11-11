@@ -1,11 +1,114 @@
-# AI 평가단 플랫폼
+<div align="center">
 
-사용자 참여 기반 AI 서비스 품질평가 플랫폼. 학생 평가단의 AI 서비스 사용 평가를 표준(ISO/IEC 25010·25059) 기반 구성개념으로 수집하고, 평가 의뢰·참여 보상 정산까지 처리.
+# AI 평가단
 
-- 스택: Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · Prisma · PostgreSQL
-- 한림대학교 캡스톤디자인
+**학생이 직접 써 보고 평가하는 AI 에듀테크 서비스 품질평가 플랫폼**
 
-<!-- 팀 구성(이름·역할·GitHub 아이디) 기재 -->
+학생 평가자 모집부터 평가문항 구성, 응답 수집, 평가 결과, 참여 보상 정산까지 한곳에서 처리
+
+[서비스](https://evalia.co.kr) · [시연 서버](https://try.evalia.co.kr) · 한림대학교 SW 캡스톤디자인 2026-2
+
+![Next.js](https://img.shields.io/badge/Next.js_16-000000?logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_4-06B6D4?logo=tailwindcss&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-2D3748?logo=prisma&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+
+</div>
+
+![표준 기반으로 구성된 평가](docs/images/detail.png)
+
+## 왜 만들었나
+
+학습 도우미 챗봇, AI 튜터, 자동 채점처럼 학생이 쓰는 AI 서비스가 늘고 있지만, 실제 학생이 써 봤을 때 어떤지 확인하는 과정은 대부분 수작업입니다.
+
+- 평가할 학생을 매번 따로 모집하고 선발
+- 무엇을 물어볼지 정하는 기준이 평가마다 다름
+- 응답 정리, 참여 보상 지급, 세금 처리가 엑셀과 메일로 흩어짐
+
+AI 평가단은 이 과정을 하나의 흐름으로 묶습니다. 서비스를 등록하면 국제 표준(ISO/IEC 25010·25059)에 맞춰 평가 항목과 문항이 구성되고, 학생 평가자가 서비스를 직접 사용하며 응답하고, 결과와 보상 정산까지 플랫폼 안에서 이어집니다.
+
+## 이렇게 동작합니다
+
+```
+ 서비스 등록  ─▶  평가 구성  ─▶  모집·선발  ─▶  응답  ─▶  평가 결과  ─▶  보상 정산
+ (유형·속성)     (표준 기반)     (학생 평가자)   (서비스 사용)  (문항별 분포)    (지급·세무)
+```
+
+## 주요 기능
+
+### 학생 평가자
+
+- **평가 찾기와 신청**: 모집 중인 평가를 보고 신청, 선발되면 알림
+- **서비스를 옆에 띄우고 응답**: 평가할 서비스와 문항을 한 화면에 나란히 열기
+- **임시 저장**: 응답 도중 나가도 같은 기기에서 이어서 작성
+- **참여 보상 확인**: 받을 보상과 지급 내역, 계좌 등록
+
+### 개설자 (교원·에듀테크 기업)
+
+- **표준 기반 평가 구성**: 서비스 유형과 속성(AI 서비스, 추천·개인화, 개인정보 수집 등)을 고르면 그에 맞는 평가 항목과 검증된 측정 문항을 자동으로 구성
+- **AI 문항 초안**: 서비스 설명을 바탕으로 문항 초안을 만들고 직접 다듬기
+- **모집·선발 관리**: 정원, 마감, 신청자 선발
+- **평가 결과**: 문항별 점수 분포와 응답 내보내기
+
+### 평가 의뢰와 정산
+
+- **평가 의뢰·견적서**: 인원과 보상을 입력하면 견적서(PDF)와 의뢰를 한 번에
+- **전자세금계산서**: 입금 확인 후 발행
+- **참여 보상 지급**: 원천징수를 반영한 지급과 원장 기반 정산 기록
+
+### 운영
+
+- **평가 승인**: 공개 전 관리자 검토
+- **AI 도우미**: 메신저에서 자연어로 데이터 조회(권한 범위 안에서만)
+- **인증 준비 점검**: 소프트웨어 품질 인증을 준비할 때 확인할 항목 정리
+- **AI News**: 모델 순위와 최신 소식 모아 보기
+- **앱 설치**: PWA로 데스크톱·모바일에 설치, 웹 푸시 알림
+
+## 화면
+
+| 서비스 등록 | 평가 찾기 |
+|---|---|
+| ![서비스 등록](docs/images/services.png) | ![평가 찾기](docs/images/find.png) |
+| **평가 결과** | **평가 의뢰·견적** |
+| ![평가 결과](docs/images/result.png) | ![평가 의뢰](docs/images/order.png) |
+
+화면은 [시연 서버](https://try.evalia.co.kr)의 시연 계정 데이터
+
+## 기술 스택
+
+| 영역 | 사용 기술 |
+|---|---|
+| 프레임워크 | Next.js 16 (App Router, Server Actions) · React 19 |
+| 언어·스타일 | TypeScript · Tailwind CSS 4 |
+| 데이터 | Prisma · PostgreSQL 15 |
+| 실시간 | Server-Sent Events(메신저·알림) |
+| 외부 연동 | 팝빌(전자세금계산서·사업자 조회) · OpenAI(문항 초안·AI 도우미) · Web Push |
+| 운영 | Docker Compose · GitHub Actions(CI) |
+
+## 폴더 구조
+
+```
+app/
+  page.tsx            로그인·회원가입
+  dashboard/          로그인 후 화면(평가·서비스·의뢰·정산·관리)
+  api/                라우트 핸들러(업로드, 실시간 메시지 등)
+  components/         공용 컴포넌트
+  lib/                도메인 로직(평가 구성, 승인, 정산, 세금, 조회)
+prisma/
+  schema.prisma       데이터 모델
+  migrations/         마이그레이션
+  seed*.ts            기본 시드(구성개념·테스트 계정·시연 데이터)
+scripts/              자체 점검(세션·조회·사용량 한도·표기 규칙)
+```
+
+## 팀
+
+| 이름 | 개발 | 연구 | GitHub |
+|---|---|---|---|
+| 권주용 | 백엔드 | 논문 작성 | [KwonJuyong](https://github.com/KwonJuyong) |
+| 진형준 | 프론트엔드 | IRB·행정 절차 | [hyungjunjin](https://github.com/hyungjunjin) |
+| 서지은 | 디자인 | QA·피드백 관리 | [Seojieun9](https://github.com/Seojieun9) |
 
 ## 로컬 실행
 
