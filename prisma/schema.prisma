@@ -218,6 +218,24 @@ model Project {
   rejectedAt   DateTime?
   rejectReason String?
   createdAt    DateTime  @default(now())
+
+  pastPayments PastPayment[]
+}
+
+/// 플랫폼 지급 기능 도입 전의 참여 보상 기록(청구서·정산 명부 기준). 실적 집계 전용
+/// 원장·지급명세서와 무관. 계정 없는 참여자가 있어 사람은 학번으로만 식별
+model PastPayment {
+  id        String   @id @default(cuid())
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  studentId String?
+  amount    Int
+  // CLAIM(청구서 금액) | MAIL(제출 메일 금액) | LEDGER(노무비 집행표 회차 합계) | ESTIMATE(1인 1회차 3만 원 산정) | ROSTER(정산 명부 합계)
+  basis     String
+  label     String
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
 }
 
 model Enrollment {

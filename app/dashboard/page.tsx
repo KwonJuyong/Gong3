@@ -8,6 +8,8 @@ import MyRewardsPanel, { type MyRewardSummary } from "./MyRewardsPanel";
 import { getSettlementProfile } from "../lib/settlementProfile";
 import { visibleProjectWhere, capacityOf, rewardPerPersonOf, isPayerUs } from "../lib/approvals";
 import { getQuoteSupplier } from "../lib/orgSettings";
+import { getPlatformStats } from "../lib/platformStats";
+import { manwonText } from "../lib/money";
 
 export const metadata = { title: "대시보드" };
 
@@ -216,6 +218,11 @@ export default async function DashboardPage({
   const myProfile = await getSettlementProfile(safeUser.id);
   // 문의 전화번호는 코드에 두지 않고 조직 설정(연락처)에서 읽음
   const { contact } = await getQuoteSupplier();
+  // 실적은 첫 화면 머리에만 보임
+  const stats = focus ? null : await getPlatformStats();
+  const statsLine = stats
+    ? `지금까지 평가 ${stats.rounds}회 · ${stats.people}명 참여 · 참여 보상 ${manwonText(stats.paidTotal)} 지급`
+    : "";
 
   // DEVELOPER/ADMIN: 자동 생성용 확정 설문 서비스 목록
   let confirmedServices: { id: string; name: string; versionId: string }[] = [];
@@ -349,10 +356,70 @@ export default async function DashboardPage({
       .filter(Boolean)
       .join(" · ");
 
+  // 평가를 여는 사람(기업·교수·관리자)은 실적 숫자를, 학생은 참여 숫자와 실적 한 줄을 봄
+  const isMaker = safeUser.role === "DEVELOPER" || isAdmin;
+  const running = mine.filter((p) => p.status === "RECRUITING" || p.status === "ACTIVE");
   const summaryLine =
-    [toRespond.length > 0 ? `응답할 평가 ${toRespond.length}건` : null, awaiting.length > 0 ? `결과 대기 ${awaiting.length}건` : null]
+    (isMaker
+      ? [running.length > 0 ? `운영 중 ${running.length}건` : null, toSelect.length > 0 ? `선발할 평가 ${toSelect.length}건` : null]
+      : [toRespond.length > 0 ? `응답할 평가 ${toRespond.length}건` : null, awaiting.length > 0 ? `결과 대기 ${awaiting.length}건` : null]
+    )
       .filter(Boolean)
       .join(" · ") || "지금 처리할 일은 없어요";
+  const heroStats: { label: string; value: string; href?: string }[] = isMaker
+    ? stats
+      ? [
+          { label: "진행한 평가", value: `${stats.rounds}회` },
+          { label: "참여 보상 지급", value: manwonText(stats.paidTotal) },
+          { label: "참여 인원", value: `${stats.people}명` },
+        ]
+      : []
+    : [
+        { label: "응답 대기", value: `${toRespond.length}건` },
+        { label: "참여한 평가", value: `${participatedProjects.length}건`, href: "/dashboard/surveys#participated" },
+        { label: "받을 보상", value: `${upcomingReward.toLocaleString("ko-KR")}원` },
+      ];
+  // 보상을 받은 적 없는 개설자에게는 계좌 안내가 필요 없음
+  const showRewards = !isMaker || myRewardSummary !== null;
+
+  const recruitSection = (
+    <section aria-labelledby="recruit-h" className="bg-white rounded-[var(--radius-xl)] p-5">
+      <div className="flex items-baseline justify-between mb-1">
+        <h2 id="recruit-h" className="text-[17px] font-bold text-[var(--foreground)]">
+          모집 중
+        </h2>
+        <Link href="/dashboard/surveys" className="text-sm text-[var(--gray-600)] hover:text-[var(--foreground)]">
+          전체보기
+        </Link>
+      </div>
+      {recruitingProjects.length === 0 ? (
+        <p className="text-sm text-[var(--muted)] py-4">모집 중인 평가가 없어요.</p>
+      ) : (
+        <ul className="divide-y divide-[var(--gray-100)]">
+          {recruitingProjects.slice(0, RECRUIT_PREVIEW).map((p) => {
+            const chip = myChip(p);
+            return (
+              <li key={p.id}>
+                <Link
+                  href={`/dashboard?view=detail&p=${p.id}`}
+                  scroll={false}
+                  className="block py-3 -mx-2 px-2 rounded-[var(--radius-md)] hover:bg-[var(--gray-50)]"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 text-[15px] font-medium text-[var(--foreground)] truncate">{p.title}</span>
+                    {chip && (
+                      <span className="shrink-0 text-xs font-semibold text-[var(--accent)]">{chip}</span>
+                    )}
+                  </span>
+                  <span className="block text-[13px] text-[var(--muted)] mt-0.5 truncate">{recruitSub(p)}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
 
   return (
     <div className="bg-[var(--surface)] flex flex-col min-h-full">
@@ -372,13 +439,10 @@ export default async function DashboardPage({
             <div className="min-w-0">
               <h1 className="text-[26px] font-bold tracking-tight">{safeUser.name}님, 안녕하세요</h1>
               <p className="text-[15px] text-white/75 mt-1">{summaryLine}</p>
+              {!isMaker && statsLine && <p className="text-[13px] text-white/60 mt-2">{statsLine}</p>}
             </div>
             <dl className="flex items-center gap-5 sm:gap-7">
-              {[
-                { label: "응답 대기", value: `${toRespond.length}건` },
-                { label: "참여한 평가", value: `${participatedProjects.length}건`, href: "/dashboard/surveys#participated" },
-                { label: "받을 보상", value: `${upcomingReward.toLocaleString("ko-KR")}원` },
-              ].map((st, i) => (
+              {heroStats.map((st, i) => (
                 // 숫자를 위에 크게 보이되 마크업은 dt → dd 순서를 지킴(flex-col-reverse)
                 <div key={st.label} className={`flex flex-col-reverse ${i > 0 ? "pl-5 sm:pl-7 border-l border-white/15" : ""}`}>
                   <dt className="text-[13px] text-white/70 mt-0.5">{st.label}</dt>
@@ -404,8 +468,8 @@ export default async function DashboardPage({
                 {tasks.length === 0 ? (
                   <p className="text-[15px] text-[var(--muted)] py-5">
                     할 일이 없어요.{" "}
-                    <Link href="/dashboard/surveys" className="text-[var(--accent)] font-medium">
-                      참여할 평가 찾기
+                    <Link href={isMaker ? "/dashboard/services" : "/dashboard/surveys"} className="text-[var(--accent)] font-medium">
+                      {isMaker ? "새 평가 만들기" : "참여할 평가 찾기"}
                     </Link>
                   </p>
                 ) : (
@@ -435,6 +499,9 @@ export default async function DashboardPage({
               </section>
             )}
 
+            {/* 폰에서는 일정보다 모집 중을 먼저 보여줌. 넓은 화면은 오른쪽 열에 둠 */}
+            {!focus && <div className="lg:hidden">{recruitSection}</div>}
+
             <DashboardView
               projects={safeProjects}
               user={safeUser}
@@ -445,56 +512,23 @@ export default async function DashboardPage({
 
           {!focus && (
             <aside className="space-y-4">
-              {/* 계좌 미등록을 알 수 있도록 항상 보여줌 */}
-              <MyRewardsPanel
-                summary={myRewardSummary}
-                profile={{
-                  bankName: myProfile.bankName,
-                  accountNumber: myProfile.accountNumber,
-                  holderName: myProfile.holderName,
-                  hasRrn: myProfile.hasRrn,
-                  payoutReady: myProfile.payoutReady,
-                  withholdingReady: myProfile.withholdingReady,
-                  byAdmin: myProfile.byAdmin,
-                }}
-              />
+              {/* 학생은 계좌 미등록을 알 수 있도록 항상 보여줌 */}
+              {showRewards && (
+                <MyRewardsPanel
+                  summary={myRewardSummary}
+                  profile={{
+                    bankName: myProfile.bankName,
+                    accountNumber: myProfile.accountNumber,
+                    holderName: myProfile.holderName,
+                    hasRrn: myProfile.hasRrn,
+                    payoutReady: myProfile.payoutReady,
+                    withholdingReady: myProfile.withholdingReady,
+                    byAdmin: myProfile.byAdmin,
+                  }}
+                />
+              )}
 
-              <section aria-labelledby="recruit-h" className="bg-white rounded-[var(--radius-xl)] p-5">
-                <div className="flex items-baseline justify-between mb-1">
-                  <h2 id="recruit-h" className="text-[17px] font-bold text-[var(--foreground)]">
-                    모집 중
-                  </h2>
-                  <Link href="/dashboard/surveys" className="text-sm text-[var(--gray-600)] hover:text-[var(--foreground)]">
-                    전체보기
-                  </Link>
-                </div>
-                {recruitingProjects.length === 0 ? (
-                  <p className="text-sm text-[var(--muted)] py-4">모집 중인 평가가 없어요.</p>
-                ) : (
-                  <ul className="divide-y divide-[var(--gray-100)]">
-                    {recruitingProjects.slice(0, RECRUIT_PREVIEW).map((p) => {
-                      const chip = myChip(p);
-                      return (
-                        <li key={p.id}>
-                          <Link
-                            href={`/dashboard?view=detail&p=${p.id}`}
-                            scroll={false}
-                            className="block py-3 -mx-2 px-2 rounded-[var(--radius-md)] hover:bg-[var(--gray-50)]"
-                          >
-                            <span className="flex items-center gap-2">
-                              <span className="min-w-0 flex-1 text-[15px] font-medium text-[var(--foreground)] truncate">{p.title}</span>
-                              {chip && (
-                                <span className="shrink-0 text-xs font-semibold text-[var(--accent)]">{chip}</span>
-                              )}
-                            </span>
-                            <span className="block text-[13px] text-[var(--muted)] mt-0.5 truncate">{recruitSub(p)}</span>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </section>
+              <div className="hidden lg:block">{recruitSection}</div>
             </aside>
           )}
         </div>

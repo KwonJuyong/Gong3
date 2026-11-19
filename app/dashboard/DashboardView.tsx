@@ -949,9 +949,15 @@ export default function DashboardView({
         <div className="mb-3">
           <CreateSteps current={3} />
         </div>
-        <p className="text-sm text-[var(--muted)] mb-6">
-          서비스의 확정된 평가문항이 이 평가의 문항이 됩니다. 일정과 인원만 정해 주세요.
-        </p>
+        {sp.get("frozen") === "1" ? (
+          <p role="status" className="text-sm text-[var(--success)] bg-[var(--success-light)] rounded-[var(--radius-md)] px-4 py-3 mb-6">
+            평가문항을 확정했어요. 일정과 인원을 정해 승인 요청하면 모집이 시작돼요.
+          </p>
+        ) : (
+          <p className="text-sm text-[var(--muted)] mb-6">
+            서비스의 확정된 평가문항이 이 평가의 문항이 됩니다. 일정과 인원만 정해 주세요.
+          </p>
+        )}
 
         {confirmedServices.length === 0 ? (
           <div className="text-center py-10 space-y-3">

@@ -4,7 +4,7 @@ import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "../../db";
-import { isConstructActive, type ServiceProfile } from "../../lib/surveyProfile";
+import { isConstructActive, serviceKindLabel, type ServiceProfile } from "../../lib/surveyProfile";
 import CreateSteps from "./CreateSteps";
 import ServiceForm from "./ServiceForm";
 import { deleteServiceAction } from "./actions";
@@ -94,8 +94,7 @@ export default async function ServicesPage({
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-[var(--foreground)]">{s.name}</p>
                     <p className="text-xs text-[var(--muted)] mt-1">
-                      {s.preset ? `${s.preset} · ` : ""}
-                      {s.modality}
+                      {serviceKindLabel(s.preset, s.modality)}
                       {isAdmin && s.owner?.name ? ` · 등록자 ${s.owner.name}` : ""}
                       {` · 평가문항 ${confirmed ? "확정" : drafting ? "작성 중" : "없음"}`}
                     </p>

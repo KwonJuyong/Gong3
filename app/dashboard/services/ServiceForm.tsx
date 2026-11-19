@@ -19,9 +19,9 @@ type Flags = {
 const FLAG_META: { key: keyof Flags; label: string; hint: string }[] = [
   { key: "isAiService", label: "AI 서비스", hint: "AI 전용 평가 항목(출력 정확성·강건성·투명성)을 포함해요" },
   { key: "hasRecommendation", label: "추천·개인화 기능", hint: "추천 정확도 평가 항목을 포함해요" },
-  { key: "isSafetyCritical", label: "안전 민감(safety-critical)", hint: "안전성 평가 항목을 포함해요(헬스케어 등)" },
+  { key: "isSafetyCritical", label: "안전 민감", hint: "안전성 평가 항목을 포함해요(헬스케어 등)" },
   { key: "hasPersonalData", label: "개인정보 수집", hint: "보안 평가 비중을 높여요" },
-  { key: "userFacingUi", label: "사용자 대면 UI", hint: "상호작용 역량 강조" },
+  { key: "userFacingUi", label: "사용자 화면이 있음", hint: "상호작용 평가 항목을 강조해요" },
 ];
 
 const DEFAULT_FLAGS: Flags = {
@@ -54,7 +54,7 @@ export default function ServiceForm({ defaultOpen }: { defaultOpen: boolean }) {
         <span>
           <span className="block text-sm font-semibold text-[var(--foreground)]">새 서비스 등록</span>
           <span className="block text-xs text-[var(--muted)] mt-0.5">
-            유형을 고르면 평가 항목이 자동 구성됩니다. 세부 속성은 직접 조정할 수 있습니다.
+            이름과 유형만 정하면 평가 항목이 자동으로 구성되고 평가문항까지 바로 만들어져요.
           </span>
         </span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-[var(--gray-500)] transition-transform group-open:rotate-180" aria-hidden="true">
@@ -69,7 +69,7 @@ export default function ServiceForm({ defaultOpen }: { defaultOpen: boolean }) {
             <input name="name" required placeholder="예: 학습도우미 챗봇" className={`mt-1 ${inputCls}`} />
           </label>
           <label className="text-xs text-[var(--muted)]">
-            서비스 유형(프리셋)
+            서비스 유형
             <select
               name="preset"
               value={preset}
@@ -85,7 +85,7 @@ export default function ServiceForm({ defaultOpen }: { defaultOpen: boolean }) {
             </select>
           </label>
           <label className="text-xs text-[var(--muted)]">
-            입력 형태(modality)
+            입력 형태
             <select name="modality" defaultValue="text" className={`mt-1 ${inputCls}`}>
               <option value="text">텍스트</option>
               <option value="image">이미지</option>
@@ -95,8 +95,9 @@ export default function ServiceForm({ defaultOpen }: { defaultOpen: boolean }) {
           </label>
         </div>
 
-        <div>
-          <p className="text-xs text-[var(--muted)] mb-2">서비스 속성</p>
+        {/* 유형이 기본값을 정하므로 세부 속성은 필요한 사람만 펼침 */}
+        <details open={presetReset}>
+          <summary className="cursor-pointer text-xs text-[var(--gray-700)] mb-2 select-none">세부 속성 조정 (선택)</summary>
           {presetReset && (
             <p className="text-xs text-[var(--warning)] bg-[var(--warning-light)] px-3 py-2 rounded-[var(--radius-md)] mb-2 leading-relaxed">
               유형을 바꿔서 아래 속성이 그 유형의 기본값으로 다시 설정되었습니다. 필요하면
@@ -123,10 +124,10 @@ export default function ServiceForm({ defaultOpen }: { defaultOpen: boolean }) {
               </label>
             ))}
           </div>
-        </div>
+        </details>
 
         <SubmitButton className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-dark)]">
-          서비스 등록
+          등록하고 평가문항 만들기
         </SubmitButton>
       </form>
     </details>

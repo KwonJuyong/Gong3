@@ -25,7 +25,7 @@
     "bcrypt": "^6.0.0",
     "fast-xml-parser": "^5.10.1",
     "fflate": "^0.8.3",
-    "next": "16.4.2",
+    "next": "16.4.6",
     "openai": "^7.55.0",
     "popbill": "^1.64.2",
     "prisma": "^6.19.3",
@@ -45,7 +45,7 @@
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.6",
     "pptxgenjs": "^4.0.1",
     "tailwindcss": "^4"
   },

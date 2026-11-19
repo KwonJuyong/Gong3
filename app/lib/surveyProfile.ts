@@ -12,6 +12,14 @@ export type ServiceProfile = {
   modality: string;
 };
 
+const MODALITY_LABEL: Record<string, string> = { text: "텍스트", image: "이미지", voice: "음성", multimodal: "멀티모달" };
+
+/** 화면 표시용 유형·입력 형태 이름. 저장값(id)은 화면에 노출하지 않음 */
+export function serviceKindLabel(preset: string | null, modality: string): string {
+  const p = PRESETS.find((x) => x.id === preset)?.label;
+  return [p, MODALITY_LABEL[modality] ?? modality].filter(Boolean).join(" · ");
+}
+
 // 6개 유형 프리셋: 속성 플래그의 프리필(UX용). 선택 후 개별 조정 가능.
 export const PRESETS: { id: string; label: string; flags: Partial<ServiceProfile> }[] = [
   { id: "education", label: "교육 / 에듀테크", flags: { userFacingUi: true } },

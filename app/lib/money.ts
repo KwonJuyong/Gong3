@@ -114,6 +114,11 @@ export function wonText(n: number): string {
   return n.toLocaleString("ko-KR") + "원";
 }
 
+/** 596만 원(만 원 미만 버림. 실적 요약처럼 실제보다 크게 보이면 안 되는 곳용) */
+export function manwonText(n: number): string {
+  return Math.floor(n / 10000).toLocaleString("ko-KR") + "만 원";
+}
+
 
 const DIGITS = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
 /** 4자리 안에서의 자릿수 */

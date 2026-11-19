@@ -378,7 +378,11 @@ export async function enrollProjectAction(formData: FormData) {
   }
 
   revalidatePath("/dashboard");
-  // 같은 평가 상세로 돌아가 바뀐 상태를 보여줌
+  // 목록에서 바로 신청한 경우 목록에 머묾. 그 외에는 같은 평가 상세로 돌아감
+  if (formData.get("back") === "surveys") {
+    revalidatePath("/dashboard/surveys");
+    redirect("/dashboard/surveys?enrolled=1");
+  }
   redirect(`/dashboard?view=detail&p=${projectId}`);
 }
 

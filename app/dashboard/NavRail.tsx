@@ -44,8 +44,8 @@ const GROUPS: NavGroup[] = [
         roles: ["ADMIN"],
       },
       { href: "/dashboard/insights", label: "AI News", icon: I("M4 22V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v16a2 2 0 0 0 2 2H4ZM8 7h6M8 11h6M8 15h4") },
-      // 인증 준비 자가점검(부가 기능)
-      { href: "/dashboard/certification", label: "인증 준비", icon: I("M9 12l2 2 4-4M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3Z") },
+      // 인증 준비 자가점검(부가 기능). 서비스를 가진 쪽만 씀
+      { href: "/dashboard/certification", label: "인증 준비", icon: I("M9 12l2 2 4-4M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3Z"), roles: ["DEVELOPER", "ADMIN"] },
       // 자연어 데이터 조회. 볼 수 있는 범위는 queryPolicy 가 정하므로 메뉴는 모두에게 보임
       { href: "/dashboard/query", label: "데이터 조회", icon: I("M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM21 21l-4.35-4.35") },
     ],

@@ -150,10 +150,17 @@ export async function generateDraftsAction(formData: FormData) {
     hasPersonalData: service.hasPersonalData,
     userFacingUi: service.userFacingUi,
   };
-  const results = await generateAdaptiveQuestions(
-    genService,
-    targets.map((c) => ({ id: c.id, name: c.name, description: c.description })),
-  );
+  // 외부 AI 호출 실패 시 오류 화면 대신 같은 화면에서 다시 누를 수 있게 함
+  let results: Awaited<ReturnType<typeof generateAdaptiveQuestions>>;
+  try {
+    results = await generateAdaptiveQuestions(
+      genService,
+      targets.map((c) => ({ id: c.id, name: c.name, description: c.description })),
+    );
+  } catch (e) {
+    console.error("평가문항 생성 실패", e);
+    redirect(`${SERVICES_PATH}/${serviceId}?generated=fail`);
+  }
 
   // 생성 문구 upsert. 수정본과 승인 상태는 유지하고 generated 만 갱신함
   for (const r of results) {
@@ -344,5 +351,7 @@ export async function freezeVersionAction(formData: FormData) {
   await notifyAdminsForReview({ title: `${service.name} · 회차 ${version.round}`, requesterId: me.id });
 
   revalidatePath(`${SERVICES_PATH}/${serviceId}`);
-  redirect(`${SERVICES_PATH}/${serviceId}?frozen=1`);
+  revalidatePath("/dashboard");
+  // 확정 다음 할 일은 일정·인원 입력 하나뿐이라 그 화면으로 바로 보냄
+  redirect(`/dashboard?view=create-auto&s=${serviceId}&frozen=1`);
 }

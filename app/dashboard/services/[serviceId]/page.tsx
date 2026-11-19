@@ -4,10 +4,11 @@ import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "../../../db";
-import { isConstructActive, type ServiceProfile } from "../../../lib/surveyProfile";
+import { isConstructActive, serviceKindLabel, type ServiceProfile } from "../../../lib/surveyProfile";
 import { generateDraftsAction, freezeVersionAction } from "../actions";
 import CreateSteps from "../CreateSteps";
 import DraftEditor from "./DraftEditor";
+import GenerateButton from "./GenerateButton";
 
 export const metadata = { title: "평가문항 관리" };
 
@@ -92,8 +93,7 @@ export default async function ServiceDetailPage({
           <div>
             <h1 className="text-xl font-bold text-[var(--foreground)]">{service.name}</h1>
             <p className="text-sm text-[var(--muted)] mt-1">
-              {service.preset ? `${service.preset} · ` : ""}
-              {service.modality} · 평가 항목 {active.length}개
+              {serviceKindLabel(service.preset, service.modality)} · 평가 항목 {active.length}개
               {version ? ` · 회차 ${version.round} (작성중)` : ""}
             </p>
           </div>
@@ -109,7 +109,7 @@ export default async function ServiceDetailPage({
 
         {created === "1" && (
           <div className="rounded-[var(--radius-md)] bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2.5">
-            서비스를 등록했어요. 이제 「평가문항 생성」을 눌러 평가문항을 만들어 주세요.
+            서비스를 등록했어요. 서비스에 맞춘 평가문항을 바로 만들고 있어요.
           </div>
         )}
         {generated === "1" && (
@@ -122,16 +122,14 @@ export default async function ServiceDetailPage({
             자동으로 만들 서비스 맞춤 문항이 없습니다(모두 검증된 표준 도구로 측정합니다).
           </div>
         )}
+        {generated === "fail" && (
+          <div role="alert" className="rounded-[var(--radius-md)] bg-[var(--danger-light)] text-[var(--danger)] text-sm px-4 py-2.5">
+            평가문항을 만들지 못했어요. 잠시 뒤 아래 「평가문항 생성」을 다시 눌러 주세요.
+          </div>
+        )}
         {saved === "1" && (
           <div className="rounded-[var(--radius-md)] bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2.5">
             문항이 저장되었습니다.
-          </div>
-        )}
-        {/* 동결만으로는 공개되지 않고, 평가를 만들어 승인받아야 한다는 안내 */}
-        {frozen === "1" && (
-          <div className="rounded-[var(--radius-md)] bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2.5">
-            평가문항을 최종 확정했습니다. <strong>아직 학생에게 공개되지 않습니다</strong> —
-            아래에서 이 평가문항으로 평가를 만들고 관리자 승인을 받으면 모집이 시작됩니다.
           </div>
         )}
         {frozen === "none" && (
@@ -174,19 +172,21 @@ export default async function ServiceDetailPage({
                 평가 항목과 척도는 고정하고 문구만 서비스에 맞게 생성됩니다. ({adaptiveCount}개 대상 · 확정 {approvedCount}/{drafts.length})
               </p>
             </div>
-            <form action={generateDraftsAction}>
-              <input type="hidden" name="serviceId" value={service.id} />
-              <ConfirmButton
-                message={
-                  drafts.length > 0
-                    ? "AI 로 평가문항을 다시 생성합니다.\n\n· 생성 원문이 새 문구로 바뀝니다(직접 고친 문구와 확정 표시는 유지).\n· AI 호출 비용이 듭니다.\n\n정말 재생성하시겠습니까?"
-                    : "AI 로 평가문항을 생성합니다.\n\n· AI 호출 비용이 들고 1분 정도 걸릴 수 있습니다.\n\n생성하시겠습니까?"
-                }
-                className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-dark)] whitespace-nowrap"
-              >
-                {drafts.length > 0 ? "문구 재생성" : "평가문항 생성"}
-              </ConfirmButton>
-            </form>
+            {drafts.length > 0 ? (
+              // 재생성은 생성 원문을 덮어써서 확인을 받음
+              <form action={generateDraftsAction}>
+                <input type="hidden" name="serviceId" value={service.id} />
+                <ConfirmButton
+                  message={"AI 로 평가문항을 다시 생성합니다.\n\n· 생성 원문이 새 문구로 바뀝니다(직접 고친 문구와 확정 표시는 유지).\n· AI 호출 비용이 듭니다.\n\n정말 재생성하시겠습니까?"}
+                  pendingText="문항 만드는 중…"
+                  className="px-4 py-2 rounded-[var(--radius-md)] border border-[var(--gray-300)] text-[var(--foreground)] text-sm font-medium hover:bg-[var(--gray-50)] whitespace-nowrap"
+                >
+                  문구 재생성
+                </ConfirmButton>
+              </form>
+            ) : (
+              <GenerateButton serviceId={service.id} auto={created === "1" && adaptiveCount > 0} />
+            )}
           </div>
 
           {drafts.length === 0 ? (

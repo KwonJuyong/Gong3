@@ -90,7 +90,7 @@ export const visibleProjectWhere: Prisma.ProjectWhereInput = {
  * 동시 제출에 대비해 createRewardForResponse 에서 한 번 더 확인함
  */
 export const openProjectWhere: Prisma.ProjectWhereInput = {
-  status: { notIn: [...HIDDEN_PROJECT_STATUSES] },
+  status: { notIn: [...HIDDEN_PROJECT_STATUSES, "FINISHED"] },
   closedAt: null,
 };
 
@@ -183,10 +183,10 @@ export async function notifyCreatorRejected(input: {
 
 /**
  * 발주가 연결되지 않은 업체·학교 평가. 이 상태에서는 응답해도 보상이 생기지 않음
- * 연구비 건은 발주가 없는 게 정상이라 제외함
+ * 연구비 건은 발주가 없는 게 정상이라 제외함. 종료된 평가도 제외함(보상을 플랫폼 밖에서 정산한 건에 연결하면 이중 지급 기록)
  */
 export const orderMissingWhere: Prisma.ProjectWhereInput = {
-  status: { notIn: [...HIDDEN_PROJECT_STATUSES] },
+  status: { notIn: [...HIDDEN_PROJECT_STATUSES, "FINISHED"] },
   fundingType: { in: ["COMPANY", "UNIVERSITY"] },
   order: { is: null },
 };
