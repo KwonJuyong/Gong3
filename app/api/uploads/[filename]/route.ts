@@ -68,15 +68,23 @@ export async function GET(
       "Cache-Control": "private, max-age=31536000, immutable",
     };
 
-    if (imageMime) {
+    const rawName = req.nextUrl.searchParams.get("name") || filename;
+    // 헤더 인젝션 방지: 제어문자 제거 후 RFC5987 인코딩
+    const safeName = rawName.replace(/[\r\n"\\]/g, "").slice(0, 200);
+    const forceDownload = req.nextUrl.searchParams.get("download") === "1";
+    const inlinePdf = ext === "pdf" && req.nextUrl.searchParams.get("inline") === "1" && !forceDownload;
+
+    if (imageMime && !forceDownload) {
       // 이미지는 인라인 렌더
       headers["Content-Type"] = imageMime;
+    } else if (inlinePdf) {
+      // PDF 참고자료 미리보기. 브라우저 기본 뷰어로 새 탭 열람만 허용함
+      headers["Content-Type"] = fileMime;
+      headers["Content-Disposition"] =
+        `inline; filename*=UTF-8''${encodeURIComponent(safeName)}`;
     } else {
       // 문서/일반 파일은 강제 다운로드 (인라인 실행 차단)
-      headers["Content-Type"] = fileMime;
-      const rawName = req.nextUrl.searchParams.get("name") || filename;
-      // 헤더 인젝션 방지: 제어문자 제거 후 RFC5987 인코딩
-      const safeName = rawName.replace(/[\r\n"\\]/g, "").slice(0, 200);
+      headers["Content-Type"] = imageMime ?? fileMime;
       headers["Content-Disposition"] =
         `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}`;
     }

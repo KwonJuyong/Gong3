@@ -7,6 +7,7 @@ import { setSessionCookie } from "../session-server";
 import { checkRateLimit } from "../rate-limit";
 import { consumeClaimToken, lookupClaimToken } from "../lib/accountClaim";
 import { clientIp, logAccess } from "../lib/accessLog";
+import { passwordProblem } from "../lib/password";
 
 // IP 는 clientIp()(lib/accessLog.ts)로 얻음
 const getClientIP = clientIp;
@@ -49,15 +50,10 @@ export async function claimAccountAction(
   if (email.toLowerCase() !== confirm.toLowerCase()) {
     return { error: "두 이메일이 서로 다릅니다. 다시 확인해 주세요.", success: false };
   }
-  if (password.length < 8) {
-    return { error: "비밀번호는 8자 이상이어야 합니다.", success: false };
-  }
+  const pwMsg = passwordProblem(password, [found.studentId, email]);
+  if (pwMsg) return { error: pwMsg, success: false };
   if (password !== passwordConfirm) {
     return { error: "두 비밀번호가 서로 다릅니다.", success: false };
-  }
-  // 학번과 같은 비밀번호는 쓰지 못하게 함
-  if (password.trim() === found.studentId) {
-    return { error: "학번과 같은 비밀번호는 쓸 수 없습니다. 다른 값으로 정해 주세요.", success: false };
   }
 
   // 이메일 중복은 대소문자를 무시하고 확인함(registerAction 과 같은 규칙).

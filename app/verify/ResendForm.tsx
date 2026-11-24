@@ -3,15 +3,13 @@
 import { useActionState } from "react";
 import { resendVerificationAction } from "../actions";
 import type { ActionState } from "../db";
-
-const inputCls =
-  "w-full px-3.5 py-2.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors placeholder:text-[var(--gray-400)]";
+import { INPUT } from "../AuthParts";
 
 /**
  * 인증 메일 재발송 폼(/verify 와 로그인 화면에서 씀).
  * 가입 여부가 드러나지 않도록 성공 문구는 계정 상태와 관계없이 같음
  */
-export default function ResendForm() {
+export default function ResendForm({ defaultIdentifier = "" }: { defaultIdentifier?: string }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     resendVerificationAction,
     null,
@@ -21,10 +19,11 @@ export default function ResendForm() {
     <form action={formAction} className="space-y-2.5">
       <input
         name="identifier"
+        defaultValue={defaultIdentifier}
         placeholder="example@hallym.ac.kr"
         required
         autoComplete="username"
-        className={inputCls}
+        className={INPUT}
       />
       {state?.error && (
         <p className="text-sm text-[var(--danger)] bg-[var(--danger-light)] px-3 py-2 rounded-[var(--radius-md)]">

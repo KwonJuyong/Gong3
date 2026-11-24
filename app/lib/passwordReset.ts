@@ -59,8 +59,8 @@ export async function requestPasswordReset(
   });
 
   if (!r.ok) {
-    // 발송에 실패했으면 토큰도 지움
-    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+    // 발송에 실패한 이번 토큰만 지움. 동시에 발급된 다른 요청의 링크는 유지
+    await prisma.passwordResetToken.deleteMany({ where: { tokenHash: hash(raw) } });
     // 설정 문제(키·발신 도메인)는 사용자에게 알림
     return { sent: false, configError: r.error };
   }
@@ -101,16 +101,25 @@ export async function consumeResetToken(raw: string, passwordHash: string): Prom
       data: { usedAt: new Date() },
     });
     if (swap.count !== 1) return false;
+    const target = await tx.user.findUnique({
+      where: { id: check.userId },
+      select: { emailVerifiedAt: true },
+    });
     await tx.user.update({
       where: { id: check.userId },
       data: {
         password: passwordHash,
+        // 메일로 받은 재설정 링크로 본인이 확인됐으므로 미인증 상태면 함께 인증 완료 처리함
+        ...(target?.emailVerifiedAt ? {} : { emailVerifiedAt: new Date() }),
         // 세션 세대를 올려 기존 세션을 모두 무효화함
         sessionEpoch: { increment: 1 },
       },
     });
-    // 같은 사용자의 다른 미사용 링크는 지움
+    // 같은 사용자의 다른 미사용 재설정·인증 링크는 지움
     await tx.passwordResetToken.deleteMany({ where: { userId: check.userId, usedAt: null } });
+    if (!target?.emailVerifiedAt) {
+      await tx.emailVerificationToken.deleteMany({ where: { userId: check.userId, usedAt: null } });
+    }
     return true;
   });
 

@@ -1,62 +1,48 @@
 "use client";
 
-import SubmitButton from "@/app/components/SubmitButton";
 import { useState } from "react";
-import { saveDraftAction } from "../actions";
+import { ui } from "@/app/components/ui";
+import ConfirmButton from "@/app/components/ConfirmButton";
+import SubmitButton from "@/app/components/SubmitButton";
+import { freezeVersionAction, saveReviewAction } from "../actions";
 
-export default function DraftEditor({
-  draft,
-  constructName,
-}: {
-  draft: {
-    id: string;
-    generated: string;
-    edited: string | null;
-    approved: boolean;
-    scaleType: string;
-  };
-  constructName: string;
+type Question = { id: string; label: string; text: string };
+
+export default function DraftEditor({ questions, serviceId, versionId, stamp }: {
+  questions: Question[]; serviceId: string; versionId: string; stamp: string;
 }) {
-  const [edited, setEdited] = useState(draft.edited ?? draft.generated);
-  const [approved, setApproved] = useState(draft.approved);
-
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<string | null>(null);
+  const dirty = questions.some(q => (edits[q.id] ?? q.text) !== q.text);
   return (
-    <form
-      action={saveDraftAction}
-      className="rounded-[var(--radius-md)] border border-[var(--gray-200)] p-4 space-y-2"
-    >
-      <input type="hidden" name="draftId" value={draft.id} />
-
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-[var(--foreground)]">{constructName}</span>
-        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-          {draft.scaleType === "LIKERT_5" ? "5점 동의척도" : draft.scaleType}
-        </span>
-      </div>
-
-      <p className="text-xs text-[var(--gray-500)]">자동 생성 원문: {draft.generated}</p>
-
-      <textarea
-        name="edited"
-        value={edited}
-        onChange={(e) => setEdited(e.target.value)}
-        rows={2}
-        className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--gray-200)] text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--gray-900)]/10"
-      />
-
-      <div className="flex items-center justify-between">
-        <label className="flex items-center gap-2 text-xs text-[var(--muted)] cursor-pointer">
-          <input
-            type="checkbox"
-            name="approved"
-            checked={approved}
-            onChange={(e) => setApproved(e.target.checked)}
-          />
-          확정(승인)
-        </label>
-        <SubmitButton className="px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-xs font-medium hover:bg-[var(--accent-dark)]">
-          저장
-        </SubmitButton>
+    <form action={saveReviewAction}>
+      <input type="hidden" name="serviceId" value={serviceId} />
+      <input type="hidden" name="versionId" value={versionId} />
+      <input type="hidden" name="stamp" value={stamp} />
+      <input type="hidden" name="allowUnapproved" value="on" />
+      <ol className="divide-y divide-[var(--gray-100)]">
+        {questions.map((q, index) => {
+          const value = edits[q.id] ?? q.text;
+          return <li key={q.id} className="py-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-xs text-[var(--muted)]">{index + 1}. {q.label}</span>
+              <button type="button" aria-expanded={editing === q.id} onClick={() => setEditing(editing === q.id ? null : q.id)} className="text-sm font-medium text-[var(--accent)]">{editing === q.id ? "접기" : "수정"}</button>
+            </div>
+            {editing === q.id ? (
+              <textarea autoFocus aria-label={q.label + " 문항 수정"} required rows={2} name={q.id} value={value}
+                onChange={e => setEdits({ ...edits, [q.id]: e.target.value })}
+                className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--gray-300)] p-3 text-[15px]" />
+            ) : <>
+              <p className="mt-1 whitespace-pre-wrap break-words text-[15px]">{value || "문항을 입력해 주세요."}</p>
+              <input type="hidden" name={q.id} value={value} />
+            </>}
+          </li>;
+        })}
+      </ol>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--gray-200)] pt-4">
+        <p className="text-sm text-[var(--muted)]">{dirty ? "수정한 문항을 함께 저장해 주세요." : "문항을 확정하면 모집 일정과 비용 처리를 정할 수 있어요."}</p>
+        {dirty ? <SubmitButton disabled={questions.some(q => !(edits[q.id] ?? q.text).trim())} className={ui.primary}>수정한 문항 저장</SubmitButton> :
+          <ConfirmButton formAction={freezeVersionAction} confirmLabel="문항 확정" message="화면에 표시된 모든 문항을 이 회차의 설문으로 확정할까요? 확정 후 문구를 수정할 수 없어요." className={ui.primary}>확정하고 다음: 모집·비용</ConfirmButton>}
       </div>
     </form>
   );

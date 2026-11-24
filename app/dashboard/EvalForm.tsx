@@ -5,16 +5,7 @@ import { submitResponseAction } from "./actions";
 import { questionKey, MAX_TEXT_ANSWER } from "../lib/projectQuestions";
 import { Likert5Field, Semantic7Field, ScaleField, StarRating, ImageUploadField } from "./EvalFields";
 import SubmitButton from "../components/SubmitButton";
-
-/**
- * 평가 응답 화면.
- *
- * - 상단에 응답한 문항 수를 표시해 비어 있는 문항을 알려줌
- * - 작성 중인 응답은 이 기기의 localStorage 에만 임시 저장하고, 제출하면 지움(공용 PC 대비).
- * - 빈 문항은 제출 시 문항 옆에 표시하고 첫 빈 문항으로 이동함
- * - 응답 키는 서버·리포트와 같은 questionKey() 로 만듦
- * - 필수 여부는 화면에서만 검사함(이미지·개선 의견은 선택).
- */
+import { ui } from "../components/ui";
 
 type AnyQ = {
   type: string;
@@ -31,6 +22,8 @@ type AnyQ = {
 };
 
 const draftKey = (projectId: string, userId: string) => `eval-draft:${projectId}:${userId}`;
+// 첫 응답 입력 시각. 임시 저장과 함께 지움
+const startKey = (key: string) => `${key}:t0`;
 
 function readDraft(key: string): Record<string, unknown> | null {
   try {
@@ -40,10 +33,27 @@ function readDraft(key: string): Record<string, unknown> | null {
     return null;
   }
 }
+function readStart(key: string): string | null {
+  try {
+    return window.localStorage.getItem(startKey(key));
+  } catch {
+    return null;
+  }
+}
+/** 서버 저장이 끝난 뒤 부름. 제출 직후 지우면 거절·통신 오류 때 작성 내용을 잃음 */
+export function clearEvalDraft(projectId: string, userId: string) {
+  writeDraft(draftKey(projectId, userId), null);
+}
+
 function writeDraft(key: string, v: Record<string, unknown> | null) {
   try {
-    if (v) window.localStorage.setItem(key, JSON.stringify(v));
-    else window.localStorage.removeItem(key);
+    if (v) {
+      window.localStorage.setItem(key, JSON.stringify(v));
+      if (!window.localStorage.getItem(startKey(key))) window.localStorage.setItem(startKey(key), String(Date.now()));
+    } else {
+      window.localStorage.removeItem(key);
+      window.localStorage.removeItem(startKey(key));
+    }
   } catch {
     /* 사생활 보호 모드 등: 임시 저장은 편의 기능이라 조용히 넘어감 */
   }
@@ -69,6 +79,41 @@ function isAnswered(q: AnyQ, v: unknown): boolean {
 }
 const isRequired = (q: AnyQ) => q.type !== "image";
 
+// 원저자 지침상 문항을 무작위 순서로 제시하는 검증도구(O'Brien et al., 2018, 부록 A)
+const SHUFFLED_INSTRUMENTS = ["UES_SF:"];
+
+/**
+ * 화면에 보일 문항 순서(원래 인덱스 배열). 응답 키는 itemKey 라 순서와 무관함
+ * 응답자마다 다르되 새로고침·서버 렌더에서는 같은 순서가 나오도록 평가·응답자로 시드를 만듦
+ */
+function displayOrder(questions: AnyQ[], seed: string): number[] {
+  let h = 2166136261;
+  for (const c of seed) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  const rand = () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507) + 0x6d2b79f5;
+    return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
+  };
+  const order: number[] = [];
+  let run: number[] = [];
+  const flush = () => {
+    for (let j = run.length - 1; j > 0; j--) {
+      const r = Math.floor(rand() * (j + 1));
+      [run[j], run[r]] = [run[r], run[j]];
+    }
+    order.push(...run);
+    run = [];
+  };
+  questions.forEach((q, i) => {
+    if (SHUFFLED_INSTRUMENTS.some((p) => q.itemKey?.startsWith(p))) run.push(i);
+    else {
+      flush();
+      order.push(i);
+    }
+  });
+  flush();
+  return order;
+}
+
 export default function EvalForm({
   project,
   userId,
@@ -90,6 +135,7 @@ export default function EvalForm({
 }) {
   const key = draftKey(project.id, userId);
   const formRef = useRef<HTMLFormElement>(null);
+  const elapsedRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<Record<string, unknown> | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [values, setValues] = useState<Record<string, unknown>>(prevAnswers);
@@ -111,7 +157,14 @@ export default function EvalForm({
 
   const initial = useMemo(() => ({ ...prevAnswers, ...(draft ?? {}) }), [prevAnswers, draft]);
   const keys = useMemo(() => questions.map((q, i) => questionKey(q as never, i)), [questions]);
-  const requiredIdx = useMemo(() => questions.map((q, i) => (isRequired(q) ? i : -1)).filter((i) => i >= 0), [questions]);
+  const order = useMemo(() => displayOrder(questions, `${project.id}:${userId}`), [questions, project.id, userId]);
+  // 화면 순서대로 둠. 빈 문항 안내가 화면에서 가장 위의 문항으로 이동함
+  const requiredIdx = useMemo(() => order.filter((i) => isRequired(questions[i])), [order, questions]);
+  const sectionHints = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const q of questions) if (q.section && q.sectionHint && !m.has(q.section)) m.set(q.section, q.sectionHint);
+    return m;
+  }, [questions]);
   const answeredCount = requiredIdx.filter((i) => isAnswered(questions[i], values[keys[i]])).length;
 
   const sync = useCallback(() => {
@@ -140,8 +193,9 @@ export default function EvalForm({
       el?.querySelector<HTMLElement>("input, textarea, select")?.focus({ preventScroll: true });
       return;
     }
-    // 공용 PC 에 응답을 남기지 않음
-    writeDraft(key, null);
+    // 폼 액션이 FormData 를 만들기 전에 채움
+    const t0 = Number(readStart(key));
+    if (elapsedRef.current && t0 > 0) elapsedRef.current.value = String(Math.max(0, Math.round((Date.now() - t0) / 1000)));
   }
 
   function clearDraft() {
@@ -159,7 +213,8 @@ export default function EvalForm({
   return (
     <>
       <h1 className="text-xl font-bold text-[var(--foreground)] mb-1">{project.title}</h1>
-      {project.location && <p className="text-sm text-[var(--muted)] mb-3">{project.location}</p>}
+      {/* 장소를 비우면 서버가 「미정」으로 저장함. 온라인 평가에서는 의미가 없어 숨김 */}
+      {project.location && project.location !== "미정" && <p className="text-sm text-[var(--muted)] mb-3">{project.location}</p>}
       {intro}
 
       {alreadyAnswered && (
@@ -199,14 +254,17 @@ export default function EvalForm({
         className="space-y-8"
       >
         <input type="hidden" name="projectId" value={project.id} />
+        <input ref={elapsedRef} type="hidden" name="elapsedSec" defaultValue="" />
 
-        {questions.map((q, i) => {
+        {order.map((i, pos) => {
+          const q = questions[i];
           const k = keys[i];
           const prev = initial[k];
           const prevArr = Array.isArray(prev) ? (prev as string[]) : prev != null ? [String(prev)] : [];
           // 구획이 바뀌는 첫 문항에만 제목을 그림(설문 원본 문항만 구획을 가짐).
-          const prevSection = i > 0 ? questions[i - 1]?.section : undefined;
+          const prevSection = pos > 0 ? questions[order[pos - 1]]?.section : undefined;
           const newSection = q.section && q.section !== prevSection ? q.section : null;
+          const hint = newSection ? sectionHints.get(newSection) : undefined;
           const err = missing.has(i);
           const name = `answer_${k}`;
           const num = Number(prev);
@@ -216,7 +274,7 @@ export default function EvalForm({
               {newSection && (
                 <div className="pt-3 pb-1.5 border-b border-[var(--gray-200)]">
                   <h2 className="text-base font-semibold text-[var(--foreground)]">{newSection}</h2>
-                  {q.sectionHint && <p className="text-sm text-[var(--muted)] mt-1 leading-relaxed">{q.sectionHint}</p>}
+                  {hint && <p className="text-sm text-[var(--muted)] mt-1 leading-relaxed">{hint}</p>}
                 </div>
               )}
               <fieldset
@@ -227,7 +285,7 @@ export default function EvalForm({
                 <legend className="w-full">
                   <span className="flex items-start gap-2 text-[15px] font-semibold text-[var(--foreground)] leading-relaxed">
                     <span className="w-6 h-6 shrink-0 bg-[var(--gray-100)] text-[var(--gray-700)] rounded-[var(--radius-sm)] flex items-center justify-center text-xs font-semibold">
-                      {i + 1}
+                      {pos + 1}
                     </span>
                     {q.type === "semantic7" ? (
                       <span className="flex-1 sr-only">
@@ -284,6 +342,7 @@ export default function EvalForm({
                 {q.type === "text" && (
                   <textarea
                     name={name}
+                    aria-label={`${pos + 1}번 문항 답변`}
                     defaultValue={prev != null ? String(prev) : ""}
                     rows={4}
                     maxLength={MAX_TEXT_ANSWER}
@@ -302,7 +361,7 @@ export default function EvalForm({
                   <input
                     name={`answer_text:${q.itemKey}`}
                     placeholder="개선 의견 (선택)"
-                    aria-label={`${i + 1}번 문항 개선 의견 (선택)`}
+                    aria-label={`${pos + 1}번 문항 개선 의견 (선택)`}
                     defaultValue={String(initial[`text:${q.itemKey}`] ?? "")}
                     maxLength={MAX_TEXT_ANSWER}
                     className="w-full px-3 py-2.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-200)] text-sm outline-none focus:border-[var(--accent)] transition-colors"
@@ -314,15 +373,15 @@ export default function EvalForm({
         })}
 
         <div className="pt-2">
+          <p className="text-xs text-[var(--muted)] mb-2">
+            보상이 있는 평가는 운영진이 응답을 검수한 뒤 지급해요.
+          </p>
           {missing.size > 0 && (
             <p className="text-sm text-[var(--danger)] mb-2" role="alert">
               응답하지 않은 문항이 {missing.size}개 있습니다. 표시된 문항을 확인해 주세요.
             </p>
           )}
-          <SubmitButton
-            pendingText="제출 중…"
-            className="w-full py-3 bg-[var(--accent)] text-white rounded-[var(--radius-md)] font-semibold text-sm hover:bg-[var(--accent-dark)] transition-colors"
-          >
+          <SubmitButton pendingText="제출 중…" className={`${ui.primary} w-full`}>
             {alreadyAnswered ? "고친 내용으로 다시 제출" : "제출하기"}
           </SubmitButton>
         </div>

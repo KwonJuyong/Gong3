@@ -5,7 +5,7 @@ import { LLM_LONG_TIMEOUT_MS, LLM_MAX_RETRIES } from "./limits";
 // Structured Outputs(json_schema)로 출력 필드를 constructId/questionText 로 제한함
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-export const PROMPT_VERSION = "adaptive-v1";
+export const PROMPT_VERSION = "adaptive-v2";
 export const ADAPTIVE_SCALE = "LIKERT_5"; // LLM 적응 문항의 고정 척도(5점 동의)
 
 let _client: OpenAI | null = null;
@@ -20,7 +20,7 @@ export function activeModel(): string {
   return MODEL;
 }
 
-export type GenConstruct = { id: string; name: string; description: string };
+export type GenConstruct = { id: string; name: string; description: string; evaluator: string };
 export type GenService = {
   name: string;
   preset: string | null;
@@ -40,7 +40,8 @@ const SYSTEM_PROMPT = [
   "- 5점 동의 척도('전혀 그렇지 않다'~'매우 그렇다')로 응답 가능한 평서문(진술문)일 것.",
   "- 한 문항에 하나의 개념만 담을 것(이중 질문 금지). 유도 질문·부정문 금지.",
   "- 해당 구성개념의 측정 대상을 벗어나지 말 것. 문구만 서비스 맥락에 맞게 조정.",
-  "- 서비스명을 자연스럽게 녹이되 과장·마케팅 표현은 쓰지 말 것.",
+  "- 학생 문항은 직접 써 본 학생이 관찰할 수 있는 말로 쓴다. 개발사 문항은 담당자가 확인할 수 있는 운영 사실로 쓴다.",
+  "- 서비스명과 평가 항목명을 기계적으로 반복하지 않는다. 기술 용어, 홍보 표현을 피하고 입력에 없는 기능을 가정하지 않는다.",
 ].join("\n");
 
 /**
@@ -85,7 +86,7 @@ export async function generateAdaptiveQuestions(
   if (constructs.length === 0) return [];
 
   const constructList = constructs
-    .map((c) => `- id="${c.id}" | ${c.name}: ${c.description}`)
+    .map((c) => `- id="${c.id}" | ${c.name} | 응답자: ${c.evaluator === "DEVELOPER" ? "개발사" : "학생"} | ${c.description}`)
     .join("\n");
 
   const resp = await client().chat.completions.create({
@@ -136,7 +137,11 @@ export async function generateAdaptiveQuestions(
 
   // 요청한 구성개념 id 만 받음
   const allowed = new Set(constructs.map((c) => c.id));
-  return (parsed.questions || [])
+  const questions = (parsed.questions || [])
     .filter((q) => allowed.has(q.constructId) && (q.questionText || "").trim())
     .map((q) => ({ constructId: q.constructId, questionText: q.questionText.trim() }));
+  if (questions.length !== constructs.length || new Set(questions.map(q => q.constructId)).size !== allowed.size) {
+    throw new Error("일부 평가 항목의 문항을 생성하지 못했습니다.");
+  }
+  return questions;
 }

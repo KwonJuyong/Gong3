@@ -1,10 +1,12 @@
 import SubmitButton from "@/app/components/SubmitButton";
+import { ui } from "@/app/components/ui";
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "../../../db";
 import { type SurveyBlock } from "../../../lib/surveyBlocks";
 import { legacySurveyWhere } from "../../../lib/approvals";
+import { scaleRange } from "../../../lib/projectQuestions";
 import { submitResponseAction } from "../actions";
 
 export const metadata = { title: "평가 응답" };
@@ -27,20 +29,24 @@ function Likert5({ name }: { name: string }) {
   );
 }
 
-function Semantic7({
+function ScaleRow({
   name,
   left,
   right,
+  min,
+  max,
 }: {
   name: string;
   left: string;
   right: string;
+  min: number;
+  max: number;
 }) {
   return (
     <div className="flex items-center gap-2 py-1.5">
       <span className="w-28 text-right text-xs text-[var(--foreground)] shrink-0">{left}</span>
-      <div className="flex gap-1">
-        {[1, 2, 3, 4, 5, 6, 7].map((v) => (
+      <div className="flex flex-wrap gap-1">
+        {Array.from({ length: max - min + 1 }, (_, i) => min + i).map((v) => (
           <label key={v} className="cursor-pointer">
             <input type="radio" name={name} value={v} required />
           </label>
@@ -122,25 +128,52 @@ export default async function TakeSurveyPage({
             </section>
           )}
 
-          {/* 검증도구 (UEQ 등) */}
-          {instruments.map((b) => (
-            <section key={b.constructId} className="bg-white rounded-[var(--radius-xl)] p-5">
-              <h3 className="text-sm font-semibold text-[var(--foreground)] mb-1">{b.constructName}</h3>
-              <p className="text-xs text-[var(--muted)] mb-3">
-                양쪽 표현 중 더 가깝다고 느끼는 쪽에 표시해주세요. (1~7)
-              </p>
-              <div className="divide-y divide-[var(--gray-200)]">
-                {b.items.map((it) => (
-                  <Semantic7
-                    key={it.itemKey}
-                    name={it.itemKey}
-                    left={it.leftLabel || it.text}
-                    right={it.rightLabel || ""}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
+          {/* 검증도구는 원래 척도 범위대로 그림(scaleRange 와 서버 검사 일치) */}
+          {instruments.map((b) => {
+            const { min, max } = scaleRange(b.scaleType);
+            return (
+              <section key={b.constructId} className="bg-white rounded-[var(--radius-xl)] p-5">
+                <h3 className="text-sm font-semibold text-[var(--foreground)] mb-1">{b.constructName}</h3>
+                <p className="text-xs text-[var(--muted)] mb-3">
+                  {b.scaleType === "SEMANTIC_7"
+                    ? "양쪽 표현 중 더 가깝다고 느끼는 쪽에 표시해주세요. (1~7)"
+                    : b.scaleType === "LIKERT_5"
+                      ? "각 문장에 얼마나 동의하시는지 골라주세요."
+                      : `각 문장이 어느 정도 해당하는지 골라주세요. (${min}~${max})`}
+                </p>
+                <div className="divide-y divide-[var(--gray-200)]">
+                  {b.items.map((it) =>
+                    b.scaleType === "SEMANTIC_7" ? (
+                      <ScaleRow
+                        key={it.itemKey}
+                        name={it.itemKey}
+                        left={it.leftLabel || it.text}
+                        right={it.rightLabel || ""}
+                        min={min}
+                        max={max}
+                      />
+                    ) : b.scaleType === "LIKERT_5" ? (
+                      <div key={it.itemKey} className="py-2">
+                        <p className="text-sm text-[var(--foreground)]">{it.text}</p>
+                        <Likert5 name={it.itemKey} />
+                      </div>
+                    ) : (
+                      <div key={it.itemKey} className="py-2">
+                        <p className="text-sm text-[var(--foreground)]">{it.text}</p>
+                        <ScaleRow
+                          name={it.itemKey}
+                          left={it.leftLabel || String(min)}
+                          right={it.rightLabel || String(max)}
+                          min={min}
+                          max={max}
+                        />
+                      </div>
+                    ),
+                  )}
+                </div>
+              </section>
+            );
+          })}
 
           {vignettes.length > 0 && (
             <section className="bg-white rounded-[var(--radius-xl)] p-5 space-y-5">
@@ -164,7 +197,7 @@ export default async function TakeSurveyPage({
             </section>
           )}
 
-          <SubmitButton className="w-full px-4 py-3 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-sm font-semibold hover:bg-[var(--accent-dark)]">
+          <SubmitButton className={`${ui.primary} w-full`}>
             제출하기
           </SubmitButton>
         </form>

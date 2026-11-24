@@ -38,7 +38,7 @@ export async function askDataAction(_prev: QueryState, formData: FormData): Prom
   if (!me || me.status !== "ACTIVE") redirect("/");
 
   const question = String(formData.get("question") || "");
-  // 질문마다 LLM 을 호출함. 도우미(sendAiMessage)와 한도를 함께 씀
+  // 질문마다 LLM 을 호출함. Evi(sendAiMessage)와 한도를 함께 씀
   const rl = checkLlmQuota(me);
   if (rl) return { ok: false, kind: "error", message: rl, question, at: Date.now() };
   const out = await runNaturalQuery({ id: me.id, name: me.name, role: me.role }, question);

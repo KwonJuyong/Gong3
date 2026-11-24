@@ -20,7 +20,7 @@ export type Attachment = {
 export type RoomSummary = {
   id: string;
   kind: RoomKind;
-  title: string; // 화면 표시명 (DM=상대명, GROUP=방이름, AI=AI 도우미)
+  title: string; // 화면 표시명 (DM=상대명, GROUP=방이름, AI=Evi)
   avatarLabel: string; // 아바타 이니셜/이모지
   memberCount: number;
   lastContent: string;
@@ -89,7 +89,7 @@ function roomTitle(
   title: string | null,
   others: { name: string }[],
 ): { title: string; avatarLabel: string } {
-  if (kind === "AI") return { title: title || "AI 도우미", avatarLabel: "AI" };
+  if (kind === "AI") return { title: "Evi", avatarLabel: "AI" };
   if (kind === "GROUP") {
     const t = title || others.map((o) => o.name).join(", ") || "그룹";
     return { title: t, avatarLabel: "그룹" };
@@ -224,7 +224,7 @@ export async function getRoom(
     content: m.content,
     attachments: parseAttachments(m.attachments),
     senderId: m.senderId,
-    senderName: m.senderId ? m.sender?.name || "알 수 없음" : "AI 도우미",
+    senderName: m.senderId ? m.sender?.name || "알 수 없음" : "Evi",
     isAI: m.senderId === null,
     mine: m.senderId === me.id,
     createdAt: m.createdAt.toISOString(),
@@ -368,7 +368,7 @@ export async function sendAiMessage(
     content: m.content,
     attachments: parseAttachments(m.attachments),
     senderId: m.senderId,
-    senderName: m.senderId ? me.name : "AI 도우미",
+    senderName: m.senderId ? me.name : "Evi",
     isAI: m.senderId === null,
     mine: m.senderId === me.id,
     createdAt: m.createdAt.toISOString(),
@@ -456,7 +456,7 @@ export async function createAiRoom(): Promise<string | null> {
   const conv = await prisma.conversation.create({
     data: {
       type: "AI",
-      title: "AI 도우미",
+      title: "Evi",
       createdById: me.id,
       members: { create: [{ userId: me.id }] },
     },

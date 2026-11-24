@@ -89,7 +89,7 @@ export default function MyRewardsPanel({
                 {profile.bankName} {maskAccount(profile.accountNumber)}
               </span>
               <span className="block text-[13px] text-[var(--muted)] truncate">
-                {profile.holderName ? `예금주 ${profile.holderName}` : "예금주 미입력"}
+                {profile.holderName ? `예금주 ${profile.holderName}` : "예금주 본인"}
                 {profile.hasRrn ? "" : " · 주민번호 미등록"}
               </span>
             </span>
@@ -109,7 +109,7 @@ export default function MyRewardsPanel({
         <details className="mt-3">
           <summary className="text-[13px] text-[var(--gray-600)] cursor-pointer">세금·영수증 안내</summary>
           <div className="text-[13px] text-[var(--muted)] mt-2 space-y-1.5 leading-relaxed">
-            {summary.taxTotal > 0 && <p>원천징수 누계 {won(summary.taxTotal)} — 받은 금액은 세금을 뺀 금액입니다.</p>}
+            {summary.taxTotal > 0 && <p>원천징수 누계 {won(summary.taxTotal)}. 받은 금액은 세금을 뺀 금액입니다.</p>}
             {/* 원천징수영수증은 지급명세서 제출 후 학생이 홈택스에서 직접 출력함 */}
             {summary.paid.count > 0 && (
               <p>

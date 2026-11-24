@@ -1,13 +1,8 @@
 "use client";
 
 import { useState } from "react";
-
-/**
- * 간이지급명세서(기타소득) 국세청 일괄등록 양식 내려받기.
- *
- * 주민번호가 없는 소득자는 가산세 대상이 되므로 먼저 점검(?check=1, 이름만 받음)하고
- * 그 뒤에 다운로드를 열기. 주민번호는 xlsx 다운로드에만 들어가고 AuditLog 에 남음
- */
+import { ui } from "@/app/components/ui";
+import { won } from "../../lib/money";
 
 interface CheckResult {
   year: number;
@@ -24,8 +19,6 @@ interface CheckResult {
   missingRrn: { name: string; grossAmount: number }[];
   ready: boolean;
 }
-
-import { won } from "../../lib/money";
 
 export default function SimpleStatementPanel({
   defaultYear,
@@ -109,7 +102,7 @@ export default function SimpleStatementPanel({
           onClick={() => {
             window.location.href = `/api/settlement/withholding/simple-statement?${qs}`;
           }}
-          className="px-3 py-1.5 text-xs font-medium bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)] disabled:opacity-40 disabled:cursor-not-allowed"
+          className={`${ui.primaryXs} disabled:cursor-not-allowed`}
         >
           엑셀 받기
         </button>

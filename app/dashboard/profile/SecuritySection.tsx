@@ -6,7 +6,7 @@ import { useActionState } from "react";
 import { updateProfileAction, logoutOtherDevicesAction } from "../../actions";
 import { Card, Field, Note, INPUT, BTN_PRIMARY, BTN_GHOST } from "./ui";
 
-type ActionState = { error: string | null; success: boolean } | null;
+import type { ActionState } from "@/app/db";
 
 /**
  * 보안: 학번·사번, 비밀번호, 로그인 기록, 다른 기기 로그아웃.
@@ -102,7 +102,7 @@ export default function SecuritySection({
         title={userType === "DEVELOPER" ? "로그인 ID" : `${idLabel} 변경`}
         desc={
           userType === "DEVELOPER"
-            ? "이메일이 곧 로그인 ID 입니다. 바꾸면 다음 로그인부터 새 주소로 접속합니다. 본인 확인을 위해 현재 비밀번호가 필요합니다."
+            ? "이메일이 곧 로그인 ID 입니다. 바꾸면 새 주소로 인증 메일이 가고, 인증을 마쳐야 다시 로그인할 수 있습니다. 본인 확인을 위해 현재 비밀번호가 필요합니다."
             : `${idLabel}는 로그인에 쓰이지 않습니다. 로그인 ID는 「기본 정보」 탭의 이메일입니다. 다만 이메일을 잃어버렸을 때 본인 확인에 쓰이므로 변경에 현재 비밀번호가 필요합니다.`
         }
       >
@@ -111,6 +111,7 @@ export default function SecuritySection({
             <Field label={idLabel}>
               <input
                 name={idField}
+                type={userType === "DEVELOPER" ? "email" : "text"}
                 defaultValue={studentId}
                 required
                 maxLength={userType === "STAFF" ? 8 : undefined}
@@ -131,7 +132,13 @@ export default function SecuritySection({
           </div>
 
           {idState?.error && <Note tone="danger">{idState.error}</Note>}
-          {idState?.success && <Note tone="success">{idLabel}가 저장되었습니다.</Note>}
+          {idState?.success && (
+            <Note tone="success">
+              {userType === "DEVELOPER"
+                ? "저장되었습니다. 새 주소로 보낸 인증 메일의 링크를 눌러 주세요."
+                : `${idLabel}가 저장되었습니다.`}
+            </Note>
+          )}
 
           <div className="flex justify-end">
             <SubmitButton type="submit" disabled={idPending} className={BTN_PRIMARY}>

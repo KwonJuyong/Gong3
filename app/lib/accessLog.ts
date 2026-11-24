@@ -2,18 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { prisma } from "../prisma";
 
-/**
- * 개인정보처리시스템 접속기록(개인정보의 안전성 확보조치 기준 제8조).
- *
- * 인증 이벤트(로그인·로그아웃·비밀번호 변경 등)와 다른 사람의 개인정보를 조회·출력한 경우만
- * 기록함. 관리자의 변경 작업은 AuditLog 에 따로 남음
- *
- * IP 는 clientIp() 로만 얻음. X-Forwarded-For 의 첫 값은 클라이언트가 임의로 넣을 수 있으므로
- * 프록시가 붙인 오른쪽 값을 씀
- * 기록에 실패해도 로그인·다운로드는 막지 않음
- */
-
-/** 앞단 신뢰 프록시 수. CDN 을 하나 더 두면 2 로 올림 */
+// X-Forwarded-For 스푸핑 방지를 위해 신뢰 프록시 홉 기준으로 오른쪽 값 사용
 const TRUSTED_PROXY_HOPS = 1;
 
 export function ipFromHeaders(h: Headers): string {
@@ -54,7 +43,6 @@ export const KIND_LABEL: Record<string, string> = {
 };
 export const ACTION_LABEL: Record<string, string> = { VIEW: "조회", EXPORT: "출력", UPDATE: "변경", DELETE: "삭제" };
 
-/** 없는 계정으로 시도한 입력값은 앞 2글자와 도메인만 남기고 가림 */
 export function maskAccount(v: string): string {
   const s = v.trim().slice(0, 120);
   const at = s.indexOf("@");
@@ -92,9 +80,6 @@ export async function logAccess(e: {
   }
 }
 
-/**
- * 개인정보 조회·출력을 기록함. 본인 정보를 본인이 보는 경우(subjectId === userId)는 남기지 않음
- */
 export async function logPersonalData(
   userId: string,
   action: AccessAction,
@@ -117,10 +102,6 @@ export async function logPersonalData(
 
 const SEEN_EVERY_MS = 5 * 60 * 1000;
 
-/**
- * 마지막 활동 시각·IP 를 5분에 한 번 기록함(getSessionUserId 가 호출).
- * 실패해도 세션 검증에 영향을 주지 않도록 무시함
- */
 export async function touchLastSeen(userId: string): Promise<void> {
   try {
     const cutoff = new Date(Date.now() - SEEN_EVERY_MS);
@@ -128,12 +109,10 @@ export async function touchLastSeen(userId: string): Promise<void> {
       where: { id: userId, OR: [{ lastSeenAt: null }, { lastSeenAt: { lt: cutoff } }] },
       data: { lastSeenAt: new Date(), lastSeenIp: await clientIp() },
     });
-  } catch {
-    /* 부가 기능 */
-  }
+  } catch {}
 }
 
-/** 보관기간. 고유식별정보를 처리하므로 2년 이상 보관해야 해서 25개월로 둠 */
+// 고유식별정보 처리 시스템 접속기록 법정 보관기간(2년 이상)
 export const RETENTION_MONTHS = 25;
 
 export async function purgeExpiredAccessLogs(): Promise<number> {
@@ -145,13 +124,6 @@ export async function purgeExpiredAccessLogs(): Promise<number> {
 
 export type Finding = { key: string; title: string; detail: string; rows: { at: Date; account: string; ip: string; note: string }[] };
 
-/**
- * 월 점검용 이상 징후.
- * 1. 같은 IP 에서 로그인 실패 10회 이상
- * 2. 관리자 계정이 처음 보는 IP 에서 로그인
- * 3. 한 사람이 하루에 개인정보 파일을 5회 이상 출력
- * 4. 0~6시(KST) 개인정보 조회·출력
- */
 export async function findAnomalies(from: Date, to: Date): Promise<Finding[]> {
   const logs = await prisma.accessLog.findMany({
     where: { createdAt: { gte: from, lt: to } },

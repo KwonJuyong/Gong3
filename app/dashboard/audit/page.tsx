@@ -6,7 +6,7 @@ import AuditTable, { type AuditRow } from "./AuditTable";
 export const metadata = { title: "조회 감사 로그" };
 
 /**
- * AI 도우미 질의 감사 로그(ADMIN 전용). 누가 무엇을 조회했는지 확인함
+ * Evi 질의 감사 로그(ADMIN 전용). 누가 무엇을 조회했는지 확인함
  * 질의 원문은 저장 전에 redactQuery() 로 민감정보를 지우므로 화면에서 다시 가리지 않음
  */
 export default async function AuditPage({

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { isPublicAddress } from "../app/lib/publicAddress.ts";
 import { readUploadForm } from "../app/lib/uploadForm.ts";
 import { consumeQuota } from "../app/rate-limit.ts";
+import { passwordProblem } from "../app/lib/password.ts";
 
 test("내부·예약 주소와 IPv6 우회 차단", () => {
   for (const address of [
@@ -64,4 +65,16 @@ test("본문 한도 경계값 허용", async () => {
   assert.ok(!("error" in result));
   assert.equal(result.bytes, body.length);
   assert.equal((await readUploadForm(request(body + "x", headers), 1024)).status, 413);
+});
+
+test("흔하거나 계정 정보에서 나온 비밀번호 거절", () => {
+  for (const pw of ["1234567", "12345678", "Password1", "qwer1234!", "aaaaaaaa", "abababab", "20240001", "20240001!", "hong.gildong", "evalia1234"]) {
+    assert.notEqual(passwordProblem(pw, ["20240001", "hong.gildong@hallym.ac.kr", "홍길동"]), null, pw);
+  }
+  for (const pw of ["봄날 오후 연필 기차", "correct horse battery", "20240001seoul", "abcdefgh".repeat(9)]) {
+    assert.equal(passwordProblem(pw, ["20240001", "hong.gildong@hallym.ac.kr"]), null, pw);
+  }
+  assert.notEqual(passwordProblem("가".repeat(25)), null);
+  assert.match(passwordProblem("홍길동2024!!", ["20240001", "a@b.com", "홍길동"]), /학번·이메일·이름/);
+  assert.doesNotMatch(passwordProblem("password"), /학번/);
 });

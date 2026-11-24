@@ -1,6 +1,7 @@
 "use client";
 
 import SubmitButton from "@/app/components/SubmitButton";
+import { ui } from "@/app/components/ui";
 import { uploadSensitiveImage } from "@/app/lib/uploadSensitive";
 
 import { useState } from "react";
@@ -59,7 +60,7 @@ export default function DirectorSignForm({
           </div>
         )}
         <div className="space-y-1.5">
-          <label className="inline-flex cursor-pointer items-center px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-xs font-medium hover:bg-[var(--accent-dark)]">
+          <label className={`${ui.primaryXs} cursor-pointer`}>
             파일 선택
             <input
               type="file"

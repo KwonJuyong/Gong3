@@ -1,16 +1,14 @@
 import SubmitButton from "@/app/components/SubmitButton";
+import { ui } from "@/app/components/ui";
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { redirect } from "next/navigation";
 import { prisma } from "../../db";
+import { won } from "../../lib/money";
 import CostNav from "./CostNav";
 import { saveBudget } from "./actions";
 import { getCostSetting, BUDGET_KEY } from "./settings";
 
 export const metadata = { title: "비용 관리" };
-
-function won(n: number) {
-  return "₩" + n.toLocaleString("ko-KR");
-}
 
 export default async function CostDashboardPage() {
   const userId = await getSessionUserId();
@@ -82,7 +80,7 @@ export default async function CostDashboardPage() {
                 placeholder="예산 입력"
                 className="flex-1 min-w-0 px-2 py-1 text-sm border border-[var(--gray-200)] rounded-[var(--radius-md)]"
               />
-              <SubmitButton className="px-3 py-1 text-xs font-medium bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)]">
+              <SubmitButton className={ui.primaryXs}>
                 저장
               </SubmitButton>
             </form>
@@ -131,7 +129,7 @@ export default async function CostDashboardPage() {
                     <tr key={r.id} className="border-t border-[var(--gray-100)] hover:bg-[var(--gray-50)]">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <span className="w-7 h-7 rounded-full bg-[var(--accent)] text-white text-xs flex items-center justify-center shrink-0">
+                          <span className={ui.avatarSm}>
                             {r.name.slice(0, 1)}
                           </span>
                           <div>

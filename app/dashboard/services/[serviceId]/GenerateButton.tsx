@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { ui } from "@/app/components/ui";
 import SubmitButton from "@/app/components/SubmitButton";
 import { generateDraftsAction } from "../actions";
 
-/** 첫 문항 생성 버튼. 서비스를 막 등록하고 들어온 경우 누르지 않아도 바로 시작함 */
-export default function GenerateButton({ serviceId, auto }: { serviceId: string; auto: boolean }) {
+/** 문항 생성 버튼. 서비스를 막 등록하고 들어온 경우 누르지 않아도 바로 시작함. 확정한 문항이 있으면 새 회차용이라 보조 버튼 */
+export default function GenerateButton({ serviceId, auto, secondary }: { serviceId: string; auto: boolean; secondary?: boolean }) {
   const formRef = useRef<HTMLFormElement>(null);
   const started = useRef(false);
 
@@ -20,9 +21,9 @@ export default function GenerateButton({ serviceId, auto }: { serviceId: string;
       <input type="hidden" name="serviceId" value={serviceId} />
       <SubmitButton
         pendingText="문항 만드는 중… 1분 정도 걸려요"
-        className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-dark)] whitespace-nowrap"
+        className={secondary ? ui.secondary : ui.primary}
       >
-        평가문항 생성
+        {secondary ? "새 회차 문항 만들기" : "평가문항 생성"}
       </SubmitButton>
     </form>
   );

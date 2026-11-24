@@ -1,13 +1,9 @@
 "use client";
 
 import SubmitButton from "@/app/components/SubmitButton";
+import { ui } from "@/app/components/ui";
 import { Fragment, useMemo, useState } from "react";
 import { saveSettlementProfileForUserAction } from "../settlementProfileActions";
-
-/**
- * 평가단 정산 정보 현황. 계좌가 없어 지급에서 빠질 사람을 확인하고 입력을 요청함
- * 대리입력도 가능하지만 예외용임
- */
 
 export interface ProfileRow {
   userId: string;
@@ -42,9 +38,7 @@ const BANKS = [
 const INPUT =
   "w-full px-2.5 py-1.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-200)] text-sm outline-none focus:border-[var(--accent)] transition-colors placeholder:text-[var(--gray-400)]";
 
-/** 정산 화면 버튼과 같은 스타일 */
-const BTN_PRIMARY =
-  "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)] transition-opacity";
+const BTN_PRIMARY = `${ui.primaryXs} gap-1.5`;
 const BTN_GHOST =
   "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border border-[var(--gray-300)] text-[var(--muted)] rounded-[var(--radius-md)] hover:bg-[var(--gray-50)] transition-colors";
 

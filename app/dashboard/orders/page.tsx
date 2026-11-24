@@ -41,7 +41,7 @@ export default async function OrdersPage({
   // 사업자등록번호가 없으면 프로필의 기업 정보 탭으로 보냄(프로필이 읽는 ?error= 사용).
   if (!(await canTransact(me))) {
     redirect(
-      `/dashboard/profile?tab=biz&error=${encodeURIComponent(
+      `/dashboard/profile?tab=biz&from=orders&error=${encodeURIComponent(
         "의뢰·견적서를 이용하려면 사업자등록번호를 먼저 등록해 주세요.",
       )}`,
     );
@@ -85,7 +85,7 @@ export default async function OrdersPage({
         <div>
           <h1 className="text-xl font-bold text-[var(--foreground)]">평가 의뢰</h1>
           <p className="text-sm text-[var(--muted)] mt-1">
-            모집 인원과 보상을 정해 의뢰하면, 결제 확인 후 모집이 시작됩니다.
+            모집 인원과 보상을 정해 의뢰하고 입금이 확인되면 학생 참여 보상이 생겨요. 평가 공개는 관리자 승인으로 따로 진행돼요.
           </p>
         </div>
         {q.error && (
@@ -181,7 +181,7 @@ export default async function OrdersPage({
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm whitespace-nowrap">
                 <thead>
                   <tr className="text-left text-xs text-[var(--gray-500)] bg-[var(--gray-50)]">
                     <th className="px-4 py-3 font-semibold">주문번호</th>

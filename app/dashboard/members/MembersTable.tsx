@@ -4,6 +4,7 @@ import SubmitButton from "@/app/components/SubmitButton";
 import { confirmSubmit } from "@/app/components/feedback";
 import ConfirmButton from "@/app/components/ConfirmButton";
 import ReauthField from "@/app/components/ReauthField";
+import { ui } from "@/app/components/ui";
 import { useMemo, useState, useActionState } from "react";
 import Link from "next/link";
 import { csvCell } from "@/app/lib/csv";
@@ -141,7 +142,9 @@ export default function MembersTable({ rows, meId }: { rows: MemberRow[]; meId: 
         </div>
       </div>
 
-      {filter === "noemail" && <ClaimLinkPanel rows={filtered} />}
+      {(filter === "noemail" || filter === "unverified") && (
+        <ClaimLinkPanel rows={filtered.filter((r) => r.status === "ACTIVE")} />
+      )}
 
       {filtered.length === 0 ? (
         <p className="text-sm text-[var(--gray-500)] text-center py-12">검색 결과가 없습니다.</p>
@@ -294,7 +297,7 @@ function MemberRowView({
                   이메일을 바꾸면 <strong>인증이 해제</strong>되어 본인이 다시 인증해야
                   로그인됩니다. 오타 정정도 마찬가지입니다.
                 </p>
-                <SubmitButton className="px-3 py-2 text-xs font-semibold rounded-[var(--radius-md)] bg-[var(--accent)] text-white hover:opacity-90">
+                <SubmitButton className={ui.primaryXs}>
                   저장
                 </SubmitButton>
               </form>
@@ -374,7 +377,7 @@ function MemberRowView({
                     </div>
                   )}
                   <p className="text-xs text-[var(--muted)] mt-1.5 leading-relaxed">
-                    탈퇴해도 <strong>기록과 개인정보는 남습니다</strong> — 로그인만 막힙니다.
+                    탈퇴해도 <strong>기록과 개인정보는 남고</strong> 로그인만 막힙니다.
                     보상·지급 기록은 원천징수 신고 근거라 지울 수 없습니다.
                   </p>
                 </div>
@@ -525,7 +528,7 @@ function ClaimLinkPanel({ rows }: { rows: MemberRow[] }) {
     <div className="mx-5 mb-5 p-4 rounded-[var(--radius-md)] bg-[var(--surface)] border border-[var(--gray-200)]">
       <p className="text-sm font-semibold text-[var(--foreground)] mb-1">계정 인계 링크</p>
       <p className="text-[12px] text-[var(--gray-600)] leading-relaxed mb-3">
-        이메일이 없는 계정은 로그인할 방법이 없습니다. 링크를 발급해 문자·메신저로 보내면,
+        이메일이 없거나 미인증 상태인 계정은 로그인할 수 없습니다. 링크를 발급해 문자·메신저로 보내면,
         본인이 링크 한 번으로 이메일과 새 비밀번호를 정하고 바로 들어옵니다.
         <br />
         <span className="text-[var(--gray-500)]">
@@ -535,10 +538,7 @@ function ClaimLinkPanel({ rows }: { rows: MemberRow[] }) {
 
       <form action={formAction}>
         <input type="hidden" name="userIds" value={rows.map((r) => r.id).join(",")} />
-        <button
-          disabled={pending || rows.length === 0}
-          className="px-3.5 py-2 text-xs font-semibold rounded-[var(--radius-md)] bg-[var(--accent)] text-white hover:bg-[var(--accent-dark)] disabled:opacity-50 transition-colors"
-        >
+        <button disabled={pending || rows.length === 0} className={ui.primaryXs}>
           {pending ? "발급 중…" : `이 목록 ${rows.length}명에게 링크 발급`}
         </button>
       </form>

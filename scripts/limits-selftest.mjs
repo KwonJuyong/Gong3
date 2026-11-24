@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(root);
 
-const { checkRateLimit, consumeQuota } = await import("../app/rate-limit.ts");
+const { checkRateLimit, refundRateLimit, consumeQuota } = await import("../app/rate-limit.ts");
 const L = await import("../app/lib/limits.ts");
 const { toAgentTurn, attachmentTurnIndexes } = await import("../app/lib/chatAttachments.ts");
 
@@ -38,6 +38,16 @@ t("L-02", "한도를 넘으면 안내 문구", typeof checkRateLimit("t:a", 3, 1
   Date.now = () => real() + 2000;
   t("L-03", "시간 창이 지나면 초기화", checkRateLimit("t:b", 1, 1000) === null);
   Date.now = real;
+}
+{
+  // 공용 IP 에서 성공한 시도는 한도에서 빠져 다음 사람을 막지 않음
+  for (let i = 0; i < 10; i++) {
+    checkRateLimit("t:ip", 3, 1000);
+    refundRateLimit("t:ip");
+  }
+  t("L-28", "성공 시도 환급 후 통과", checkRateLimit("t:ip", 3, 1000) === null);
+  times(3, () => checkRateLimit("t:ip", 3, 1000));
+  t("L-29", "실패만 쌓이면 차단", typeof checkRateLimit("t:ip", 3, 1000) === "string");
 }
 {
   const [max] = L.LIMIT_RULES.message;

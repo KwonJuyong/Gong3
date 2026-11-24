@@ -10,7 +10,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
 
-const ROOTS = ["app", "scripts", "prisma", "middleware.ts"];
+const ROOTS = ["app", "scripts", "prisma", "proxy.ts"];
 const SKIP_DIRS = new Set(["node_modules", "migrations", "templates"]);
 
 // 실명 원본 데이터라 문구를 고치지 않음
@@ -49,7 +49,15 @@ const REASON_WORDS = /[다요함음]\.?$|않|금지|필수|때문|\(.*\)$|eslint
 const MAX_ANY = 0;
 /** 이 줄 수를 넘는 새 파일 금지. 아래 파일은 분리 전까지 지금 크기를 넘기지 않음 */
 const MAX_LINES = 900;
-const OVERSIZED = { "app/dashboard/DashboardView.tsx": 2200, "app/page.tsx": 950 };
+/**
+ * 손으로 짠 주 버튼(남색 바탕+흰 글자 클래스 직접 작성). 새 버튼은 app/components/ui.ts 의 ui.primary 등 사용.
+ * 앱 전체는 지금 개수를 넘기지 않고(낮추기만), 평가 만들기 화면은 0개 유지
+ */
+const RAW_BUTTON = /bg-\[var\(--accent\)\][^"'`]*text-white|text-white[^"'`]*bg-\[var\(--accent\)\]/g;
+const MAX_RAW_BUTTONS = 24;
+const UI_STRICT = [/^app\/dashboard\/services\/(?!CreateShell)/, /^app\/dashboard\/accompany\/(new|RecruitForm|\[projectId\]\/recruit)/, /^app\/dashboard\/FundingFields/];
+let rawButtons = 0;
+const OVERSIZED = {};
 
 const problems = [];
 const report = (file, line, msg) => problems.push(`${file}:${line}  ${msg}`);
@@ -112,6 +120,9 @@ function check(file) {
   })(sf);
 
   if (file.endsWith(".tsx")) {
+    const raw = src.match(RAW_BUTTON)?.length ?? 0;
+    rawButtons += raw;
+    if (raw && UI_STRICT.some((r) => r.test(file))) report(file, 1, `손으로 짠 버튼 ${raw}개. 평가 만들기 화면은 ui.primary·ui.secondary 등 공용 토큰만 사용`);
     src.split("\n").forEach((l, i) => {
       const m = l.match(NOUN_JSX_COMMENT);
       if (m && !REASON_WORDS.test(m[1])) report(file, i + 1, `이름만 적은 JSX 주석: ${m[1]}`);
@@ -124,6 +135,7 @@ const files = ROOTS.flatMap((r) => collect(r, [])).filter((f) => !SKIP_FILES.has
 let anyTotal = 0;
 for (const f of files) anyTotal += check(f);
 if (anyTotal > MAX_ANY) problems.push(`any 타입 ${anyTotal}개(상한 ${MAX_ANY})`);
+if (rawButtons > MAX_RAW_BUTTONS) problems.push(`손으로 짠 버튼 ${rawButtons}개(상한 ${MAX_RAW_BUTTONS}). 새 버튼은 app/components/ui.ts 의 공용 토큰 사용`);
 
 if (problems.length > 0) {
   console.error(problems.join("\n"));

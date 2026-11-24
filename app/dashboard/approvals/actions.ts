@@ -55,6 +55,7 @@ export async function approveProjectAction(formData: FormData) {
     title: project.title,
     approverId: me.id,
     creatorId: project.creatorId,
+    link: `/dashboard?view=detail&p=${project.id}`,
   });
 
   revalidatePath(PATH);
@@ -85,6 +86,7 @@ export async function rejectProjectAction(formData: FormData) {
     reason,
     approverId: me.id,
     creatorId: project.creatorId,
+    link: `/dashboard?view=detail&p=${project.id}`,
   });
 
   revalidatePath(PATH);
@@ -137,6 +139,9 @@ export async function linkOrderToProjectAction(formData: FormData) {
     include: { order: { select: { id: true } } },
   });
   if (!project || project.order) redirect(`${PATH}?already=1`);
+  // 다른 기업·서비스의 의뢰를 붙이면 그 기업이 낸 대금으로 이 평가의 보상이 생기므로 차단
+  const order = await prisma.order.findUnique({ where: { id: orderId }, select: { serviceId: true, buyerId: true } });
+  if (!order || (order.serviceId !== project.serviceId && order.buyerId !== project.creatorId)) redirect(`${PATH}?mismatch=1`);
 
   const linked = await prisma.order.updateMany({
     where: { id: orderId, projectId: null },

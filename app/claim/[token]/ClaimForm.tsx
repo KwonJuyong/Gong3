@@ -1,27 +1,19 @@
 "use client";
 
 import SubmitButton from "@/app/components/SubmitButton";
-import { useActionState } from "react";
+import { useFormSubmit } from "@/app/components/useFormSubmit";
+import { BTN_PRIMARY, INPUT, LABEL } from "@/app/AuthParts";
 import { claimAccountAction } from "../actions";
-import { ActionState } from "../../db";
 
-/**
- * 계정 인계 폼. 인증 메일을 보내지 않으므로 오타를 막으려고 이메일을 두 번 받음
- * 서버 액션은 URL 을 볼 수 없어 token 을 hidden 으로 보냄
- */
 export default function ClaimForm({ token }: { token: string }) {
-  const [state, formAction] = useActionState<ActionState, FormData>(claimAccountAction, null);
-
-  const inputCls =
-    "w-full px-3.5 py-2.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors placeholder:text-[var(--gray-400)]";
-  const labelCls = "block text-xs font-medium text-[var(--gray-700)] mb-1.5";
+  const [state, form, pending] = useFormSubmit(claimAccountAction);
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form {...form} className="space-y-3">
       <input type="hidden" name="token" value={token} />
 
       <div>
-        <label htmlFor="claim-email" className={labelCls}>
+        <label htmlFor="claim-email" className={LABEL}>
           이메일 <span className="text-[var(--danger)]">*</span>
         </label>
         <p className="text-xs text-[var(--gray-500)] mb-1.5">
@@ -34,12 +26,12 @@ export default function ClaimForm({ token }: { token: string }) {
           required
           autoComplete="email"
           placeholder="example@hallym.ac.kr"
-          className={inputCls}
+          className={INPUT}
         />
       </div>
 
       <div>
-        <label htmlFor="claim-email-confirm" className={labelCls}>
+        <label htmlFor="claim-email-confirm" className={LABEL}>
           이메일 확인 <span className="text-[var(--danger)]">*</span>
         </label>
         <input
@@ -49,12 +41,12 @@ export default function ClaimForm({ token }: { token: string }) {
           required
           autoComplete="email"
           placeholder="한 번 더 입력해 주세요"
-          className={inputCls}
+          className={INPUT}
         />
       </div>
 
       <div className="pt-1">
-        <label htmlFor="claim-pw" className={labelCls}>
+        <label htmlFor="claim-pw" className={LABEL}>
           새 비밀번호 <span className="text-[var(--danger)]">*</span>
         </label>
         <p className="text-xs text-[var(--gray-500)] mb-1.5">
@@ -68,12 +60,12 @@ export default function ClaimForm({ token }: { token: string }) {
           minLength={8}
           autoComplete="new-password"
           placeholder="새 비밀번호"
-          className={inputCls}
+          className={INPUT}
         />
       </div>
 
       <div>
-        <label htmlFor="claim-pw-confirm" className={labelCls}>
+        <label htmlFor="claim-pw-confirm" className={LABEL}>
           비밀번호 확인 <span className="text-[var(--danger)]">*</span>
         </label>
         <input
@@ -84,7 +76,7 @@ export default function ClaimForm({ token }: { token: string }) {
           minLength={8}
           autoComplete="new-password"
           placeholder="한 번 더 입력해 주세요"
-          className={inputCls}
+          className={INPUT}
         />
       </div>
 
@@ -94,7 +86,7 @@ export default function ClaimForm({ token }: { token: string }) {
         </p>
       )}
 
-      <SubmitButton className="w-full py-2.5 bg-[var(--accent)] text-white rounded-[var(--radius-md)] font-semibold text-sm hover:bg-[var(--accent-dark)] active:scale-[0.98] transition-all mt-2">
+      <SubmitButton pending={pending} className={`${BTN_PRIMARY} mt-2`}>
         등록하고 시작하기
       </SubmitButton>
     </form>

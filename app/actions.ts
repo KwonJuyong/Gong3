@@ -14,12 +14,12 @@ import {
   isMailReady,
 } from "./lib/emailVerification";
 import { createNotifications } from "./lib/notify";
-import { isKnownMajor } from "./lib/majors";
-import { EMAIL_UNVERIFIED_ERROR, LEGACY_ID_ERROR } from "./lib/authMessages";
-import { checkRateLimit } from "./rate-limit";
+import { EMAIL_UNVERIFIED_ERROR, LEGACY_ID_ERROR, LOGIN_FAILED_ERROR } from "./lib/authMessages";
+import { checkRateLimit, refundRateLimit } from "./rate-limit";
 import { checkLimit } from "./lib/limits";
 import { createDmRoom, sendMessage } from "./dashboard/messenger/actions";
 import { clientIp, logAccess, maskAccount } from "./lib/accessLog";
+import { passwordProblem } from "./lib/password";
 
 const getClientIP = clientIp;
 
@@ -28,7 +28,6 @@ const stripPhone = (v: string | null) => v?.replace(/\D/g, "") || null;
 // 없는 계정에도 bcrypt 비교를 한 번 해서 응답 시간으로 계정 존재가 드러나지 않게 함
 const DUMMY_HASH = bcrypt.hashSync("dummy-password-for-timing", 10);
 
-/** 인증 **/
 export async function loginAction(
   prevState: ActionState,
   formData: FormData
@@ -69,8 +68,10 @@ export async function loginAction(
       kind: "LOGIN_FAIL",
       result: user ? "비밀번호 불일치" : "없는 계정",
     });
-    return { error: "이메일 또는 비밀번호가 틀렸습니다.", success: false };
+    return { error: LOGIN_FAILED_ERROR, success: false };
   }
+  // IP 한도는 실패만 셈. 학교 공용 IP 에서 여러 학생이 연달아 로그인해도 막히지 않음
+  refundRateLimit(`login:${ip}`);
   const account = user.email || user.studentId;
 
   // 인증 안 된 주소로는 재설정 메일이 나가므로 미인증 계정은 막음
@@ -128,11 +129,17 @@ export async function migrateToEmailLoginAction(
     return { error: "두 이메일이 서로 다릅니다. 다시 확인해 주세요.", success: false };
   }
 
+  // IP 를 바꿔 가며 한 학번을 두드리는 경우. 로그인의 login-id 와 같은 기준
+  const idMsg = checkRateLimit(`migrate-id:${legacyId.toLowerCase()}`, 20, 15 * 60 * 1000);
+  if (idMsg) return { error: idMsg, success: false };
+
   const user = await prisma.user.findUnique({ where: { studentId: legacyId } });
-  // 학번 존재 여부가 드러나지 않도록 두 경우를 구분하지 않음
-  if (!user || !(await bcrypt.compare(password, user.password))) {
+  // 학번 존재 여부가 드러나지 않도록 두 경우를 구분하지 않고, 없는 학번도 bcrypt 비교를 거침(응답 시간)
+  const passwordOk = await bcrypt.compare(password, user?.password ?? DUMMY_HASH);
+  if (!user || !passwordOk) {
     return { error: "학번·사번 또는 비밀번호가 틀렸습니다.", success: false };
   }
+  refundRateLimit(`migrate:${ip}`);
 
   if (user.status === "WITHDRAWN") {
     return { error: "탈퇴 처리된 계정입니다. 관리자에게 문의해 주세요.", success: false };
@@ -168,10 +175,10 @@ export async function migrateToEmailLoginAction(
   const prevVerifiedAt = user.emailVerifiedAt;
 
   try {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { email, emailVerifiedAt: null },
-    });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: user.id }, data: { email, emailVerifiedAt: null } }),
+      prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } }),
+    ]);
   } catch {
     return { error: "저장 중 오류가 발생했습니다. 다시 시도해주세요.", success: false };
   }
@@ -241,7 +248,7 @@ export async function registerAction(
   formData: FormData
 ): Promise<ActionState> {
   const ip = await getClientIP();
-  const rlMsg = checkRateLimit(`register:${ip}`, 5, 30 * 60 * 1000);
+  const rlMsg = checkRateLimit(`register:${ip}`, 30, 30 * 60 * 1000);
   if (rlMsg) return { error: rlMsg, success: false };
 
   const userType = (formData.get("userType") as string) || "STUDENT";
@@ -250,12 +257,13 @@ export async function registerAction(
   const phone = stripPhone(((formData.get("phone") as string) || "").trim());
   let email: string | null = ((formData.get("email") as string) || "").trim() || null;
 
-  if (!name || !password) {
-    return { error: "이름과 비밀번호는 필수입니다.", success: false };
+  // 화면의 체크 상태와 별개로 서버에서도 확인함(스크립트 오류·직접 요청으로 동의 없이 가입 방지)
+  if (formData.get("privacyConsent") !== "1") {
+    return { error: "개인정보 수집 및 이용에 동의해 주세요.", success: false };
   }
 
-  if (password.length < 8) {
-    return { error: "비밀번호는 8자 이상이어야 합니다.", success: false };
+  if (!name || !password) {
+    return { error: "이름과 비밀번호는 필수입니다.", success: false };
   }
 
   let studentId: string;
@@ -278,7 +286,7 @@ export async function registerAction(
     if (!employeeId) return { error: "사번은 필수입니다.", success: false };
     if (employeeId.length > 8) return { error: "사번은 최대 8자리입니다.", success: false };
     if (!/^[a-zA-Z0-9]+$/.test(employeeId)) return { error: "사번은 영문과 숫자만 가능합니다.", success: false };
-    if (!isKnownMajor(major)) return { error: "소속을 목록에서 선택해 주세요.", success: false };
+    if (!major) return { error: "소속을 입력해 주세요.", success: false };
     studentId = employeeId;
     role = "DEVELOPER";
   } else {
@@ -289,7 +297,7 @@ export async function registerAction(
     if (studentId.includes("@")) {
       return { error: "학번에는 @ 를 쓸 수 없습니다.", success: false };
     }
-    if (!isKnownMajor(major)) return { error: "전공을 목록에서 선택해 주세요.", success: false };
+    if (!major) return { error: "전공을 입력해 주세요.", success: false };
     role = "USER";
   }
 
@@ -298,6 +306,8 @@ export async function registerAction(
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "이메일 형식이 올바르지 않습니다.", success: false };
   }
+  const pwMsg = passwordProblem(password, [studentId, email, name]);
+  if (pwMsg) return { error: pwMsg, success: false };
 
   const duplicateErrors: string[] = [];
 
@@ -320,7 +330,10 @@ export async function registerAction(
   if (existingByEmail && !duplicateErrors.includes("이메일(ID)")) duplicateErrors.push("이메일");
 
   if (duplicateErrors.length > 0) {
-    return { error: `이미 사용 중인 항목: ${duplicateErrors.join(", ")}`, success: false };
+    return {
+      error: `이미 사용 중인 항목: ${duplicateErrors.join(", ")}. 예전에 가입했다면 로그인하거나 「로그인이 안 되시나요?」에서 비밀번호를 재설정해 주세요.`,
+      success: false,
+    };
   }
 
   // 인증 메일을 보낼 수 없으면 계정을 만들지 않음
@@ -358,7 +371,7 @@ export async function resendVerificationAction(
   formData: FormData
 ): Promise<ActionState> {
   const ip = await getClientIP();
-  const rlMsg = checkRateLimit(`verify-resend:${ip}`, 5, 30 * 60 * 1000);
+  const rlMsg = checkRateLimit(`verify-resend:${ip}`, 15, 30 * 60 * 1000);
   if (rlMsg) return { error: rlMsg, success: false };
 
   const identifier = ((formData.get("identifier") as string) || "").trim();
@@ -384,7 +397,7 @@ export async function requestPasswordResetAction(
   formData: FormData
 ): Promise<ActionState> {
   const ip = await getClientIP();
-  const rlMsg = checkRateLimit(`reset:${ip}`, 5, 30 * 60 * 1000);
+  const rlMsg = checkRateLimit(`reset:${ip}`, 15, 30 * 60 * 1000);
   if (rlMsg) return { error: rlMsg, success: false };
 
   const identifier = ((formData.get("identifier") as string) || "").trim();
@@ -418,13 +431,10 @@ export async function completePasswordResetAction(
 
   const token = ((formData.get("token") as string) || "").trim();
   const newPassword = (formData.get("newPassword") as string) || "";
-  const confirm = (formData.get("confirmPassword") as string) || "";
 
   if (!token) return { error: "재설정 링크가 올바르지 않습니다.", success: false };
-  if (newPassword.length < 8)
-    return { error: "비밀번호는 8자 이상이어야 합니다.", success: false };
-  if (newPassword !== confirm)
-    return { error: "새 비밀번호가 서로 다릅니다.", success: false };
+  const pwMsg = passwordProblem(newPassword);
+  if (pwMsg) return { error: pwMsg, success: false };
 
   const hashed = await bcrypt.hash(newPassword, 10);
   const r = await consumeResetToken(token, hashed);
@@ -472,7 +482,6 @@ export async function logoutOtherDevicesAction(
   return { error: null, success: true };
 }
 
-/** 프로필 수정 **/
 export async function updateProfileAction(
   _prevState: ActionState,
   formData: FormData
@@ -490,14 +499,18 @@ export async function updateProfileAction(
   const newPassword = has("newPassword") ? str("newPassword") : "";
   const changesId = has(idField) && !!str(idField) && str(idField) !== me.studentId;
 
+  // 기업 계정은 ID 와 이메일이 같은 값이라 ID 변경을 이메일 변경(인증 다시 받기)으로 함께 처리함
+  const nextEmail =
+    me.userType === "DEVELOPER" && changesId ? str(idField) : has("email") ? str("email") : undefined;
   // 이메일이 로그인 ID 이므로 이메일 변경도 비밀번호 확인 대상임
-  const emailChanged = has("email") && (str("email") || null) !== me.email;
+  const emailChanged = nextEmail !== undefined && (nextEmail || null) !== me.email;
 
   // 현재 비밀번호는 자격증명을 바꿀 때만 요구함
   if (changesId || newPassword || emailChanged) {
     const currentPassword = str("currentPassword");
     if (!currentPassword) return { error: "현재 비밀번호를 입력해주세요.", success: false };
-    const isValid = await bcrypt.compare(currentPassword, me.password);
+    const row = await prisma.user.findUnique({ where: { id: me.id }, select: { password: true } });
+    const isValid = !!row && (await bcrypt.compare(currentPassword, row.password));
     if (!isValid) return { error: "현재 비밀번호가 일치하지 않습니다.", success: false };
   }
 
@@ -509,10 +522,9 @@ export async function updateProfileAction(
     data.name = name;
   }
   if (has("major")) {
-    // 업체명(DEVELOPER)은 자유 입력. 기존 값 그대로면 목록에 없는 옛 전공도 유지함
     const major = str("major");
-    if (me.userType !== "DEVELOPER" && major !== me.major && !isKnownMajor(major)) {
-      return { error: "전공·소속을 목록에서 선택해 주세요.", success: false };
+    if (me.userType !== "DEVELOPER" && me.major && !major) {
+      return { error: "전공·소속을 입력해 주세요.", success: false };
     }
     data.major = major;
   }
@@ -525,7 +537,7 @@ export async function updateProfileAction(
   }
 
   // 이메일을 바꾸면 인증 상태를 초기화함
-  if (has("email")) data.email = str("email") || null;
+  if (nextEmail !== undefined) data.email = nextEmail || null;
   if (emailChanged) {
     if (!isMailReady()) {
       return {
@@ -534,7 +546,7 @@ export async function updateProfileAction(
       };
     }
     // 이메일이 로그인 ID 라 비우면 다시 로그인할 수 없음
-    const email = str("email");
+    const email = nextEmail ?? "";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return { error: "이메일 형식이 올바르지 않습니다.", success: false };
     }
@@ -558,28 +570,29 @@ export async function updateProfileAction(
         return { error: "사번은 영문과 숫자만 가능합니다.", success: false };
     }
     // 로그인이 studentId 를 먼저 찾으므로 남의 이메일을 ID 로 선점하지 못하게 막음(가입과 같은 규칙).
-    if (me.userType === "DEVELOPER") {
-      const owner = await prisma.user.findFirst({
-        where: { email: { equals: value, mode: "insensitive" }, id: { not: me.id } },
-        select: { id: true },
-      });
-      if (owner) return { error: "이미 다른 계정이 사용 중인 이메일입니다.", success: false };
-    } else if (value.includes("@")) {
+    // 기업 계정의 중복 주소는 위 이메일 변경 검사가 막음
+    if (me.userType !== "DEVELOPER" && value.includes("@")) {
       return { error: "학번에는 @ 를 쓸 수 없습니다.", success: false };
     }
     data.studentId = value;
   }
 
   if (newPassword) {
-    if (newPassword.length < 8)
-      return { error: "새 비밀번호는 8자 이상이어야 합니다.", success: false };
+    const pwMsg = passwordProblem(newPassword, [me.studentId, me.email, me.name]);
+    if (pwMsg) return { error: pwMsg, success: false };
     data.password = await bcrypt.hash(newPassword, 10);
   }
 
   if (Object.keys(data).length === 0) return { error: null, success: true };
 
   try {
-    await prisma.user.update({ where: { id: me.id }, data });
+    // 자격증명이 바뀌면 이전에 보낸 재설정 링크도 폐기함(옛 주소·옛 비밀번호 기준으로 발급된 링크)
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: me.id }, data }),
+      ...(newPassword || emailChanged
+        ? [prisma.passwordResetToken.deleteMany({ where: { userId: me.id, usedAt: null } })]
+        : []),
+    ]);
   } catch {
     return { error: "이미 존재하는 ID·이메일·연락처입니다.", success: false };
   }
@@ -608,7 +621,7 @@ export async function updateProfileAction(
   return { error: null, success: true };
 }
 
-/** 메시지: 상대 id 로 DM 방을 확보해 메시지 전송 (통합 메신저 모델) **/
+/** 상대와의 DM 방을 확보한 뒤 메시지를 보냄 */
 export async function sendMessageAction(formData: FormData): Promise<void> {
   const me = await getSessionUser();
   if (!me) return;
@@ -690,7 +703,7 @@ export async function createAnnouncementAction(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-/** 평가별 공지 (생성자 → 참여자) **/
+/** 개설자가 자기 평가 참여자에게 보내는 공지 */
 export async function sendProjectAnnouncementAction(formData: FormData) {
   const me = await getSessionUser();
   if (!me) return;

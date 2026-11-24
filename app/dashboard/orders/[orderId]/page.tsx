@@ -1,6 +1,7 @@
 import ClearQueryParams from "@/app/components/ClearQueryParams";
 import ConfirmButton from "@/app/components/ConfirmButton";
 import ReauthField from "@/app/components/ReauthField";
+import { ui } from "@/app/components/ui";
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -15,6 +16,7 @@ import {
   confirmPaymentRefundSentAction,
   markTaxInvoiceAmendedAction,
   retryInvoiceAction,
+  linkOrderToMyProjectAction,
 } from "../actions";
 
 export const metadata = { title: "평가 의뢰 상세" };
@@ -59,6 +61,7 @@ export default async function OrderDetailPage({
         service: true,
         payments: { orderBy: { createdAt: "desc" } },
         rewards: true,
+        project: { select: { id: true, title: true } },
         // 발주자의 현재 사업자 확인 상태(Order.biz* 는 발주 시점 값)
         buyer: {
           select: {
@@ -88,6 +91,14 @@ export default async function OrderDetailPage({
   const accountSet = account.bank && account.account && account.holder;
 
   const label = STATUS_LABEL[order.status] ?? STATUS_LABEL.PENDING;
+  // 아직 평가에 연결하지 않은 의뢰면 발주자의 의뢰 없는 평가를 고를 수 있게 함
+  const linkable = !order.projectId && order.buyerId === me.id && ["PENDING", "PAID"].includes(order.status)
+    ? await prisma.project.findMany({
+        where: { creatorId: me.id, order: null, status: { in: ["PENDING_APPROVAL", "RECRUITING", "ACTIVE"] } },
+        select: { id: true, title: true },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
 
   return (
     <div className="min-h-screen bg-[var(--surface)]">
@@ -134,6 +145,31 @@ export default async function OrderDetailPage({
               <dd className="text-[var(--foreground)] text-base">{won(order.totalAmount)}</dd>
             </div>
           </dl>
+        </section>
+
+        <section className="bg-white rounded-[var(--radius-xl)] p-5 space-y-3">
+          <h3 className="text-sm font-semibold text-[var(--foreground)]">연결한 평가</h3>
+          {order.project ? (
+            <Link href={`/dashboard?view=detail&p=${order.project.id}`} className="text-sm text-[var(--accent)] underline">{order.project.title}</Link>
+          ) : linkable.length > 0 ? (
+            <form action={linkOrderToMyProjectAction} className="flex flex-col sm:flex-row gap-2">
+              <input type="hidden" name="orderId" value={order.id} />
+              <label htmlFor="link-project" className="sr-only">연결할 평가</label>
+              <select id="link-project" name="projectId" required className="flex-1 min-w-0 px-3 py-2 text-sm border border-[var(--gray-200)] rounded-[var(--radius-md)] bg-white">
+                {linkable.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+              </select>
+              <ConfirmButton
+                message="이 의뢰를 선택한 평가에 연결할까요? 의뢰 인원·단가가 그 평가의 정원과 참여 보상이 되고, 한 번 연결하면 바꿀 수 없어요."
+                className={ui.primarySm}
+              >
+                평가에 연결
+              </ConfirmButton>
+            </form>
+          ) : (
+            <p className="text-sm text-[var(--muted)]">
+              아직 연결한 평가가 없어요. <Link href="/dashboard/services" className="underline">평가를 만들 때</Link> 이 의뢰를 고르면 연결돼요.
+            </p>
+          )}
         </section>
 
         {order.bizName && (
@@ -241,7 +277,7 @@ export default async function OrderDetailPage({
               <>
                 <p className="text-xs text-[var(--muted)] mt-1">
                   아래 계좌로 <strong>{won(order.totalAmount)}</strong> 를 입금해 주세요. 입금이
-                  확인되면 평가자 모집이 시작됩니다. 세금계산서는 별도 발행됩니다.
+                  확인되면 연결한 평가의 학생 참여 보상이 생겨요(모집 공개는 관리자 승인으로 따로 진행돼요). 세금계산서는 별도로 발행돼요.
                 </p>
                 <div className="mt-4 p-4 bg-[var(--gray-50)] rounded-[var(--radius-md)] space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -282,7 +318,7 @@ export default async function OrderDetailPage({
             <h3 className="text-sm font-semibold text-[var(--success)]">입금이 확인되었습니다</h3>
             <p className="text-xs text-[var(--muted)] mt-1">
               {payment?.paidAt && `${seoul(payment.paidAt)} 확인 · `}
-              평가자 모집을 시작할 수 있습니다. 평가자 {order.rewards.length}명이 응답했습니다.
+              연결한 평가의 학생 참여 보상이 생겨요. 지금까지 보상 대상 {order.rewards.length}명이에요.
             </p>
             {/* 발행(300)과 국세청 전송 결과(304/305)를 구분해 보여줌 */}
             {payment?.taxInvoiceIssued ? (
@@ -330,7 +366,7 @@ export default async function OrderDetailPage({
                 </div>
                 <ConfirmButton
                   message={`통장에서 ${won(order.totalAmount)} 입금(입금자명: {depositorName})을 확인했습니까?\n\n· 원장에 입금으로 기록되고 되돌릴 수 없습니다.\n· 의뢰가 확정되고, 세금계산서가 아직 없으면 자동 발행됩니다(국세청 신고).\n· 실제로 통장에 들어온 것을 본 뒤에만 누르세요.\n\n정말 입금 확인으로 처리하시겠습니까?`}
-                  className="px-4 py-2 text-sm font-semibold bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)]"
+                  className={ui.primarySm}
                 >
                   입금 확인 → 의뢰 확정
                 </ConfirmButton>

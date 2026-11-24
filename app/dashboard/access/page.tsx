@@ -4,6 +4,7 @@ import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { prisma } from "../../db";
 import ConfirmButton from "@/app/components/ConfirmButton";
 import ClearQueryParams from "@/app/components/ClearQueryParams";
+import { ui } from "@/app/components/ui";
 import {
   ACTION_LABEL,
   KIND_LABEL,
@@ -17,14 +18,6 @@ import { kstMonth, monthRange } from "./month";
 import type { Prisma } from "@prisma/client";
 
 export const metadata = { title: "접속 기록" };
-
-/**
- * 접속 현황·접속기록·월 점검(ADMIN). 기록은 app/lib/accessLog.ts 가 남김
- *
- * 위·변조 방지를 위해 수정·삭제 기능은 두지 않음(파기는 월 점검 때 자동).
- * 접속기록도 개인정보이므로 이 화면을 연 것도 기록함
- * 「최근 활동」은 User.lastSeenAt(5분 간격 갱신)을 기준으로 한 추정값임
- */
 
 const PER = 50;
 const ACTIVE_MIN = 15;
@@ -314,7 +307,7 @@ async function LogTab({ q }: { q: Q }) {
           <input type="date" name="to" defaultValue={q.to ?? ""} className={input} />
         </label>
         {q.ip && <input type="hidden" name="ip" value={q.ip} />}
-        <button className="px-4 py-2 text-sm font-semibold bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)]">
+        <button className={ui.primarySm}>
           찾기
         </button>
         {(q.q || q.kind || q.from || q.to || q.user || q.ip) && (
@@ -506,7 +499,7 @@ async function ReviewTab({ q }: { q: Q }) {
         <h2 className="text-sm font-semibold text-[var(--foreground)]">점검 기록</h2>
         {review ? (
           <p className="text-sm text-[var(--gray-700)] mt-2 leading-relaxed">
-            <strong className="text-[var(--success)]">점검 완료</strong> — {fmt(review.createdAt)} · {reviewer?.name ?? "관리자"} ·
+            <strong className="text-[var(--success)]">점검 완료</strong> · {fmt(review.createdAt)} · {reviewer?.name ?? "관리자"} ·
             당시 이상 징후 {review.findings}건
             {review.note && (
               <>
@@ -532,7 +525,7 @@ async function ReviewTab({ q }: { q: Q }) {
                 message={`${month} 접속기록 점검을 완료로 기록합니다.\n\n· 점검자·시각·메모와 당시 이상 징후 ${findingCount}건이 남고, 고칠 수 없습니다.\n· 보관기간(${RETENTION_MONTHS}개월)이 지난 접속기록은 이때 함께 파기됩니다.\n\n정말 기록하시겠습니까?`}
                 confirmLabel="점검 완료 기록"
                 pendingText="기록 중…"
-                className="px-4 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)]"
+                className={ui.primarySm}
               >
                 {month} 점검 완료 기록
               </ConfirmButton>

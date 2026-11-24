@@ -1,4 +1,5 @@
 import ClearQueryParams from "@/app/components/ClearQueryParams";
+import { ui } from "@/app/components/ui";
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import Link from "next/link";
 import { prisma } from "../../db";
@@ -76,10 +77,7 @@ async function PayrollProfileSection({ userId }: { userId: string }) {
             프로필에서 한 번만 입력하면 됩니다.
           </p>
         </div>
-        <Link
-          href="/dashboard/profile?tab=settlement"
-          className="shrink-0 px-3 py-2 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-xs font-medium hover:bg-[var(--accent-dark)]"
-        >
+        <Link href="/dashboard/profile?tab=settlement" className={ui.primaryXs}>
           프로필에서 관리 →
         </Link>
       </div>
@@ -205,10 +203,7 @@ async function AdminBatchSection({
                 {` · 서류 ${b._count.claims}건`}
               </p>
             </div>
-            <Link
-              href={`/dashboard/payroll/admin/${b.id}`}
-              className="px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-xs font-medium hover:bg-[var(--accent-dark)] text-center"
-            >
+            <Link href={`/dashboard/payroll/admin/${b.id}`} className={ui.primaryXs}>
               관리
             </Link>
           </div>

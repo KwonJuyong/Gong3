@@ -1,5 +1,6 @@
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import Link from "next/link";
+import { ui } from "@/app/components/ui";
 import { prisma } from "@/app/db";
 import { activeCertGroups, type CertAnswers, type CertServiceFlags } from "@/app/lib/certChecklist";
 import ChecklistForm, { type PlainGroup } from "./ChecklistForm";
@@ -144,10 +145,7 @@ export default async function CertificationPage({
             <p className="text-xs text-[var(--muted)] mt-1.5 leading-relaxed">
               서비스 속성(AI 여부·개인정보 처리 등)에 따라 확인할 항목이 달라집니다.
             </p>
-            <Link
-              href="/dashboard/services"
-              className="inline-block mt-5 px-4 py-2 bg-[var(--accent)] text-white rounded-[var(--radius-md)] text-sm font-medium hover:bg-[var(--accent-dark)] transition-colors"
-            >
+            <Link href="/dashboard/services" className={`${ui.primarySm} mt-5`}>
               서비스 등록하러 가기
             </Link>
           </section>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import SubmitButton from "../components/SubmitButton";
+import { ui } from "../components/ui";
 import { useEscape } from "../components/useEscape";
 import {
   createAnnouncementAction,
@@ -15,6 +16,7 @@ export type NotificationItem = {
   id: string;
   content: string;
   type: string;
+  link: string | null;
   fromStudentId: string | null;
   fromName: string | null;
   createdAt: string;
@@ -137,7 +139,7 @@ export default function NotificationBell({
                 required
                 className="flex-1 min-w-0 px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--surface)] border border-[var(--gray-200)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors"
               />
-              <SubmitButton type="submit" className="px-3 py-1.5 bg-[var(--accent)] text-white text-xs font-medium rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)] transition-colors shrink-0">
+              <SubmitButton type="submit" className={ui.primaryXs}>
                 공지
               </SubmitButton>
             </form>
@@ -153,7 +155,17 @@ export default function NotificationBell({
                 <li key={n.id} className="flex justify-between items-start gap-3 px-4 py-3">
                   <div className="flex-1 min-w-0">
                     {n.type === "ANNOUNCE" && <span className="text-xs font-semibold text-amber-700">공지</span>}
-                    <p className="text-sm text-[var(--foreground)] break-words">{n.content}</p>
+                    {n.link ? (
+                      <Link
+                        href={n.link}
+                        onClick={() => setOpen(false)}
+                        className="block text-sm text-[var(--foreground)] break-words hover:text-[var(--accent)] hover:underline underline-offset-2"
+                      >
+                        {n.content}
+                      </Link>
+                    ) : (
+                      <p className="text-sm text-[var(--foreground)] break-words">{n.content}</p>
+                    )}
                     <p className="mt-0.5 text-xs text-[var(--muted)]">
                       {who && <span>발신: {who} · </span>}
                       {ago(n.createdAt)}

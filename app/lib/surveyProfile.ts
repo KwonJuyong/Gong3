@@ -63,13 +63,8 @@ export function isConstructActive(
     case "B":
       return true; // 사용 품질
     case "C":
-      return true; // 운영·메타
+      return true;
     default:
       return false;
   }
-}
-
-// 보안 가중치: 개인정보 보유 시 상향
-export function securityWeight(base: number, p: ServiceProfile): number {
-  return p.hasPersonalData ? Math.round(base * 1.5) : base;
 }

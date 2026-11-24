@@ -1,6 +1,7 @@
 "use client";
 
 import SubmitButton from "@/app/components/SubmitButton";
+import { ui } from "@/app/components/ui";
 import { useState, useMemo } from "react";
 import { createClaimBatch } from "./actions";
 
@@ -97,7 +98,7 @@ export default function ClaimBatchForm({ projects }: { projects: FinishedProject
             />
           </label>
 
-          <SubmitButton className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-dark)] shrink-0">
+          <SubmitButton className={ui.primarySm}>
             회차 생성
           </SubmitButton>
         </form>

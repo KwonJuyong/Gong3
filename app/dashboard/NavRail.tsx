@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { ui } from "../components/ui";
 import { useEscape } from "../components/useEscape";
 import { useCanInstall, promptInstall } from "../pwa-install";
 
@@ -43,6 +44,11 @@ const GROUPS: NavGroup[] = [
         icon: I("M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z", <path d="m9 12 2 2 4-4" />),
         roles: ["ADMIN"],
       },
+    ],
+  },
+  {
+    label: "자료·도구",
+    items: [
       { href: "/dashboard/insights", label: "AI News", icon: I("M4 22V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v16a2 2 0 0 0 2 2H4ZM8 7h6M8 11h6M8 15h4") },
       // 인증 준비 자가점검(부가 기능). 서비스를 가진 쪽만 씀
       { href: "/dashboard/certification", label: "인증 준비", icon: I("M9 12l2 2 4-4M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3Z"), roles: ["DEVELOPER", "ADMIN"] },
@@ -76,7 +82,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard/members", label: "회원 관리", icon: I("M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"), roles: ["ADMIN"] },
       { href: "/dashboard/org", label: "조직 설정", icon: I("M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01"), roles: ["ADMIN"] },
-      // 위: AI 도우미 질의 감사 로그. 아래: 법정 접속기록과 월 점검
+      // 위: Evi 질의 감사 로그. 아래: 법정 접속기록과 월 점검
       { href: "/dashboard/access", label: "접속 기록", icon: I("M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21a8 8 0 0 1 16 0", <path d="M19 3v4M21 5h-4" />), roles: ["ADMIN"] },
       { href: "/dashboard/audit", label: "조회 감사 로그", icon: I("M9 12h6M9 16h6M9 8h6M5 3h14a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"), roles: ["ADMIN"] },
     ],
@@ -156,14 +162,7 @@ export default function NavRail({
       {GROUPS.map((group, gi) => {
         const visible = group.items.filter(canSee);
         if (visible.length === 0) return null;
-        return (
-          <div key={gi} className="px-2">
-            {group.label && !compact && (
-              <p className="px-2 pt-3 pb-1 text-xs font-semibold text-[var(--gray-500)]">
-                {group.label}
-              </p>
-            )}
-            {group.label && compact && gi > 0 && <div className="my-2 mx-2 border-t border-[var(--gray-100)]" />}
+        const links = (
             <div className="space-y-0.5">
               {visible.map((it) => {
                 const active = isActive(it.href);
@@ -224,8 +223,14 @@ export default function NavRail({
                 );
               })}
             </div>
-          </div>
         );
+        if (group.label && !compact) return (
+          <details key={group.label} open={visible.some(it => isActive(it.href)) || (group.label === "관리" && accessReviewDue)} className="px-2">
+            <summary className="cursor-pointer rounded-[var(--radius-md)] px-2.5 py-2 text-sm font-medium text-[var(--gray-600)] hover:bg-[var(--gray-50)]">{group.label}</summary>
+            {links}
+          </details>
+        );
+        return <div key={gi} className="px-2">{group.label && <div className="my-2 mx-2 border-t border-[var(--gray-100)]" />}{links}</div>;
       })}
 
       {/* 앱 설치 (웹 브라우저에서 접속했을 때만) */}
@@ -348,12 +353,11 @@ function InstallModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="p-4 space-y-3 overflow-y-auto">
           {canInstall ? (
-            // 브라우저가 넘겨준 설치 프롬프트를 띄움
             <button
               onClick={async () => {
                 if (await promptInstall()) onClose();
               }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[var(--accent)] text-white rounded-[var(--radius-md)] font-semibold text-sm hover:bg-[var(--accent-dark)] active:scale-[0.98] transition-all"
+              className={`${ui.primary} w-full gap-2`}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />

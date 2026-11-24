@@ -21,9 +21,9 @@ import {
 
 const PROFILE = "/dashboard/profile";
 
-function backTo(tab: string, error?: string): never {
+function backTo(tab: string, error?: string, from?: string): never {
   const q = error ? `error=${encodeURIComponent(error)}` : "saved=1";
-  redirect(`${PROFILE}?tab=${tab}&${q}`);
+  redirect(`${PROFILE}?tab=${tab}&${q}${from ? `&from=${from}` : ""}`);
 }
 
 const str = (fd: FormData, k: string) => ((fd.get(k) as string) || "").trim();
@@ -87,14 +87,16 @@ export async function saveMyProfileSettlementAction(formData: FormData) {
 export async function saveMyBizProfileAction(formData: FormData) {
   const me = await getSessionUser();
   if (!me) backTo("biz", "인증이 필요합니다.");
+  // 오류로 다시 그릴 때도 의뢰 화면 복귀 표시를 유지함
+  const from = str(formData, "from") === "orders" ? "orders" : undefined;
 
   const bizNo = normalizeBizNo(str(formData, "bizNo"));
   // 사업자번호 체크섬 확인
-  if (!isValidBizNo(bizNo)) backTo("biz", BIZ_NO_ERROR);
+  if (!isValidBizNo(bizNo)) backTo("biz", BIZ_NO_ERROR, from);
 
   // 발주 권한 확인 체크(기록용). 폼의 required 와 별개로 서버에서도 확인함
   if (str(formData, "attest") !== "1") {
-    backTo("biz", "해당 사업자 명의로 의뢰할 권한이 있는지 확인에 동의해 주세요.");
+    backTo("biz", "해당 사업자 명의로 의뢰할 권한이 있는지 확인에 동의해 주세요.", from);
   }
 
   // 사업자 실재 확인(팝빌, 50원/건). 체크섬만으로는 임의로 만든 번호를 거르지 못함
@@ -104,7 +106,7 @@ export async function saveMyBizProfileAction(formData: FormData) {
   let bizState: BizState | null | undefined;
   if (popbillReady() && (prev.bizNo !== bizNo || !prev.bizVerifiedAt)) {
     const quotaErr = checkBizLookupQuota(me.id);
-    if (quotaErr) backTo("biz", quotaErr);
+    if (quotaErr) backTo("biz", quotaErr, from);
     try {
       const info = await checkBizInfo(bizNo);
       bizState = bizStateFromCloseDown(info.closeDownState);
@@ -115,7 +117,7 @@ export async function saveMyBizProfileAction(formData: FormData) {
 
   // 폐업·미등록이면 저장 단계에서 알림(null 은 통과).
   if (bizStateBlocks(bizState)) {
-    backTo("biz", `국세청에 '${bizState}'로 조회되는 사업자등록번호입니다. 번호를 확인해 주세요.`);
+    backTo("biz", `국세청에 '${bizState}'로 조회되는 사업자등록번호입니다. 번호를 확인해 주세요.`, from);
   }
 
   await saveBizProfile(me.id, {
@@ -130,5 +132,6 @@ export async function saveMyBizProfileAction(formData: FormData) {
 
   revalidatePath(PROFILE);
   revalidatePath("/dashboard/orders"); // 발주 폼 프리필
+  if (from) redirect("/dashboard/orders");
   backTo("biz");
 }

@@ -1,6 +1,7 @@
 import "server-only";
 import bcrypt from "bcrypt";
 import { checkRateLimit } from "../rate-limit";
+import { prisma } from "../prisma";
 import { REAUTH_FIELD } from "../components/ReauthField";
 
 /**
@@ -9,7 +10,7 @@ import { REAUTH_FIELD } from "../components/ReauthField";
  * 통과하면 null, 아니면 화면에 보일 문구.
  */
 export async function checkReauth(
-  me: { id: string; password: string },
+  me: { id: string },
   formData: FormData,
 ): Promise<string | null> {
   // 성공도 세므로 입금 확인을 연달아 처리해도 막히지 않을 만큼 둠. 추측 공격에는 충분히 낮음
@@ -17,6 +18,7 @@ export async function checkReauth(
   if (rl) return rl;
   const pw = (formData.get(REAUTH_FIELD) as string) || "";
   if (!pw) return "본인 확인을 위해 내 비밀번호를 입력해 주세요.";
-  if (!(await bcrypt.compare(pw, me.password))) return "비밀번호가 일치하지 않습니다.";
+  const row = await prisma.user.findUnique({ where: { id: me.id }, select: { password: true } });
+  if (!row || !(await bcrypt.compare(pw, row.password))) return "비밀번호가 일치하지 않습니다.";
   return null;
 }

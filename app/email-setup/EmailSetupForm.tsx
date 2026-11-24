@@ -1,25 +1,15 @@
 "use client";
 
 import SubmitButton from "@/app/components/SubmitButton";
-import { useActionState } from "react";
+import { useFormSubmit } from "../components/useFormSubmit";
+import { BTN_PRIMARY, INPUT } from "../AuthParts";
 import { setMissingEmailAction } from "../actions";
-import { ActionState } from "../db";
 
-/**
- * 이메일 등록 폼. 인증 메일을 보내지 않으므로 오타를 막으려고 주소를 두 번 받음
- * 붙여넣기는 막지 않음
- */
 export default function EmailSetupForm() {
-  const [state, formAction] = useActionState<ActionState, FormData>(
-    setMissingEmailAction,
-    null,
-  );
-
-  const inputCls =
-    "w-full px-3.5 py-2.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors placeholder:text-[var(--gray-400)]";
+  const [state, form, pending] = useFormSubmit(setMissingEmailAction);
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form {...form} className="space-y-3">
       <div>
         <label
           htmlFor="email"
@@ -37,7 +27,7 @@ export default function EmailSetupForm() {
           required
           autoComplete="email"
           placeholder="example@hallym.ac.kr"
-          className={inputCls}
+          className={INPUT}
         />
       </div>
 
@@ -55,7 +45,7 @@ export default function EmailSetupForm() {
           required
           autoComplete="email"
           placeholder="한 번 더 입력해 주세요"
-          className={inputCls}
+          className={INPUT}
         />
       </div>
 
@@ -65,7 +55,7 @@ export default function EmailSetupForm() {
         </p>
       )}
 
-      <SubmitButton className="w-full py-2.5 bg-[var(--accent)] text-white rounded-[var(--radius-md)] font-semibold text-sm hover:bg-[var(--accent-dark)] active:scale-[0.98] transition-all mt-2">
+      <SubmitButton pending={pending} className={`${BTN_PRIMARY} mt-2`}>
         등록하고 계속하기
       </SubmitButton>
     </form>

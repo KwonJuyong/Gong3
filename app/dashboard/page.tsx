@@ -3,13 +3,18 @@ import { redirect } from "next/navigation";
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { prisma } from "../db";
 import { maskStudentId } from "../lib/privacy";
-import DashboardView, { type DashboardProject, type LinkableOrder } from "./DashboardView";
+import DashboardView, { type DashboardProject } from "./DashboardView";
+import type { LinkableOrder } from "./FundingFields";
+import { linkableOrdersFor } from "./linkableOrders";
+import ProjectTask from "./accompany/ProjectTask";
 import MyRewardsPanel, { type MyRewardSummary } from "./MyRewardsPanel";
 import { getSettlementProfile } from "../lib/settlementProfile";
 import { visibleProjectWhere, capacityOf, rewardPerPersonOf, isPayerUs } from "../lib/approvals";
 import { getQuoteSupplier } from "../lib/orgSettings";
 import { getPlatformStats } from "../lib/platformStats";
 import { manwonText } from "../lib/money";
+import { nextPhase } from "../lib/scenario";
+import { parseProjectGuides } from "../lib/projectGuides";
 
 export const metadata = { title: "대시보드" };
 
@@ -20,15 +25,27 @@ export const metadata = { title: "대시보드" };
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; p?: string }>;
+  searchParams: Promise<{
+    view?: string;
+    p?: string;
+    error?: string;
+    saved?: string;
+    tab?: string;
+    submitted?: string;
+    answered?: string;
+    invalid?: string;
+    full?: string;
+  }>;
 }) {
   // 「지금 할 일」과 좌측 목록은 목록·상세 화면에서만 보임
-  const { view, p: selectedId } = await searchParams;
+  const { view, p: selectedId, error, saved, tab, submitted, answered: answeredParam, invalid, full } = await searchParams;
   // 저장해 둔 옛 주소
   if (view === "create-choose") redirect("/dashboard/services");
   const focus = !!view && view !== "list" && view !== "detail";
   const userId = await getSessionUserId();
-  if (!userId) redirectToLogin();
+  // 응답 화면 등에서 만료되면 다시 로그인한 뒤 같은 화면으로 돌아오게 함
+  const here = `/dashboard${view ? `?view=${encodeURIComponent(view)}${selectedId ? `&p=${encodeURIComponent(selectedId)}` : ""}` : ""}`;
+  if (!userId) redirectToLogin(here);
 
   const userRaw = await prisma.user.findUnique({
     where: { id: userId },
@@ -49,7 +66,7 @@ export default async function DashboardPage({
     },
   });
 
-  if (!userRaw) redirectToLogin();
+  if (!userRaw) redirectToLogin(here);
 
   // 참여한 평가 목록 (중복 제거)
   const seenProjectIds = new Set<string>();
@@ -81,6 +98,27 @@ export default async function DashboardPage({
 
   // 비관리자에게는 다른 사용자 학번을 앞 4자리까지만 노출
   const isAdmin = safeUser.role === "ADMIN";
+  if (view === "task" && selectedId) return <ProjectTask projectId={selectedId} error={error} saved={saved} tab={tab} />;
+  // 동행 평가의 결과는 대화 기록과 함께 과제 화면에서 봄
+  if (view === "result" && selectedId) {
+    const accompany = await prisma.project.findFirst({
+      where: { id: selectedId, evalMode: "ACCOMPANY", ...(isAdmin ? {} : { creatorId: userId }) },
+      select: { id: true },
+    });
+    if (accompany) return <ProjectTask projectId={selectedId} error={error} saved={saved} tab={tab} />;
+  }
+  // 동행 평가에는 설문 화면이 없음. 과제가 공개되기 전이면 평가 상세로 돌려보냄
+  if (view === "eval" && selectedId && !isAdmin) {
+    const accompany = await prisma.project.findFirst({
+      where: { id: selectedId, evalMode: "ACCOMPANY" },
+      select: { creatorId: true, scenario: { select: { publishedAt: true } }, enrollments: { where: { userId, status: "ACCEPTED" }, select: { id: true } } },
+    });
+    if (accompany) {
+      if (accompany.scenario?.publishedAt && accompany.creatorId !== userId && accompany.enrollments.length)
+        return <ProjectTask projectId={selectedId} error={error} saved={saved} tab={tab} />;
+      redirect(`/dashboard?view=detail&p=${selectedId}`);
+    }
+  }
 
   // 공개되지 않은 평가는 서버 쿼리에서 거름. 개설자는 자기 평가를 승인 전에도 볼 수 있음
   const projectWhere = isAdmin ? {} : { OR: [visibleProjectWhere, { creatorId: safeUser.id }] };
@@ -118,6 +156,7 @@ export default async function DashboardPage({
         // 발주가 있으면 정원·보상 단가는 발주 값을 씀(capacityOf 와 같은 기준).
         order: { select: { panelSize: true, rewardPerPerson: true } },
         _count: { select: { responses: true, enrollments: true } },
+        scenario: { select: { publishedAt: true } },
       },
       orderBy: { startTime: "desc" },
     }),
@@ -129,6 +168,7 @@ export default async function DashboardPage({
             id: true,
             creatorId: true,
             questions: true,
+            scenario: { select: { publishedAt: true } },
             responses: responseInclude,
             enrollments: enrollmentInclude,
           },
@@ -145,13 +185,22 @@ export default async function DashboardPage({
     const enrollments = full ? opened.enrollments : p.enrollments;
     return {
     id: p.id,
+    evalMode: p.evalMode === "ACCOMPANY" ? "ACCOMPANY" : "SURVEY",
+    questionSource: p.questionSource === "AUTO" ? "AUTO" : "MANUAL",
+    hasOrder: !!p.order,
+    needsOrder: isPayerUs(p.fundingType) && !p.order,
+    taskStatus: isOpened && opened.scenario
+      ? (opened.scenario.publishedAt && (full || (p.status !== "RECRUITING" && p.enrollments.some(e => e.status === "ACCEPTED"))) ? "published" : full ? "draft" : null)
+      : null,
     title: p.title,
     description: p.description,
     location: p.location,
     status: p.status,
     startTime: p.startTime.toISOString(),
     endTime: p.endTime?.toISOString() || null,
+    closedAt: p.closedAt?.toISOString() || null,
     questions: (isOpened ? opened.questions : []) as unknown as DashboardProject["questions"],
+    guides: parseProjectGuides(p.guides),
     link: p.link,
     creatorId: p.creatorId,
     creatorName: p.creator?.name || null,
@@ -245,41 +294,48 @@ export default async function DashboardPage({
       .filter((s) => s.surveys.length > 0)
       .map((s) => ({ id: s.id, name: s.name, versionId: s.surveys[0].id }));
 
-    // 아직 평가에 연결되지 않은 발주(취소·환불 제외)
-    const orders = await prisma.order.findMany({
-      where: {
-        projectId: null,
-        status: { in: ["PENDING", "PAID"] },
-        ...(safeUser.role !== "ADMIN" ? { buyerId: safeUser.id } : {}),
-      },
-      select: {
-        id: true,
-        orderNo: true,
-        panelSize: true,
-        rewardPerPerson: true,
-        status: true,
-        service: { select: { name: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    linkableOrders = orders.map((o) => ({
-      id: o.id,
-      orderNo: o.orderNo,
-      serviceName: o.service.name,
-      panelSize: o.panelSize,
-      rewardPerPerson: o.rewardPerPerson,
-      paid: o.status === "PAID",
-    }));
+    linkableOrders = await linkableOrdersFor(safeUser);
   }
+
+  // 동행 평가 개선판 재평가가 열렸는데 아직 하지 않은 평가. 응답은 이미 있어 toRespond 에 잡히지 않음
+  const retests = (
+    await prisma.scenarioBrief.findMany({
+      where: { publishedAt: { not: null }, readings: { some: { userId: safeUser.id, phase: 1 } } },
+      select: {
+        projectId: true,
+        project: { select: { title: true } },
+        releases: { orderBy: { phase: "desc" }, take: 1, select: { phase: true, version: true } },
+        readings: { where: { userId: safeUser.id }, select: { phase: true } },
+      },
+    })
+  ).filter((b) => nextPhase(b.readings.map((r) => r.phase), b.releases[0]?.phase ?? 1, true) != null);
+  // 내 요청이 최신 개선판에 반영됐는데 고쳐졌는지 아직 확인하지 않은 평가. 재평가 대화를 마쳐도 남음(확인은 최신판만 가능)
+  const pendingChecks = await prisma.scenarioRequest.findMany({
+    where: { userId: safeUser.id, deployedPhase: { not: null }, recheckedAt: null },
+    select: { projectId: true, deployedPhase: true, reading: { select: { brief: { select: { releases: { orderBy: { phase: "desc" }, take: 1, select: { phase: true } } } } } } },
+  });
+  const rechecks = [...pendingChecks
+    .filter((r) => r.deployedPhase === r.reading.brief.releases[0]?.phase)
+    .reduce((m, r) => m.set(r.projectId, (m.get(r.projectId) ?? 0) + 1), new Map<string, number>())]
+    .map(([projectId, count]) => ({ projectId, count }));
 
   // 지금 할 일
   const myEnrollment = (p: (typeof safeProjects)[number]) => p.enrollments.find((e) => e.userId === safeUser.id);
   const answered = (p: (typeof safeProjects)[number]) => p.responses.some((r) => r.userId === safeUser.id);
+  // 동행 평가의 과제 작성(brief)·공개 여부. 학생은 공개된 과제만 할 수 있음
+  const briefOf = new Map(projectsRaw.map((p) => [p.id, p.scenario]));
+  const taskOpen = (p: { id: string }) => !!briefOf.get(p.id)?.publishedAt;
 
   // 선발됐고 진행 중인데 아직 응답하지 않은 평가
   const toRespond = safeProjects.filter(
-    (p) => p.status === "ACTIVE" && myEnrollment(p)?.status === "ACCEPTED" && !answered(p),
+    (p) => p.status === "ACTIVE" && myEnrollment(p)?.status === "ACCEPTED" && !answered(p)
+      && (p.evalMode === "SURVEY" || taskOpen(p)),
   );
+  // 선발돼 평가가 시작됐지만 운영진이 아직 과제를 공개하지 않은 동행 평가
+  const preparing = safeProjects.filter(
+    (p) => p.status === "ACTIVE" && p.evalMode === "ACCOMPANY" && myEnrollment(p)?.status === "ACCEPTED" && !taskOpen(p),
+  );
+  const titleOf = new Map(safeProjects.map((p) => [p.id, p.title]));
   // 신청하고 선발 결과를 기다리는 평가
   const awaiting = safeProjects.filter(
     (p) => p.status === "RECRUITING" && !!myEnrollment(p) && myEnrollment(p)?.status !== "REMOVED",
@@ -289,17 +345,105 @@ export default async function DashboardPage({
   const myPending = mine.filter((p) => p.status === "PENDING_APPROVAL" && (!isAdmin || p.creatorId === safeUser.id));
   const myRejected = mine.filter((p) => p.status === "REJECTED" && p.creatorId === safeUser.id);
   const toSelect = mine.filter((p) => p.status === "RECRUITING" && p.enrollmentCount > 0);
+  // 본인이 연 진행 중 평가. 응답이 얼마나 들어왔는지 첫 화면에서 보이게 함
+  const myActive = mine.filter((p) => p.status === "ACTIVE" && p.creatorId === safeUser.id);
+  // 기업·교육기관 건인데 의뢰가 없어 보상이 생기지 않는 본인 평가. 의뢰 화면에서 연결함
+  const noOrder = mine.filter((p) => p.creatorId === safeUser.id && p.needsOrder && ["PENDING_APPROVAL", "RECRUITING", "ACTIVE"].includes(p.status));
+  // 본인 동행 평가에 아직 답하지 않은 개선 요청(종료한 평가 포함, 종료 뒤에도 요청이 들어옴)
+  const toReply = safeUser.role === "DEVELOPER" || isAdmin
+    ? await prisma.scenarioRequest.groupBy({
+        by: ["projectId"],
+        where: { repliedAt: null, note: { not: "" }, reading: { brief: { project: { creatorId: safeUser.id } } } },
+        _count: { _all: true },
+      })
+    : [];
+  // 관리자는 다른 개설자의 승인 요청도 처리해야 하므로 승인 화면 바로가기를 맨 앞에 둠
+  const toApprove = isAdmin ? safeProjects.filter((p) => p.status === "PENDING_APPROVAL") : [];
+  // 동행 평가 중 과제 인터뷰를 아직 안 한 본인 평가, 과제는 있는데 아직 공개하지 않은 평가(관리자)
+  const toBrief = mine.filter((p) => p.evalMode === "ACCOMPANY" && p.creatorId === safeUser.id
+    && !briefOf.get(p.id) && p.status !== "FINISHED" && p.status !== "REJECTED");
+  // 과제는 정했지만 아직 승인을 요청하지 않은 작성 중 동행 평가
+  const toRecruit = mine.filter((p) => p.status === "DRAFT" && p.creatorId === safeUser.id && !!briefOf.get(p.id));
+  const toPublish = isAdmin
+    ? safeProjects.filter((p) => p.evalMode === "ACCOMPANY" && briefOf.get(p.id) && !taskOpen(p)
+        && (p.status === "RECRUITING" || p.status === "ACTIVE"))
+    : [];
   const upcomingReward = (myRewardSummary?.upcoming.amount ?? 0) + (myRewardSummary?.reviewing.amount ?? 0);
 
   type Task = { key: string; tone: "primary" | "warn" | "info" | "danger"; title: string; desc: string; href: string; cta: string };
   const tasks: Task[] = [
-    ...toRespond.map((p) => ({
+    ...(toApprove.length > 0
+      ? [{
+          key: "approve",
+          tone: "warn" as const,
+          title: `승인 대기 평가 ${toApprove.length}건`,
+          desc: "내용을 확인하고 승인하거나 반려해 주세요",
+          href: "/dashboard/approvals",
+          cta: "검토하기",
+        }]
+      : []),
+    ...toRespond.map((p) => p.evalMode === "ACCOMPANY" ? {
+      key: `r-${p.id}`,
+      tone: "primary" as const,
+      title: p.title,
+      desc: "선발됐어요 · Evi와 과제를 진행해 주세요",
+      href: `/dashboard?view=task&p=${p.id}`,
+      cta: "과제 시작",
+    } : {
       key: `r-${p.id}`,
       tone: "primary" as const,
       title: p.title,
       desc: "선발됐어요 · 응답해 주세요",
       href: `/dashboard?view=eval&p=${p.id}`,
       cta: "응답하기",
+    }),
+    ...toPublish.map((p) => ({
+      key: `o-${p.id}`,
+      tone: "warn" as const,
+      title: p.title,
+      desc: "Evi 과제가 정리됐어요 · 확인하고 학생에게 공개해 주세요",
+      href: `/dashboard?view=task&p=${p.id}`,
+      cta: "공개하기",
+    })),
+    ...toRecruit.map((p) => ({
+      key: `d-${p.id}`,
+      tone: "warn" as const,
+      title: p.title,
+      desc: "과제를 정했어요 · 모집·비용을 정해 승인을 요청해 주세요",
+      href: `/dashboard/accompany/${p.id}/recruit`,
+      cta: "이어서",
+    })),
+    ...toBrief.map((p) => ({
+      key: `b-${p.id}`,
+      tone: "warn" as const,
+      title: p.title,
+      desc: "Evi와 학생 과제를 정해 주세요",
+      href: `/dashboard?view=task&p=${p.id}`,
+      cta: "작성하기",
+    })),
+    ...retests.map((b) => ({
+      key: `t-${b.projectId}`,
+      tone: "primary" as const,
+      title: b.project.title,
+      desc: `${b.releases[0]?.version ?? "새 버전"} 개선판 재평가 · 고쳐졌는지 확인해 주세요`,
+      href: `/dashboard?view=task&p=${b.projectId}`,
+      cta: "재평가",
+    })),
+    ...rechecks.filter((r) => !retests.some((b) => b.projectId === r.projectId)).map((r) => ({
+      key: `k-${r.projectId}`,
+      tone: "primary" as const,
+      title: titleOf.get(r.projectId) ?? "동행 평가",
+      desc: `내 요청 ${r.count}건이 반영됐어요 · 고쳐졌는지 확인해 주세요`,
+      href: `/dashboard?view=task&p=${r.projectId}`,
+      cta: "확인하기",
+    })),
+    ...preparing.map((p) => ({
+      key: `w-${p.id}`,
+      tone: "info" as const,
+      title: p.title,
+      desc: "선발됐어요 · Evi 과제를 준비하고 있어요",
+      href: `/dashboard?view=detail&p=${p.id}`,
+      cta: "보기",
     })),
     ...myRejected.map((p) => ({
       key: `x-${p.id}`,
@@ -317,6 +461,29 @@ export default async function DashboardPage({
       href: `/dashboard?view=recruit&p=${p.id}`,
       cta: "선발하기",
     })),
+    ...toReply.map((r) => ({
+      key: `q-${r.projectId}`,
+      tone: "warn" as const,
+      title: titleOf.get(r.projectId) ?? "동행 평가",
+      desc: `답할 개선 요청 ${r._count._all}건`,
+      href: `/dashboard?view=task&p=${r.projectId}&tab=requests`,
+      cta: "답하기",
+    })),
+    ...myActive.map((p) => p.evalMode === "ACCOMPANY" ? {
+      key: `g-${p.id}`,
+      tone: "info" as const,
+      title: p.title,
+      desc: taskOpen(p) ? `진행 중 · 기록 ${p.responseCount}/${p.acceptedCount}명` : "진행 중 · 운영진이 과제 공개를 확인하고 있어요",
+      href: `/dashboard?view=task&p=${p.id}`,
+      cta: "현황",
+    } : {
+      key: `g-${p.id}`,
+      tone: "info" as const,
+      title: p.title,
+      desc: `진행 중 · 응답 ${p.responseCount}/${p.acceptedCount}명`,
+      href: `/dashboard?view=detail&p=${p.id}`,
+      cta: "현황",
+    }),
     ...awaiting.map((p) => ({
       key: `a-${p.id}`,
       tone: "info" as const,
@@ -325,7 +492,15 @@ export default async function DashboardPage({
       href: `/dashboard?view=detail&p=${p.id}`,
       cta: "보기",
     })),
-    ...myPending.map((p) => ({
+    ...noOrder.map((p) => ({
+      key: `n-${p.id}`,
+      tone: "warn" as const,
+      title: p.title,
+      desc: "평가 의뢰 미연결 · 학생 참여 보상이 생기지 않아요",
+      href: "/dashboard/orders",
+      cta: "의뢰하기",
+    })),
+    ...myPending.filter((p) => !toBrief.includes(p)).map((p) => ({
       key: `p-${p.id}`,
       tone: "info" as const,
       title: p.title,
@@ -361,8 +536,8 @@ export default async function DashboardPage({
   const running = mine.filter((p) => p.status === "RECRUITING" || p.status === "ACTIVE");
   const summaryLine =
     (isMaker
-      ? [running.length > 0 ? `운영 중 ${running.length}건` : null, toSelect.length > 0 ? `선발할 평가 ${toSelect.length}건` : null]
-      : [toRespond.length > 0 ? `응답할 평가 ${toRespond.length}건` : null, awaiting.length > 0 ? `결과 대기 ${awaiting.length}건` : null]
+      ? [toApprove.length > 0 ? `승인 대기 ${toApprove.length}건` : myPending.length > 0 ? `승인 기다리는 평가 ${myPending.length}건` : null, running.length > 0 ? `운영 중 ${running.length}건` : null, toSelect.length > 0 ? `선발할 평가 ${toSelect.length}건` : null]
+      : [toRespond.length > 0 ? `응답할 평가 ${toRespond.length}건` : null, retests.length + rechecks.length > 0 ? `재평가·확인 ${new Set([...retests.map((b) => b.projectId), ...rechecks.map((r) => r.projectId)]).size}건` : null, awaiting.length > 0 ? `결과 대기 ${awaiting.length}건` : null]
     )
       .filter(Boolean)
       .join(" · ") || "지금 처리할 일은 없어요";
@@ -376,7 +551,7 @@ export default async function DashboardPage({
       : []
     : [
         { label: "응답 대기", value: `${toRespond.length}건` },
-        { label: "참여한 평가", value: `${participatedProjects.length}건`, href: "/dashboard/surveys#participated" },
+        { label: "참여한 평가", value: `${participatedProjects.length}건`, href: participatedProjects.length ? "/dashboard/surveys#participated" : undefined },
         { label: "받을 보상", value: `${upcomingReward.toLocaleString("ko-KR")}원` },
       ];
   // 보상을 받은 적 없는 개설자에게는 계좌 안내가 필요 없음
@@ -460,18 +635,45 @@ export default async function DashboardPage({
 
         <div className={focus ? "" : "grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] items-start"}>
           <div className="space-y-4 min-w-0">
+            {/* 제출 결과는 폰에서도 바로 보이도록 첫 줄에 둠 */}
+            {!focus && submitted === "1" && (
+              <div role="status" className="rounded-[var(--radius-md)] bg-[var(--warning-light)] text-[var(--gray-800)] text-sm px-4 py-3">
+                <strong>승인 요청을 보냈어요.</strong> 관리자가 내용을 확인하면 평가자 모집이 시작돼요. 승인·반려 결과는 알림으로 알려 드려요.
+              </div>
+            )}
+            {!focus && answeredParam && (
+              <div role="status" className="rounded-[var(--radius-md)] bg-[var(--success-light)] text-[var(--success)] text-sm px-4 py-3">
+                <strong>{answeredParam === "updated" ? "고친 응답을 저장했어요." : "응답을 제출했어요. 참여해 주셔서 고마워요."}</strong>
+                {answeredParam !== "updated" && " 보상이 있는 평가는 검수 후 지급돼요."}
+              </div>
+            )}
+            {!focus && invalid === "1" && (
+              <div role="alert" className="rounded-[var(--radius-md)] bg-[var(--danger-light)] text-[var(--danger)] text-sm px-4 py-3">
+                <strong>응답을 저장하지 못했어요.</strong> 빠진 문항이나 올바르지 않은 값이 있어요. 평가를 다시 열어 확인한 뒤 제출해 주세요. 작성하던 내용은 이 기기에 남아 있어요.
+              </div>
+            )}
+            {!focus && full === "1" && (
+              <div role="alert" className="rounded-[var(--radius-md)] bg-[var(--danger-light)] text-[var(--danger)] text-sm px-4 py-3">
+                <strong>모집 정원이 찼어요.</strong> 응답은 저장되지 않았어요. 다른 평가를 찾아봐 주세요.
+              </div>
+            )}
             {!focus && (
               <section aria-labelledby="todo-h" className="bg-white rounded-[var(--radius-xl)] p-5">
                 <h2 id="todo-h" className="text-[17px] font-bold text-[var(--foreground)] mb-1">
                   지금 할 일
                 </h2>
-                {tasks.length === 0 ? (
-                  <p className="text-[15px] text-[var(--muted)] py-5">
-                    할 일이 없어요.{" "}
-                    <Link href={isMaker ? "/dashboard/services" : "/dashboard/surveys"} className="text-[var(--accent)] font-medium">
+                {tasks.length === 0 && !isMaker && recruitingProjects.length === 0 ? (
+                  // 모집 중인 평가가 없으면 찾기 버튼이 빈 목록으로만 이어짐
+                  <p className="text-sm text-[var(--muted)] pt-2">지금 모집 중인 평가가 없어요. 새 평가가 열리면 알림으로 알려 드려요.</p>
+                ) : tasks.length === 0 ? (
+                  <div className="space-y-3 pt-2">
+                    <p className="text-sm text-[var(--muted)]">
+                      {isMaker ? "평가 만들기에서 Evi 동행 평가·표준 설문·자유 설문 중 하나를 골라 시작해 주세요." : "관심 있는 평가에 신청하세요. 선발되면 여기서 평가를 시작할 수 있어요."}
+                    </p>
+                    <Link href={isMaker ? "/dashboard/services" : "/dashboard/surveys"} className="inline-flex min-h-11 items-center rounded-[var(--radius-md)] bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-dark)]">
                       {isMaker ? "새 평가 만들기" : "참여할 평가 찾기"}
                     </Link>
-                  </p>
+                  </div>
                 ) : (
                   <ul className="divide-y divide-[var(--gray-100)]">
                     {tasks.slice(0, TASK_PREVIEW).map((t) => (

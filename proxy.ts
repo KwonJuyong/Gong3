@@ -11,7 +11,7 @@ import {
 } from "@/app/session";
 
 // 슬라이딩 갱신: 보호 경로에 접속할 때마다 유휴 만료를 뒤로 미룸
-// Edge 에서는 DB 를 볼 수 없으므로 epoch·ttl 은 쿠키 값을 그대로 쓰고,
+// 여기서는 DB 를 보지 않으므로 epoch·ttl 은 쿠키 값을 그대로 쓰고,
 // 절대 만료(abs)도 이어받기만 함. 여기서 다시 계산하면 상한이 사라짐
 async function refreshSession(res: NextResponse, s: SessionPayload) {
   const abs = s.abs ?? absoluteDeadline(absoluteTtlForTtl(s.ttl));
@@ -30,7 +30,7 @@ async function refreshSession(res: NextResponse, s: SessionPayload) {
  * API 라우트는 matcher 밖이고, 여기서는 서명·만료만 보므로 무효화된 세션도 통과함
  * 인증은 각 진입점이 getSessionUserId() 로 함
  */
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
   // 점검 모드: 정적 파일과 점검 페이지 자체는 통과

@@ -3,14 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { logoutAction } from "../actions";
+import { ui } from "../components/ui";
 import { useEscape } from "../components/useEscape";
 import { roleLabel as labelOfRole } from "../lib/roleLabel";
 
-/** 머리글 아바타 드롭다운. 프로필 화면으로 가는 입구와 로그아웃만 둠 */
-
 export default function ProfileDropdown({
   user,
-  /** 계좌가 없어 보상 지급이 막히는 상태인가 */
   payoutBlocked,
 }: {
   user: {
@@ -94,7 +92,7 @@ export default function ProfileDropdown({
             <Link
               href="/dashboard/profile"
               onClick={() => setOpen(false)}
-              className="flex items-center justify-center gap-1.5 w-full py-2 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-dark)] transition-colors"
+              className={`${ui.primarySm} w-full gap-1.5`}
             >
               프로필 관리
             </Link>

@@ -44,6 +44,7 @@ const i = (label: string): FieldMeta => ({ type: "int", label });
 const b = (label: string): FieldMeta => ({ type: "boolean", label });
 const d = (label: string): FieldMeta => ({ type: "datetime", label });
 
+// 동행 평가 양식·회신·학생 측정값은 평가별 권한이 있는 전용 화면에서만 조회
 export const MODELS: Record<string, ModelMeta> = {
   user: {
     label: "회원",
@@ -73,6 +74,7 @@ export const MODELS: Record<string, ModelMeta> = {
       description: s("설명"),
       location: s("장소"),
       status: s("상태"),
+      evalMode: s("평가 방식(SURVEY·ACCOMPANY)"),
       startTime: d("시작"),
       endTime: d("종료"),
       minParticipants: i("최소인원"),
@@ -181,13 +183,10 @@ export const MODELS: Record<string, ModelMeta> = {
   },
 };
 
-export const MODEL_KEYS = Object.keys(MODELS);
-
 export function getModelMeta(key: string): ModelMeta | undefined {
   return MODELS[key];
 }
 
-/** LLM 에게 넘길 스키마 설명을 메타데이터에서 만듦 */
 export function describeSchemaForLLM(isAdmin: boolean): string {
   const lines: string[] = [];
   for (const [key, m] of Object.entries(MODELS)) {
@@ -205,10 +204,6 @@ export function describeSchemaForLLM(isAdmin: boolean): string {
   return lines.join("\n");
 }
 
-/**
- * LLM 에게 줄 예시도 역할별로 만듦. 비관리자에게 ADMIN 전용 모델이 보이지 않게 하려는 것임
- * npm run test:query 가 이를 확인함
- */
 export function describeExamplesForLLM(isAdmin: boolean): string {
   const ex = [
     "'빅데이터 전공생 수' → model:user, mode:count, where:{major:{contains:'빅데이터'}}",

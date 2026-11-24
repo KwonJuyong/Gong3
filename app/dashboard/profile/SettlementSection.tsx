@@ -79,7 +79,17 @@ export default function SettlementSection({ profile }: { profile: SettlementSect
   }
 
   return (
-    <form action={saveMyProfileSettlementAction} className="space-y-5">
+    <form
+      action={saveMyProfileSettlementAction}
+      onSubmit={(e) => {
+        if (canSubmit) return;
+        // 버튼을 잠그지 않고, 눌렀을 때 막힌 칸으로 데려감
+        e.preventDefault();
+        const target = !bank.trim() ? "bankName" : !account.trim() ? "accountNumber" : rrnIncomplete ? "rrn" : "consent";
+        e.currentTarget.querySelector<HTMLElement>(`[name="${target}"]`)?.focus();
+      }}
+      className="space-y-5"
+    >
       <Card
         title="정산 정보"
         desc="평가 보상 지급과 연구비 노무비 청구가 이 정보를 함께 씁니다. 한 번만 입력하면 됩니다."
@@ -297,8 +307,17 @@ export default function SettlementSection({ profile }: { profile: SettlementSect
         </Note>
       )}
 
-      <div className="flex justify-end">
-        <SubmitButton type="submit" disabled={!canSubmit} className={BTN_PRIMARY}>
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {!canSubmit && (
+          <p className="text-xs text-[var(--muted)]">
+            {!bank.trim() || !account.trim()
+              ? "은행과 계좌번호를 입력하면 저장할 수 있어요."
+              : rrnIncomplete
+                ? "주민등록번호 13자리를 모두 입력해 주세요."
+                : "수집·이용 동의에 체크하면 저장할 수 있어요."}
+          </p>
+        )}
+        <SubmitButton type="submit" className={BTN_PRIMARY}>
           정산 정보 저장
         </SubmitButton>
       </div>

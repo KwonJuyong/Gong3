@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { ui } from "@/app/components/ui";
 import { saveCertReadinessAction } from "./actions";
 import type { CertAnswer } from "@/app/lib/certChecklist";
 
@@ -71,11 +72,7 @@ export default function ChecklistForm({
           {!dirty && saved === "ok" && (
             <span className="text-xs text-[var(--success)]">저장했습니다</span>
           )}
-          <button
-            onClick={save}
-            disabled={pending || !dirty}
-            className="px-3.5 py-1.5 bg-[var(--accent)] text-white rounded-[var(--radius-md)] text-xs font-medium hover:bg-[var(--accent-dark)] disabled:opacity-40 transition-colors"
-          >
+          <button onClick={save} disabled={pending || !dirty} className={ui.primaryXs}>
             {pending ? "저장 중…" : "저장"}
           </button>
         </div>
@@ -187,11 +184,7 @@ export default function ChecklistForm({
           </div>
 
           <div className="mt-5 flex items-center gap-3">
-            <button
-              onClick={save}
-              disabled={pending}
-              className="px-4 py-2 bg-[var(--accent)] text-white rounded-[var(--radius-md)] text-sm font-medium hover:bg-[var(--accent-dark)] disabled:opacity-50 transition-colors"
-            >
+            <button onClick={save} disabled={pending} className={ui.primarySm}>
               {pending ? "저장 중…" : "저장"}
             </button>
             {saved === "ok" && !dirty && (

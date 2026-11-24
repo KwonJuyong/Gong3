@@ -9,7 +9,7 @@ import { detectInjection, recordQueryAudit, withTimeout, ToolTimeoutError } from
 /**
  * 자연어 → 질의 명세 → 실행. 조회 화면에서 표·차트로 답하는 경로임
  *
- * 챗봇(chatAgent.ts)과 같은 도구 정의(query_data)와 엔진(runQuery)을 써서 권한 판정이 같음
+ * Evi(chatAgent.ts)와 같은 도구 정의(query_data)와 엔진(runQuery)을 써서 권한 판정이 같음
  * tool_choice 를 강제하지 않음. 모델이 도구 대신 문장을 돌려주면 되묻는 것으로 처리함
  */
 
@@ -52,7 +52,7 @@ export async function runNaturalQuery(user: ToolUser, questionRaw: string): Prom
     });
     return {
       kind: "blocked",
-      message: "도우미의 동작 규칙을 바꾸거나 조회가 차단된 정보를 요구하는 질문으로 보여 처리하지 않았습니다.",
+      message: "Evi의 동작 규칙을 바꾸거나 조회가 차단된 정보를 요구하는 질문으로 보여 처리하지 않았습니다.",
     };
   }
 
@@ -69,6 +69,7 @@ export async function runNaturalQuery(user: ToolUser, questionRaw: string): Prom
       openaiClient().chat.completions.create({
         model: CHAT_MODEL,
         temperature: 0,
+        reasoning_effort: "none",
         max_completion_tokens: QUERY_MAX_OUTPUT_TOKENS,
         messages: [
           { role: "system", content: SYSTEM },

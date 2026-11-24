@@ -12,7 +12,10 @@ import { Card, Field, Note, Badge, INPUT, BTN_PRIMARY, BTN_GHOST } from "./ui";
  */
 export default function BizSection({
   initial,
+  returnToOrders,
 }: {
+  /** 의뢰 화면에서 막혀 들어온 경우. 저장하면 의뢰 화면으로 돌아감 */
+  returnToOrders: boolean;
   initial: {
     bizNo: string;
     bizName: string;
@@ -50,6 +53,7 @@ export default function BizSection({
 
   return (
     <form action={saveMyBizProfileAction} className="space-y-5">
+      {returnToOrders && <input type="hidden" name="from" value="orders" />}
       <Card
         title="기업 정보"
         desc="평가 의뢰 시 견적서와 전자세금계산서에 그대로 쓰입니다. 여기에 저장해두면 의뢰할 때마다 다시 입력하지 않아도 됩니다."

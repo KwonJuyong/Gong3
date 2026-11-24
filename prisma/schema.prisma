@@ -43,6 +43,8 @@ model User {
   lastSeenIp   String?
 
   createdProjects   Project[]      @relation("CreatedProjects")
+  scenarioReadings  ScenarioReading[]
+  scenarioTasks     ScenarioTask[]
   responses         Response[]
   notifications     Notification[] // 내가 "받는" 알림
   sentNotifications Notification[] @relation("NotificationFromUser") // 내가 "보낸" 알림(요청자)
@@ -180,6 +182,8 @@ model Project {
   // RECRUITING(모집중·응답 불가) | ACTIVE(평가 진행) | FINISHED(종료)
   status             String       @default("ACTIVE")
   questions          Json
+  // 참고자료·매뉴얼 첨부: [{ url, name, kind: "image"|"file" }]
+  guides             Json?
   link               String?
   creatorId          String?
   creator            User?        @relation("CreatedProjects", fields: [creatorId], references: [id])
@@ -195,6 +199,12 @@ model Project {
   // AUTO 일 때 문항 원본. 학생 응답은 Project 에 붙는다.
   surveyVersionId String?
   surveyVersion   SurveyVersion? @relation("ProjectSurveySource", fields: [surveyVersionId], references: [id])
+
+  // 평가 방식. SURVEY = 문항 응답, ACCOMPANY = Evi 동행 평가(문항 없음, 과제 대화로 응답)
+  evalMode  String   @default("SURVEY")
+  // 평가 대상 서비스. 설문형은 surveyVersion 의 서비스와 같음
+  serviceId String?
+  service   Service? @relation("ServiceProjects", fields: [serviceId], references: [id], onDelete: SetNull)
 
   // 자금 출처와 지급자
   // COMPANY        업체, 지급자 = 우리(선불)
@@ -220,6 +230,99 @@ model Project {
   createdAt    DateTime  @default(now())
 
   pastPayments PastPayment[]
+  scenario     ScenarioBrief?
+}
+
+model ScenarioBrief {
+  projectId   String @id
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  description String
+  task        String
+  outcome     String
+  metric      String
+  unit        String
+  lowerBetter Boolean
+  version     String
+  publishedAt DateTime?
+  revision    Int @default(0)
+  readings    ScenarioReading[]
+  tasks       ScenarioTask[]
+  releases    ScenarioRelease[]
+}
+
+model ScenarioTask {
+  projectId String
+  brief     ScenarioBrief @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phase     Int
+  startedAt DateTime @default(now())
+  stuckAt   DateTime?
+  incident  String?
+
+  @@id([projectId, userId, phase])
+}
+
+model ScenarioReading {
+  id        String @unique @default(cuid())
+  projectId String
+  brief     ScenarioBrief @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phase     Int
+  value     Float?
+  /// 완료 확인 항목별 응답(yes·no·unknown), 측정 기준 줄 순서
+  checks    Json?
+  /// 기록 시점까지의 동행 대화([{from: npc|me, text}])
+  transcript Json?
+  /// 학생이 마칠 때 올린 화면 캡처([{url, name}], 최대 10장)
+  images    Json?
+  rating    Int
+  note      String
+  decision  String?
+  reply     String?
+  repliedAt DateTime?
+  requestedAt DateTime?
+  deployedPhase Int?
+  recheckResult String?
+  recheckNote   String?
+  recheckedAt   DateTime?
+  requests ScenarioRequest[]
+  createdAt DateTime @default(now())
+
+  @@id([projectId, userId, phase])
+  @@index([projectId, phase])
+}
+
+model ScenarioRequest {
+  id String @id @default(cuid())
+  projectId String
+  userId String
+  phase Int
+  reading ScenarioReading @relation(fields: [projectId, userId, phase], references: [projectId, userId, phase], onDelete: Cascade)
+  note String
+  decision  String?
+  reply     String?
+  repliedAt DateTime?
+  requestedAt DateTime @default(now())
+  deployedPhase Int?
+  recheckResult String?
+  recheckNote   String?
+  recheckedAt   DateTime?
+
+  @@index([projectId, userId, phase])
+}
+
+model ScenarioRelease {
+  projectId String
+  brief     ScenarioBrief @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+  phase     Int
+  version   String
+  reply     String
+  createdAt DateTime @default(now())
+
+  @@id([projectId, phase])
+  @@unique([projectId, version])
 }
 
 /// 플랫폼 지급 기능 도입 전의 참여 보상 기록(청구서·정산 명부 기준). 실적 집계 전용
@@ -302,6 +405,8 @@ model Response {
   projectId String
   userId    String
   answers   Json
+  // 첫 응답 입력부터 첫 제출까지 걸린 초(검수 보조 표시용). 고쳐 다시 내도 바꾸지 않음
+  durationSec Int?
   project   Project  @relation(fields: [projectId], references: [id])
   user      User     @relation(fields: [userId], references: [id])
   // 이 응답에 대한 보상(유상 평가일 때만)
@@ -380,6 +485,8 @@ model Notification {
   content String
   isRead  Boolean @default(false)
   type    String  @default("INFO")
+  // 누르면 열 화면(내부 경로). 없으면 알림함에서 이동하지 않음
+  link    String?
 
   fromUserId String? // 알림 "발신자"(권한 요청자)
   fromUser   User?   @relation("NotificationFromUser", fields: [fromUserId], references: [id])
@@ -443,6 +550,7 @@ model Service {
   userFacingUi      Boolean         @default(true) // → 상호작용 역량 강조
   surveys           SurveyVersion[]
   orders            Order[]
+  projects          Project[]          @relation("ServiceProjects")
   certReadiness     CertReadiness?
   createdAt         DateTime        @default(now())
 }

@@ -28,6 +28,7 @@ export default async function DashboardLayout({
     id: string;
     content: string;
     type: string;
+    link: string | null;
     fromStudentId: string | null;
     fromName: string | null;
     createdAt: string;
@@ -61,13 +62,15 @@ export default async function DashboardLayout({
         id: n.id,
         content: n.content,
         type: n.type,
+        link: n.link,
         fromStudentId: n.fromUser ? maskStudentId(n.fromUser.studentId, isAdmin) : null,
         fromName: n.fromUser?.name || null,
         createdAt: n.createdAt.toISOString(),
       }));
       unreadNotifications = await prisma.notification.count({ where: { userId, isRead: false } });
       unreadMessages = await getUnreadTotal();
-      transactable = await canTransact(user);
+      // 기업 계정은 사업자 정보를 넣기 전에도 의뢰 메뉴를 보임(의뢰 화면이 사업자 정보 입력으로 안내함)
+      transactable = user.userType === "DEVELOPER" || (await canTransact(user));
       // 관리자에게만 필요한 값이라 역할을 확인하고 셈
       if (isAdmin) pendingApprovals = await pendingApprovalCount();
       // 지난달 접속기록 점검(월 1회)을 하지 않았으면 표시함. 기록이 없던 달은 제외함

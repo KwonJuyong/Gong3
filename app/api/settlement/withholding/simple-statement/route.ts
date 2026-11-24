@@ -19,7 +19,7 @@ import {
 } from "@/app/lib/simpleStatement";
 import { fillTemplateSheet1, type CellValue } from "@/app/lib/xlsxTemplate";
 
-const TEMPLATE = "app/lib/templates/simple-statement-other-income-2024.xlsx";
+const TEMPLATE = "simple-statement-other-income-2024.xlsx";
 
 /** 집계 결과를 양식의 A~N 14열로 폄. 순서는 양식 헤더 그대로. */
 function toSheetRows(result: SimpleStatementResult): CellValue[][] {

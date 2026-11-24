@@ -31,6 +31,7 @@ import { saveBizProfile, canTransact, bizStateBlocks } from "../../lib/bizProfil
 import { isValidBizNo, normalizeBizNo, BIZ_NO_ERROR } from "../../lib/bizNo";
 import { checkBizLookupQuota, checkLimit } from "../../lib/limits";
 import { checkReauth } from "../../lib/reauth";
+import { backfillRewardsForOrder } from "../../lib/rewards";
 
 const ORDERS_PATH = "/dashboard/orders";
 
@@ -384,5 +385,34 @@ export async function markTaxInvoiceAmendedAction(formData: FormData) {
   await markTaxInvoiceAmended(paymentId);
   revalidatePath(`${ORDERS_PATH}/${payment.orderId}`);
   redirect(`${ORDERS_PATH}/${payment.orderId}`);
+}
+
+/**
+ * 기업이 자기 의뢰를 자기 평가에 연결함(평가를 먼저 만들고 의뢰를 나중에 낸 경우).
+ * 연결 전 응답의 보상은 입금이 확인된 의뢰면 바로 소급 생성됨
+ */
+export async function linkOrderToMyProjectAction(formData: FormData) {
+  const me = await getMe();
+  if (!me) return;
+  const orderId = ((formData.get("orderId") as string) || "").trim();
+  const projectId = ((formData.get("projectId") as string) || "").trim();
+  const back = `/dashboard/orders/${orderId}`;
+  if (!orderId || !projectId) redirect(back);
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, creatorId: me.id, order: null, status: { in: ["PENDING_APPROVAL", "RECRUITING", "ACTIVE"] } },
+    select: { id: true },
+  });
+  if (!project) redirect(`${back}?error=${encodeURIComponent("연결할 수 없는 평가예요. 이미 의뢰가 연결됐거나 종료된 평가인지 확인해 주세요.")}`);
+  const linked = await prisma.order.updateMany({
+    where: { id: orderId, buyerId: me.id, projectId: null, status: { in: ["PENDING", "PAID"] } },
+    data: { projectId },
+  });
+  if (linked.count === 0) redirect(`${back}?error=${encodeURIComponent("이미 다른 평가에 연결된 의뢰예요.")}`);
+  await backfillRewardsForOrder(orderId);
+
+  revalidatePath(back);
+  revalidatePath("/dashboard");
+  redirect(back);
 }
 

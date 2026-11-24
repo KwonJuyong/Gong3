@@ -52,7 +52,7 @@ export default function ProfileHeader({
                 {pct}%
               </span>
             </div>
-            <div className="h-2 rounded-full bg-[var(--gray-100)] overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+            <div className="h-2 rounded-full bg-[var(--gray-100)] overflow-hidden" role="progressbar" aria-label="프로필 완성도" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
               <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${pct}%`, backgroundColor: tone }} />
             </div>
           </div>

@@ -1,15 +1,10 @@
 import Link from "next/link";
+import { BTN_PRIMARY } from "@/app/AuthParts";
 import { lookupClaimToken } from "@/app/lib/accountClaim";
 import ClaimForm from "./ClaimForm";
 
 export const metadata = { title: "청구 확인서 서명" };
 
-/**
- * 계정 인계 화면(/claim/<토큰>). 이메일이 없는 기존 계정을 복구하는 경로임(app/lib/accountClaim.ts).
- *
- * 로그인을 요구하지 않고 URL 의 토큰으로 판정함(DB 에는 해시만 저장).
- * 토큰은 추측할 수 없는 난수라 실패 사유를 구분해 보여줌
- */
 export default async function ClaimPage({
   params,
 }: {
@@ -19,9 +14,9 @@ export default async function ClaimPage({
   const found = await lookupClaimToken(token);
 
   const shell = (title: string, body: React.ReactNode) => (
-    <main className="min-h-screen bg-[var(--surface)] flex items-center justify-center p-6">
+    <main className="min-h-screen bg-[var(--surface)] flex items-center justify-center px-4 py-6 sm:p-6">
       <div className="w-full max-w-[460px]">
-        <div className="bg-white rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] border border-[var(--gray-200)] p-8">
+        <div className="bg-white rounded-[var(--radius-xl)] p-6 sm:p-8">
           <h1 className="text-2xl font-bold text-[var(--gray-900)] mb-1 tracking-tight">
             AI 평가단
           </h1>
@@ -63,10 +58,7 @@ export default async function ClaimPage({
           <p className="font-semibold mb-1.5 text-[var(--danger)]">{m.head}</p>
           <p className="text-[13px]">{m.desc}</p>
         </div>
-        <Link
-          href="/"
-          className="block w-full py-2.5 text-center bg-[var(--accent)] text-white rounded-[var(--radius-md)] font-semibold text-sm hover:bg-[var(--accent-dark)] transition-colors"
-        >
+        <Link href="/" className={BTN_PRIMARY}>
           로그인 화면으로
         </Link>
       </>,

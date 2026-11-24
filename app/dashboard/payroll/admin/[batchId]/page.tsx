@@ -1,4 +1,5 @@
 import ConfirmButton from "@/app/components/ConfirmButton";
+import { ui } from "@/app/components/ui";
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -98,8 +99,8 @@ export default async function PayrollAdminPage({
             <form action={generateClaims}>
               <input type="hidden" name="batchId" value={batch.id} />
               <ConfirmButton
-                message={`근무기간(${fmtDate(batch.periodStart)} ~ ${fmtDate(batch.periodEnd)}) 평가자의 청구서를 자동으로 만듭니다.\n\n· 아직 청구서가 없는 사람 것만 새로 만듭니다.\n· 이 기간에 외부 의뢰형 평가(보상으로 이미 지급)가 있으면 그 근무도 들어갑니다. 생성 후 근무내역을 확인하세요.\n\n정말 생성하시겠습니까?`}
-                className="px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-xs font-medium hover:bg-[var(--accent-dark)]"
+                message={`근무기간(${fmtDate(batch.periodStart)} ~ ${fmtDate(batch.periodEnd)}) 평가자의 청구서를 자동으로 만듭니다.\n\n· 아직 청구서가 없는 사람 것만 새로 만듭니다.\n· 연구비 평가만 넣습니다. 업체·학교 평가는 보상으로 지급하므로 제외합니다.\n\n정말 생성하시겠습니까?`}
+                className={ui.primaryXs}
               >
                 평가자 서류 자동 생성
               </ConfirmButton>

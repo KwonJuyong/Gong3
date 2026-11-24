@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { INPUT } from "../AuthParts";
 
 /**
  * 전화번호 입력. 한 칸으로 받고 자릿수에 따라 하이픈을 넣음
@@ -70,12 +71,12 @@ export default function PhoneInput({
         required={required}
         pattern="[0-9\-]{9,13}"
         title="지역번호를 포함해 입력해 주세요 (예: 010-1234-5678, 033-248-0000)"
-        className="w-full px-3.5 py-2.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors placeholder:text-[var(--gray-400)]"
+        className={INPUT}
       />
       {/* 실제 제출값(하이픈 없는 숫자) */}
       <input type="hidden" name={name} value={digits} />
       <p className="text-xs text-[var(--gray-500)] mt-1">
-        휴대폰·유선번호 모두 가능합니다 (예: 033-248-0000, 02-123-4567)
+        휴대폰·유선번호 모두 가능합니다
       </p>
     </div>
   );

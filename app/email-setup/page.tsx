@@ -20,9 +20,9 @@ export default async function EmailSetupPage() {
   if (me.email) redirect("/dashboard");
 
   return (
-    <main className="min-h-screen bg-[var(--surface)] flex items-center justify-center p-6">
+    <main className="min-h-screen bg-[var(--surface)] flex items-center justify-center px-4 py-6 sm:p-6">
       <div className="w-full max-w-[460px]">
-        <div className="bg-white rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] border border-[var(--gray-200)] p-8">
+        <div className="bg-white rounded-[var(--radius-xl)] p-6 sm:p-8">
           <h1 className="text-2xl font-bold text-[var(--gray-900)] mb-1 tracking-tight">
             AI 평가단
           </h1>

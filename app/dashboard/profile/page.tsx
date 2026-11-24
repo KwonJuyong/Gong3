@@ -25,7 +25,7 @@ export const metadata = { title: "프로필" };
 export default async function ProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; saved?: string; error?: string }>;
+  searchParams: Promise<{ tab?: string; saved?: string; error?: string; from?: string }>;
 }) {
   const q = await searchParams;
   const me = await getSessionUser();
@@ -143,6 +143,7 @@ export default async function ProfilePage({
 
             {tab === "biz" && (
               <BizSection
+                returnToOrders={q.from === "orders"}
                 initial={{
                   bizNo: biz.bizNo,
                   bizName: biz.bizName,

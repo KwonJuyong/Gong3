@@ -1,4 +1,5 @@
 import { logPersonalData } from "@/app/lib/accessLog";
+import { maskStudentId } from "@/app/lib/privacy";
 import { type NextRequest, NextResponse } from "next/server";
 import { checkLimit } from "@/app/lib/limits";
 import { prisma, getSessionUser } from "../../db";
@@ -144,7 +145,8 @@ export async function GET(req: NextRequest) {
           minute: "2-digit",
           timeZone: "Asia/Seoul",
         }),
-        r.user?.studentId ?? "",
+        // 화면과 같은 기준으로 개설자에게는 학번 일부만 줌
+        maskStudentId(r.user?.studentId, me.role === "ADMIN"),
         r.user?.name ?? "",
         ...columns.map((c) => c.read(answers)),
       ].map(csvEscape);

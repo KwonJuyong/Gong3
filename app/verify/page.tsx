@@ -1,13 +1,10 @@
 import Link from "next/link";
+import { BTN_PRIMARY } from "../AuthParts";
 import { consumeVerificationToken } from "../lib/emailVerification";
 import ResendForm from "./ResendForm";
 
 export const metadata = { title: "이메일 인증" };
 
-/**
- * 가입 이메일 인증 링크(/verify?token=...). 로그인 없이 씀
- * 들어오면 바로 토큰을 소비함. 메일 클라이언트가 링크를 미리 열어도 결과는 인증 완료라 문제가 없음
- */
 export default async function VerifyPage({
   searchParams,
 }: {
@@ -17,9 +14,9 @@ export default async function VerifyPage({
   const r = await consumeVerificationToken(token || "");
 
   return (
-    <main className="min-h-screen bg-[var(--surface)] flex items-center justify-center p-6">
+    <main className="min-h-screen bg-[var(--surface)] flex items-center justify-center px-4 py-6 sm:p-6">
       <div className="w-full max-w-[420px]">
-        <div className="bg-white rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] border border-[var(--gray-200)] p-8">
+        <div className="bg-white rounded-[var(--radius-xl)] p-6 sm:p-8">
           <h1 className="text-2xl font-bold text-[var(--gray-900)] mb-1 tracking-tight">
             AI 평가단
           </h1>
@@ -32,10 +29,7 @@ export default async function VerifyPage({
                   ? "이미 인증이 완료된 계정입니다. 그대로 로그인하세요."
                   : "이메일 인증이 완료되었습니다. 이제 로그인할 수 있습니다."}
               </p>
-              <Link
-                href="/"
-                className="block w-full text-center py-2.5 bg-[var(--accent)] text-white rounded-[var(--radius-md)] font-semibold text-sm hover:bg-[var(--accent-dark)] transition-colors"
-              >
+              <Link href="/" className={BTN_PRIMARY}>
                 로그인하기
               </Link>
             </div>

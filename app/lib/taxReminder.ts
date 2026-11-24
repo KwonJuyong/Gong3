@@ -1,21 +1,3 @@
-/**
- * 세금 신고 리마인더. 신고 기한 전에 관리자에게 알림과 신고할 숫자를 보냄
- *
- * | 주기 | 무엇 | 어디 | 기한 |
- * |---|---|---|---|
- * | 매월 | 원천징수이행상황신고서 | 홈택스 | 다음 달 10일 |
- * | 매월 | 지방소득세 특별징수분 | 위택스 | 다음 달 10일 |
- * | 매월 | 간이지급명세서 | 홈택스 | 다음 달 말일 |
- * | 반기 | 부가가치세 확정신고 | 홈택스 | 1/25 · 7/25 |
- * | 연 1회 | 종합소득세 | 홈택스 | 5/31 |
- * | 6월·12월 | 원천세 반기납부 신청 | 홈택스 | 그 달 말일 |
- *
- * 세액이 0원이어도 간이지급명세서는 제출해야 함(일시적 인적용역은 과세최저한 제출 면제의 예외).
- *
- * 보낸 이력을 AppSetting(tax_reminder:<kind>:<yyyy-mm>)에 남겨 같은 알림을 두 번 보내지 않음
- * 매월 신고는 TaxFiling 에 제출 기록이 있으면 보내지 않음
- */
-
 import { prisma } from "../db";
 import { won } from "./money";
 import { createNotifications } from "./notify";
@@ -24,8 +6,6 @@ import { isMonthFiled } from "./taxFiling";
 
 const SETTLEMENT_LINK = "/dashboard/settlement";
 
-
-/** KST 기준 연·월·일. 서버 TZ 가 UTC 여도 한국 날짜로 판단함(+9 고정). */
 export function kstParts(d: Date): { year: number; month: number; day: number } {
   const kst = new Date(d.getTime() + 9 * 3600_000);
   return {
@@ -35,39 +15,31 @@ export function kstParts(d: Date): { year: number; month: number; day: number } 
   };
 }
 
-/** KST 기준 그 달의 시작·끝(다음 달 시작)을 UTC 인스턴트로 */
 function kstMonthRange(year: number, month: number): { gte: Date; lt: Date } {
   const gte = new Date(Date.UTC(year, month - 1, 1) - 9 * 3600_000);
   const lt = new Date(Date.UTC(year, month, 1) - 9 * 3600_000);
   return { gte, lt };
 }
 
-/** 직전 달 (1월이면 작년 12월) */
 function prevMonth(year: number, month: number): { year: number; month: number } {
   return month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
 }
 
-
 export interface MonthlyWithholding {
   year: number;
   month: number;
-  payoutCount: number; // 지급 건수
-  personCount: number; // 인원 (한 사람이 여러 건이면 1명)
-  gross: number; // 지급액(세전) 합계
-  incomeTax: number; // 소득세 합계(홈택스 원천세 신고용)
-  localTax: number; // 지방소득세 합계(위택스 신고용)
-  net: number; // 실지급 합계
+  payoutCount: number;
+  personCount: number;
+  gross: number;
+  incomeTax: number;
+  localTax: number;
+  net: number;
 }
 
-/**
- * 그 달에 실제로 지급된(Payout.paidAt) 보상을 집계함
- * 홈택스와 위택스에 따로 신고하므로 소득세와 지방소득세를 나눠서 돌려줌
- */
 export async function monthlyWithholding(year: number, month: number): Promise<MonthlyWithholding> {
   const { gte, lt } = kstMonthRange(year, month);
   const payouts = await prisma.payout.findMany({
     where: { status: "PAID", paidAt: { gte, lt } },
-    // 세액·실지급액은 지급 시점 값을 그대로 씀
     include: {
       reward: {
         select: {
@@ -109,28 +81,19 @@ export async function monthlyWithholding(year: number, month: number): Promise<M
   };
 }
 
-
 export interface Reminder {
-  /** 멱등키의 종류 부분. `tax_reminder:<kind>:<yyyy-mm>` */
   kind: string;
   content: string;
 }
 
-/**
- * 오늘 보낼 리마인더 목록.
- * 원천세·명세서는 기한 2~5일 전, 준비할 자료가 많은 부가세·종소세는 5~6일 전에 보냄
- */
 export async function dueReminders(now: Date = new Date()): Promise<Reminder[]> {
   const { year, month, day } = kstParts(now);
   const out: Reminder[] = [];
 
-  // 매월 8일: 원천세(홈택스) + 지방소득세(위택스), 기한 10일
   if (day === 8) {
     const p = prevMonth(year, month);
     const w = await monthlyWithholding(p.year, p.month);
-    // 원천세와 지방소득세가 모두 기록됐으면 보내지 않음
     const filed = await isMonthFiled(p.year, p.month, ["WITHHOLDING", "LOCAL_TAX"]);
-    // 지급이 없던 달은 보내지 않음
     if (w.payoutCount > 0 && !filed) {
       out.push({
         kind: "withholding",
@@ -143,7 +106,6 @@ export async function dueReminders(now: Date = new Date()): Promise<Reminder[]> 
     }
   }
 
-  // 매월 25일: 간이지급명세서, 기한 말일
   if (day === 25) {
     const p = prevMonth(year, month);
     const w = await monthlyWithholding(p.year, p.month);
@@ -160,7 +122,6 @@ export async function dueReminders(now: Date = new Date()): Promise<Reminder[]> 
     }
   }
 
-  // 1월·7월 20일: 부가세 확정신고, 기한 25일
   if ((month === 1 || month === 7) && day === 20) {
     out.push({
       kind: "vat",
@@ -171,7 +132,6 @@ export async function dueReminders(now: Date = new Date()): Promise<Reminder[]> 
     });
   }
 
-  // 5월 25일: 종합소득세, 기한 31일
   if (month === 5 && day === 25) {
     out.push({
       kind: "income-tax",
@@ -182,7 +142,6 @@ export async function dueReminders(now: Date = new Date()): Promise<Reminder[]> 
     });
   }
 
-  // 6월·12월 20일: 원천세 반기납부 신청(그 달에만 신청할 수 있음)
   if ((month === 6 || month === 12) && day === 20) {
     const target = month === 6 ? "올해 하반기" : "내년 상반기";
     out.push({
@@ -198,22 +157,15 @@ export async function dueReminders(now: Date = new Date()): Promise<Reminder[]> 
   return out;
 }
 
-
 export interface ReminderResult {
-  sent: string[]; // 이번에 보낸 kind
-  skipped: string[]; // 이미 보낸 kind
+  sent: string[];
+  skipped: string[];
 }
 
-/** 같은 달에 같은 종류를 두 번 보내지 않기 위한 키 */
 function sentKey(kind: string, year: number, month: number): string {
   return `tax_reminder:${kind}:${year}-${String(month).padStart(2, "0")}`;
 }
 
-/**
- * 크론. 오늘 보낼 리마인더를 관리자에게 발송함
- *
- * 보낸 이력을 AppSetting 에 남기므로 하루 여러 번 실행해도 됨
- */
 export async function runTaxReminders(now: Date = new Date()): Promise<ReminderResult> {
   const { year, month } = kstParts(now);
   const reminders = await dueReminders(now);
@@ -235,7 +187,6 @@ export async function runTaxReminders(now: Date = new Date()): Promise<ReminderR
       admins.map((a) => ({ userId: a.id, content: r.content, type: "SETTLEMENT" })),
       { link: SETTLEMENT_LINK },
     );
-    // 발송에 실패하면 다음에 다시 보내도록 발송 후에 기록함
     await prisma.appSetting.upsert({
       where: { key },
       update: { value: now.toISOString() },

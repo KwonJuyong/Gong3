@@ -43,19 +43,6 @@ export type VignetteBlock = {
 
 export type SurveyBlock = AdaptiveBlock | InstrumentBlock | VignetteBlock;
 
-// itemKey 규칙 (응답 저장·채점에서 동일하게 사용)
 export const adaptiveKey = (constructId: string) => `adaptive:${constructId}`;
 export const instrumentKey = (instrument: string, ordinal: number) => `${instrument}:${ordinal}`;
 export const vignetteKey = (constructId: string, level: number) => `vignette:${constructId}:${level}`;
-
-// 모든 블록의 (점수 입력이 필요한) itemKey 목록
-export function collectItemKeys(blocks: SurveyBlock[]): string[] {
-  const keys: string[] = [];
-  for (const b of blocks) {
-    if (b.kind === "LLM_ADAPTIVE") keys.push(b.itemKey);
-    else for (const it of b.items) keys.push(it.itemKey);
-  }
-  return keys;
-}
-
-// 직접 입력한 문항은 Project.questions 에 저장되고, 이 파일은 SurveyVersion 문항 전용임

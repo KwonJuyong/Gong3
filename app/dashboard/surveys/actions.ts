@@ -19,11 +19,11 @@ async function getMe() {
 }
 
 /** 척도 범위 안의 정수만 점수로 받음. 범위 밖 값은 리포트 평균을 흔듦 */
-function parseScore(raw: FormDataEntryValue | null, scaleType: string, uiMax?: number): number | null {
+function parseScore(raw: FormDataEntryValue | null, scaleType: string): number | null {
   if (typeof raw !== "string" || !/^-?\d+$/.test(raw.trim())) return null;
   const n = Number(raw);
   const { min, max } = scaleRange(scaleType);
-  return n >= Math.min(min, 1) && n <= Math.max(max, uiMax ?? max) ? n : null;
+  return n >= min && n <= max ? n : null;
 }
 
 /** 동결된 설문에 1인 1회 응답 */
@@ -72,8 +72,7 @@ export async function submitResponseAction(formData: FormData) {
     } else if (b.kind === "INSTRUMENT") {
       for (const it of b.items) {
         expected++;
-        // 응답 화면이 검증도구를 척도와 무관하게 1~7 칸으로 그림
-        const score = parseScore(formData.get(it.itemKey), b.scaleType, 7);
+        const score = parseScore(formData.get(it.itemKey), b.scaleType);
         if (score != null) {
           items.push({
             blockType: "INSTRUMENT",

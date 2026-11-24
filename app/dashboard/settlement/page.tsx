@@ -3,6 +3,7 @@ import ClearQueryParams from "@/app/components/ClearQueryParams";
 import Link from "next/link";
 import SubmitButton from "@/app/components/SubmitButton";
 import ConfirmButton from "@/app/components/ConfirmButton";
+import { ui } from "@/app/components/ui";
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { redirect } from "next/navigation";
 import { prisma } from "../../db";
@@ -122,7 +123,7 @@ export default async function SettlementPage({
   // 검수 대기 보상의 불성실 응답 의심 신호. 응답 원문은 검수 대기 건만 읽음
   const pendingResponses = await prisma.reward.findMany({
     where: { status: "PENDING", responseId: { not: null } },
-    select: { id: true, response: { select: { answers: true, project: { select: { questions: true } } } } },
+    select: { id: true, response: { select: { answers: true, durationSec: true, project: { select: { questions: true } } } } },
   });
   const qualityFlags = new Map<string, string[]>();
   for (const pr of pendingResponses) {
@@ -130,6 +131,7 @@ export default async function SettlementPage({
     const flags = responseQualityFlags(
       (pr.response.project.questions as unknown as ProjectQuestion[]) || [],
       (pr.response.answers ?? {}) as Record<string, unknown>,
+      pr.response.durationSec,
     );
     if (flags.length > 0) qualityFlags.set(pr.id, flags);
   }
@@ -204,7 +206,7 @@ export default async function SettlementPage({
         )}
         {q.failed != null && (
           <p className="text-sm text-[var(--danger)] bg-[var(--danger-light)] px-4 py-3 rounded-[var(--radius-md)]">
-            이체 실패로 기록했습니다. <strong>원장에는 지급으로 남지 않습니다</strong> — 계좌를
+            이체 실패로 기록했습니다. <strong>원장에는 지급으로 남지 않습니다</strong>. 계좌를
             고친 뒤 &quot;재이체&quot;를 누르세요.
           </p>
         )}
@@ -308,7 +310,9 @@ export default async function SettlementPage({
           const approvedNoPayout = approved.filter((r) => !r.payout).length;
           const payable = approved.filter((r) => r.payout && r.payout.status === "PENDING").length;
           const failedPayouts = rewards.filter((r) => r.payout?.status === "FAILED").length;
-          const grossSum = rewards.reduce((s, r) => s + r.grossAmount, 0);
+          // 반려분은 지급하지 않으므로 지급 예정액에서 뺌(정산 마감 환불과 같은 기준)
+          const rejectedCount = rewards.filter((r) => r.status === "REJECTED").length;
+          const grossSum = rewards.filter((r) => r.status !== "REJECTED").reduce((s, r) => s + r.grossAmount, 0);
           // 이행분: 승인된 것 전부(FAILED 포함). settleOrderRefund 와 같은 기준임
           const fulfilled = rewards.filter(
             (r) => r.status === "APPROVED" || r.status === "PAID" || r.status === "FAILED",
@@ -334,6 +338,7 @@ export default async function SettlementPage({
                     </h3>
                     <p className="text-xs text-[var(--muted)] mt-0.5">
                       응답 {rewards.length}명 · 검수대기 {pending} · 승인 {approved.length}
+                      {rejectedCount > 0 && ` · 반려 ${rejectedCount}`}
                     </p>
                   </div>
                   <div className="text-right text-xs text-[var(--muted)]">
@@ -370,7 +375,7 @@ export default async function SettlementPage({
                     ) : (
                       <>
                         아직 정원({order.panelSize}명)이 안 찼습니다. 응답 {rewards.length}명.
-                        남은 {won(-subtotalGap)} 은 미응답분입니다.
+                        남은 {won(-subtotalGap)} 은 {rejectedCount > 0 ? "미응답·반려분" : "미응답분"}입니다.
                       </>
                     )}
                   </p>
@@ -460,16 +465,24 @@ export default async function SettlementPage({
                                   <input type="hidden" name="approve" value="1" />
                                   <ConfirmButton
                                     message={`${r.user.name}님의 보상 ${won(r.grossAmount)}(실지급 ${won(r.netAmount)})을 승인합니다.\n\n· 승인하면 금액을 더 조정할 수 없습니다.\n\n정말 승인하시겠습니까?`}
-                                    className="px-2 py-1 text-xs font-medium bg-[var(--accent)] text-white rounded-[var(--radius-sm)] hover:bg-[var(--accent-dark)]"
+                                    className={ui.primaryXs}
                                   >
                                     승인
                                   </ConfirmButton>
                                 </form>
-                                <form action={reviewRewardAction}>
+                                <form action={reviewRewardAction} className="flex gap-1">
                                   <input type="hidden" name="rewardId" value={r.id} />
                                   <input type="hidden" name="approve" value="0" />
+                                  <input
+                                    name="reason"
+                                    required
+                                    maxLength={200}
+                                    placeholder="반려 사유"
+                                    aria-label={`${r.user.name}님 보상 반려 사유`}
+                                    className="w-28 px-2 py-1 text-xs border border-[var(--gray-300)] rounded-[var(--radius-sm)]"
+                                  />
                                   <ConfirmButton
-                                    message={`${r.user.name}님의 보상 ${won(r.grossAmount)}을 반려합니다.\n\n· 이 학생은 이 응답에 대한 보상을 받지 못합니다.\n· 화면에서 되돌릴 수 없습니다.\n\n정말 반려하시겠습니까?`}
+                                    message={`${r.user.name}님의 보상 ${won(r.grossAmount)}을 반려합니다(사유: {reason}).\n\n· 학생에게 사유와 함께 알림이 갑니다.\n· 이 학생은 이 응답에 대한 보상을 받지 못합니다.\n· 화면에서 되돌릴 수 없습니다.\n\n정말 반려하시겠습니까?`}
                                     className="px-2 py-1 text-xs font-medium border border-[var(--gray-300)] rounded-[var(--radius-sm)] hover:bg-[var(--gray-50)]"
                                   >
                                     반려
@@ -555,7 +568,7 @@ export default async function SettlementPage({
                     <input type="hidden" name="orderId" value={order.id} />
                     <ConfirmButton
                       message={`승인된 보상 ${approvedNoPayout}건의 지급(이체 대기) 건을 만듭니다.\n\n· 지금 등록된 계좌·예금주가 이체 대상으로 고정됩니다.\n· 계좌 미등록자는 빠집니다. 위 「평가자 정산 정보」에서 먼저 확인하세요.\n\n정말 지급을 생성하시겠습니까?`}
-                      className="px-3 py-1.5 text-xs font-medium bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)]"
+                      className={ui.primaryXs}
                     >
                       지급 생성 ({approvedNoPayout}건)
                     </ConfirmButton>
@@ -800,7 +813,7 @@ export default async function SettlementPage({
             />
             <ConfirmButton
               message={"{kind} {amount}원을 원장에 기록합니다.\n\n· 원장은 추가만 되고 지울 수 없습니다(틀리면 반대 기록으로 바로잡아야 합니다).\n· 실제로 납부·수취한 뒤에만 기록하세요.\n\n정말 기록하시겠습니까?"}
-              className="px-3 py-2 text-xs font-medium bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)]"
+              className={ui.primaryXs}
             >
               기록
             </ConfirmButton>
@@ -838,7 +851,7 @@ export default async function SettlementPage({
             </select>
             <ConfirmButton
               message={"소득 구분을 「{incomeType}」(으)로 저장합니다.\n\n· 앞으로 생기는 보상의 원천징수 세율이 바뀝니다.\n· 이미 생긴 보상의 세금은 바뀌지 않습니다.\n\n정말 저장하시겠습니까?"}
-              className="px-3 py-2 text-xs font-medium bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)]"
+              className={ui.primaryXs}
             >
               저장
             </ConfirmButton>

@@ -1,12 +1,3 @@
-// 인증 준비 점검 문항. 화면과 서버 액션이 함께 읽음
-//
-// 인증 시험이나 판정이 아니라 준비 상태를 스스로 점검하는 목록임. 점수나 합격 여부를 내지 않고
-// 미비 항목만 보여줌
-//
-// 문항은 공개된 인증 절차와 구성개념 사전(prisma/seedConstructs.ts)에서 개발사가 답할 수 있는
-// 것을 골라 직접 작성했음. 시험기관의 체크리스트를 옮긴 것이 아님
-
-/** 서비스 속성: 조건부 문항의 판정 입력. `Service` 의 플래그와 이름을 맞춤 */
 export type CertServiceFlags = {
   isAiService: boolean;
   hasPersonalData: boolean;
@@ -17,13 +8,9 @@ export type CertAnswer = "yes" | "no" | "na";
 
 export type CertItem = {
   id: string;
-  /** 질문. 예/아니오로 답할 수 있게 씀 */
   q: string;
-  /** 왜 보는지 한 줄 */
   why: string;
-  /** 문항의 근거(화면에 작게 표시) */
   basis: string;
-  /** 조건부 문항이면 판정 함수. 없으면 항상 표시. */
   when?: (f: CertServiceFlags) => boolean;
 };
 
@@ -222,12 +209,10 @@ export const CERT_GROUPS: CertGroup[] = [
   },
 ];
 
-/** 서비스 속성에 맞는 문항만 폄. 화면과 서버가 같이 씀 */
 export function activeCertItems(flags: CertServiceFlags): CertItem[] {
   return CERT_GROUPS.flatMap((g) => g.items.filter((it) => !it.when || it.when(flags)));
 }
 
-/** 활성 문항만 남긴 그룹. 빈 그룹은 떨어뜨림 */
 export function activeCertGroups(flags: CertServiceFlags): CertGroup[] {
   return CERT_GROUPS.map((g) => ({
     ...g,
@@ -237,20 +222,6 @@ export function activeCertGroups(flags: CertServiceFlags): CertGroup[] {
 
 export type CertAnswers = Record<string, CertAnswer>;
 
-/** 점검 결과 요약. 판정처럼 보이지 않도록 점수 대신 미비·미응답 개수만 셈 */
-export function summarizeCert(flags: CertServiceFlags, answers: CertAnswers) {
-  const items = activeCertItems(flags);
-  const gaps = items.filter((it) => answers[it.id] === "no");
-  const unanswered = items.filter((it) => !answers[it.id]);
-  return {
-    total: items.length,
-    answered: items.length - unanswered.length,
-    gaps,
-    unanswered,
-  };
-}
-
-/** 저장 전 정규화: 활성 문항이 아니거나 값이 허용 밖이면 버림 */
 export function sanitizeCertAnswers(flags: CertServiceFlags, raw: unknown): CertAnswers {
   if (!raw || typeof raw !== "object") return {};
   const allowed = new Set(activeCertItems(flags).map((it) => it.id));

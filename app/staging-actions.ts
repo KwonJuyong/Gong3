@@ -13,46 +13,30 @@ import {
   stagingEmail,
   STAGING_ACCOUNTS,
   STAGING_PASSWORD,
-  DEMO_PASSWORD,
-  DEMO_BUYER_EMAIL,
-  DEMO_STUDENT_EMAILS,
 } from "./lib/stagingAccounts";
 
-export type DemoAccountRow = { email: string; name: string; role: string; desc: string };
-export type DemoAccountGroup = { title: string; caption: string; password: string; rows: DemoAccountRow[] };
+export type DemoAccountRow = { email: string; name: string; role: string };
+export type DemoAccountsPayload = {
+  password: string;
+  primary: DemoAccountRow[];
+  students: DemoAccountRow[];
+};
 
-/** 화면에 보일 역할 이름. 역할 칸이 좁아 영문 코드 값은 넘침 */
-const ROLE_LABEL: Record<string, string> = { ADMIN: "관리자", DEVELOPER: "교수", USER: "학생" };
+const ROLE_LABEL: Record<string, string> = { ADMIN: "관리자", DEVELOPER: "기업", USER: "학생" };
 
-/** 켜져 있으면 안내할 계정 그룹들, 꺼져 있으면 `null`. */
-export async function getDemoAccountsAction(): Promise<DemoAccountGroup[] | null> {
+/** 켜져 있으면 안내할 계정 목록, 꺼져 있으면 `null`. */
+export async function getDemoAccountsAction(): Promise<DemoAccountsPayload | null> {
   if (!demoAccountsEnabled()) return null;
 
-  return [
-    {
-      title: "기본 계정",
-      caption: "배포할 때마다 자동으로 심긴다",
-      password: STAGING_PASSWORD,
-      rows: STAGING_ACCOUNTS.map((a) => ({
-        email: stagingEmail(a.studentId),
-        name: a.name,
-        role: ROLE_LABEL[a.role] ?? a.role,
-        desc: a.desc,
-      })),
-    },
-    {
-      title: "시연용 계정",
-      caption: "의뢰·정산 시나리오용 · 배포 시 함께 심긴다",
-      password: DEMO_PASSWORD,
-      rows: [
-        { email: DEMO_BUYER_EMAIL, name: "(주)시연테크", role: "기업", desc: "평가 의뢰 · 견적서 · 세금계산서" },
-        ...DEMO_STUDENT_EMAILS.map((email, i) => ({
-          email,
-          name: `시연학생${i + 1}`,
-          role: "학생",
-          desc: "평가 응답 · 보상 수령",
-        })),
-      ],
-    },
-  ];
+  const toRow = (a: (typeof STAGING_ACCOUNTS)[number]): DemoAccountRow => ({
+    email: stagingEmail(a.studentId),
+    name: a.name,
+    role: ROLE_LABEL[a.role] ?? a.role,
+  });
+
+  return {
+    password: STAGING_PASSWORD,
+    primary: STAGING_ACCOUNTS.filter((a) => a.role !== "USER").map(toRow),
+    students: STAGING_ACCOUNTS.filter((a) => a.role === "USER").map(toRow),
+  };
 }

@@ -36,59 +36,50 @@ export default function BizFields({
 
   const box =
     "px-3 py-2 text-sm border border-[var(--gray-200)] rounded-[var(--radius-md)]";
+  const label = "block text-xs font-medium text-[var(--muted)]";
 
   return (
     <>
+      {/* 값이 채워지면 placeholder 가 사라지므로 칸마다 보이는 라벨을 둠 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="flex gap-2">
-          <input
-            name="bizNo"
-            value={bizNo}
-            onChange={(e) => setBizNo(e.target.value)}
-            required
-            placeholder="사업자등록번호 (10자리)"
-            inputMode="numeric"
-            className={`flex-1 min-w-0 ${box}`}
-          />
-          <button
-            type="button"
-            onClick={lookup}
-            disabled={pending}
-            className="shrink-0 px-3 py-2 text-xs font-medium border border-[var(--gray-300)] rounded-[var(--radius-md)] hover:bg-[var(--gray-50)] disabled:opacity-50"
-          >
-            {pending ? "조회 중" : "조회"}
-          </button>
-        </div>
-        <input
-          name="bizName"
-          value={bizName}
-          onChange={(e) => setBizName(e.target.value)}
-          required
-          placeholder="상호"
-          className={box}
-        />
-        <input
-          name="bizCeo"
-          value={bizCeo}
-          onChange={(e) => setBizCeo(e.target.value)}
-          placeholder="대표자명"
-          className={box}
-        />
-        <input
-          name="bizEmail"
-          type="email"
-          defaultValue={initial.bizEmail}
-          required
-          placeholder="세금계산서 수신 이메일"
-          className={box}
-        />
-        <input
-          name="bizAddr"
-          value={bizAddr}
-          onChange={(e) => setBizAddr(e.target.value)}
-          placeholder="사업장 주소"
-          className={`sm:col-span-2 ${box}`}
-        />
+        <label className={label}>
+          사업자등록번호
+          <span className="flex gap-2 mt-1">
+            <input
+              name="bizNo"
+              value={bizNo}
+              onChange={(e) => setBizNo(e.target.value)}
+              required
+              placeholder="10자리"
+              inputMode="numeric"
+              className={`flex-1 min-w-0 ${box}`}
+            />
+            <button
+              type="button"
+              onClick={lookup}
+              disabled={pending}
+              className="shrink-0 px-3 py-2 text-xs font-medium border border-[var(--gray-300)] rounded-[var(--radius-md)] hover:bg-[var(--gray-50)] disabled:opacity-50"
+            >
+              {pending ? "조회 중" : "조회"}
+            </button>
+          </span>
+        </label>
+        <label className={label}>
+          상호
+          <input name="bizName" value={bizName} onChange={(e) => setBizName(e.target.value)} required className={`mt-1 w-full ${box}`} />
+        </label>
+        <label className={label}>
+          대표자명
+          <input name="bizCeo" value={bizCeo} onChange={(e) => setBizCeo(e.target.value)} className={`mt-1 w-full ${box}`} />
+        </label>
+        <label className={label}>
+          세금계산서 수신 이메일
+          <input name="bizEmail" type="email" defaultValue={initial.bizEmail} required className={`mt-1 w-full ${box}`} />
+        </label>
+        <label className={`sm:col-span-2 ${label}`}>
+          사업장 주소
+          <input name="bizAddr" value={bizAddr} onChange={(e) => setBizAddr(e.target.value)} className={`mt-1 w-full ${box}`} />
+        </label>
       </div>
       {msg && (
         <p

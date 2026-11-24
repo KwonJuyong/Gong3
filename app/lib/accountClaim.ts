@@ -60,14 +60,14 @@ export type ClaimLookup =
 export async function lookupClaimToken(token: string): Promise<ClaimLookup> {
   const row = await prisma.accountClaimToken.findUnique({
     where: { tokenHash: hash(token) },
-    include: { user: { select: { id: true, name: true, studentId: true, email: true, status: true } } },
+    include: { user: { select: { id: true, name: true, studentId: true, email: true, emailVerifiedAt: true, status: true } } },
   });
 
   if (!row) return { ok: false, reason: "invalid" };
   if (row.usedAt) return { ok: false, reason: "used" };
   if (row.expiresAt.getTime() < Date.now()) return { ok: false, reason: "expired" };
-  // 링크를 받기 전에 다른 경로로 이미 이메일을 등록했다면 할 일이 없음
-  if (row.user.email) return { ok: false, reason: "done" };
+  // 링크를 받기 전에 다른 경로로 이미 이메일 인증까지 마쳤다면 할 일이 없음
+  if (row.user.email && row.user.emailVerifiedAt) return { ok: false, reason: "done" };
   // 발급 뒤 정지·탈퇴된 계정. 인계가 곧 로그인이라 loginAction 의 상태 검사를 우회하게 됨
   if (row.user.status !== "ACTIVE") return { ok: false, reason: "inactive" };
 

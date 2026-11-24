@@ -1,12 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ui } from "./components/ui";
 import { useCanInstall, promptInstall } from "./pwa-install";
-
-// 서비스워커 등록 + 설치 안내.
-// Android/데스크톱: 설치 프롬프트가 잡히면 좌하단 "앱 설치" 버튼.
-// iOS: 설치 이벤트가 없어(애플 제약) Safari 수동 설치 안내 배너를 띄움
-// 프롬프트 이벤트 자체는 pwa-install 스토어가 들고 있음: NavRail 설치 모달과 공유해야 해서.
 
 export default function PWARegister() {
   const canInstall = useCanInstall();
@@ -37,9 +33,14 @@ export default function PWARegister() {
     try {
       dismissed = localStorage.getItem("pwa-ios-hint") === "1";
     } catch {}
+    let installDismissed = false;
+    try {
+      installDismissed = localStorage.getItem("pwa-install-hint") === "1";
+    } catch {}
+    // 브라우저 기능 감지·저장소는 마운트 후에만 가능(SSR엔 window 없음) → 1회 상태 반영
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (installDismissed) setHidden(true);
     if (isIOS && !standalone && !dismissed) {
-      // 브라우저 기능 감지는 마운트 후에만 가능(SSR엔 window 없음) → 1회 상태 반영
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIos({ chrome: /crios|fxios|edgios/i.test(ua) });
     }
 
@@ -92,14 +93,17 @@ export default function PWARegister() {
     return (
       <div className="fixed bottom-5 left-5 z-[60] flex items-center gap-2 bg-white rounded-[var(--radius-lg)] shadow-[var(--shadow-lg)] pl-3 pr-2 py-2">
         <span className="text-sm text-[var(--gray-700)]">앱으로 설치</span>
-        <button
-          onClick={() => promptInstall()}
-          className="text-sm font-medium bg-[var(--accent)] text-white px-3 py-1.5 rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)] transition-colors"
-        >
+        <button onClick={() => promptInstall()} className={ui.primarySm}>
           설치
         </button>
         <button
-          onClick={() => setHidden(true)}
+          onClick={() => {
+            // 닫은 뒤에는 메뉴의 「앱 설치」로만 안내(페이지마다 다시 뜨면 메뉴 하단을 가림)
+            try {
+              localStorage.setItem("pwa-install-hint", "1");
+            } catch {}
+            setHidden(true);
+          }}
           className="w-7 h-7 rounded-[var(--radius-md)] flex items-center justify-center text-[var(--gray-500)] hover:bg-[var(--gray-50)]"
           aria-label="닫기"
         >

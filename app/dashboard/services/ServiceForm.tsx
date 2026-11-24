@@ -1,12 +1,12 @@
 "use client";
 
 import SubmitButton from "@/app/components/SubmitButton";
+import { ui } from "@/app/components/ui";
 import { useState } from "react";
 import { createServiceAction } from "./actions";
 import { PRESETS } from "../../lib/surveyProfile";
 
-const inputCls =
-  "w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--gray-200)] text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--gray-900)]/10";
+const inputCls = ui.field;
 
 type Flags = {
   isAiService: boolean;
@@ -32,29 +32,25 @@ const DEFAULT_FLAGS: Flags = {
   userFacingUi: true,
 };
 
-export default function ServiceForm({ defaultOpen }: { defaultOpen: boolean }) {
+/** 표준 설문의 첫 단계. 서비스 유형·기능이 표준 문항 구성을 정함 */
+export default function ServiceForm({ defaultOpen, date }: { defaultOpen: boolean; date: string }) {
   const [flags, setFlags] = useState<Flags>(DEFAULT_FLAGS);
   const [preset, setPreset] = useState<string>("");
-
-  // 프리셋을 바꾸면 체크박스가 기본값으로 돌아가므로, 직접 조정한 뒤라면 안내를 띄움
-  const [presetReset, setPresetReset] = useState(false);
 
   function applyPreset(id: string) {
     const found = PRESETS.find((p) => p.id === id);
     const next = { ...DEFAULT_FLAGS, ...(found?.flags as Partial<Flags>) };
-    const changed = (Object.keys(next) as (keyof Flags)[]).some((k) => next[k] !== flags[k]);
     setPreset(id);
     setFlags(next);
-    setPresetReset(changed);
   }
 
   return (
-    <details open={defaultOpen} className="group bg-white rounded-[var(--radius-xl)] p-5">
+    <details open={defaultOpen} className={`group ${ui.panel}`}>
       <summary className="list-none cursor-pointer flex items-center justify-between gap-3">
         <span>
-          <span className="block text-sm font-semibold text-[var(--foreground)]">새 서비스 등록</span>
-          <span className="block text-xs text-[var(--muted)] mt-0.5">
-            이름과 유형만 정하면 평가 항목이 자동으로 구성되고 평가문항까지 바로 만들어져요.
+          <span className="block text-base font-bold text-[var(--foreground)]">새 서비스 등록</span>
+          <span className={`block ${ui.hint} mt-0.5`}>
+            서비스 유형과 기능에 맞춰 표준 문항 초안을 만들어 드려요.
           </span>
         </span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-[var(--gray-500)] transition-transform group-open:rotate-180" aria-hidden="true">
@@ -63,12 +59,13 @@ export default function ServiceForm({ defaultOpen }: { defaultOpen: boolean }) {
       </summary>
 
       <form action={createServiceAction} className="space-y-4 mt-4">
+        {date && <input type="hidden" name="d" value={date} />}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="text-xs text-[var(--muted)]">
+          <label className="text-sm font-semibold">
             서비스명
             <input name="name" required placeholder="예: 학습도우미 챗봇" className={`mt-1 ${inputCls}`} />
           </label>
-          <label className="text-xs text-[var(--muted)]">
+          <label className="text-sm font-semibold">
             서비스 유형
             <select
               name="preset"
@@ -84,7 +81,13 @@ export default function ServiceForm({ defaultOpen }: { defaultOpen: boolean }) {
               ))}
             </select>
           </label>
-          <label className="text-xs text-[var(--muted)]">
+        </div>
+
+
+        {/* 유형이 기본값을 정하므로 세부 속성은 필요한 사람만 펼침. 설문 문항 구성에만 쓰임 */}
+        <details>
+          <summary className={`${ui.textButton} cursor-pointer mb-2 select-none`}>설문에 넣을 서비스 기능 변경</summary>
+          <label className="text-sm font-semibold">
             입력 형태
             <select name="modality" defaultValue="text" className={`mt-1 ${inputCls}`}>
               <option value="text">텍스트</option>
@@ -93,17 +96,6 @@ export default function ServiceForm({ defaultOpen }: { defaultOpen: boolean }) {
               <option value="multimodal">멀티모달</option>
             </select>
           </label>
-        </div>
-
-        {/* 유형이 기본값을 정하므로 세부 속성은 필요한 사람만 펼침 */}
-        <details open={presetReset}>
-          <summary className="cursor-pointer text-xs text-[var(--gray-700)] mb-2 select-none">세부 속성 조정 (선택)</summary>
-          {presetReset && (
-            <p className="text-xs text-[var(--warning)] bg-[var(--warning-light)] px-3 py-2 rounded-[var(--radius-md)] mb-2 leading-relaxed">
-              유형을 바꿔서 아래 속성이 그 유형의 기본값으로 다시 설정되었습니다. 필요하면
-              직접 조정하세요.
-            </p>
-          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {FLAG_META.map((f) => (
               <label
@@ -126,9 +118,9 @@ export default function ServiceForm({ defaultOpen }: { defaultOpen: boolean }) {
           </div>
         </details>
 
-        <SubmitButton className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-dark)]">
-          등록하고 평가문항 만들기
-        </SubmitButton>
+        <div className="flex justify-end">
+          <SubmitButton pendingText="서비스 등록 중…" className={ui.primary}>등록하고 표준 문항 만들기</SubmitButton>
+        </div>
       </form>
     </details>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import SubmitButton from "@/app/components/SubmitButton";
+import { ui } from "@/app/components/ui";
 import { uploadSensitiveImage } from "@/app/lib/uploadSensitive";
 
 import { useState } from "react";
@@ -71,7 +72,7 @@ function SignatureUpload({
           </div>
         )}
         <div className="space-y-1.5">
-          <label className="inline-flex cursor-pointer items-center px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-xs font-medium hover:bg-[var(--accent-dark)]">
+          <label className={`${ui.primaryXs} cursor-pointer`}>
             파일 선택
             <input
               type="file"
@@ -262,7 +263,7 @@ export default function ClaimEditor({
         >
           PDF 미리보기
         </a>
-        <SubmitButton className="px-5 py-2 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-dark)]">
+        <SubmitButton className={ui.primarySm}>
           저장하기
         </SubmitButton>
       </div>

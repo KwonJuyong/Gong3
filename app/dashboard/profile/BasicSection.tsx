@@ -1,13 +1,11 @@
 "use client";
 
 import { toast } from "@/app/components/feedback";
-import { useActionState, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { updateProfileAction } from "../../actions";
 import PhoneInput from "../../components/PhoneInput";
-import MajorSelect from "../../components/MajorSelect";
+import { useFormSubmit } from "../../components/useFormSubmit";
 import { Card, Field, Note, INPUT, BTN_PRIMARY } from "./ui";
-
-type ActionState = { error: string | null; success: boolean } | null;
 
 /**
  * 기본 정보: 사진·이름·전공(업체명)·연락처·이메일.
@@ -28,10 +26,7 @@ export default function BasicSection({
     emailVerified: boolean;
   };
 }) {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    updateProfileAction,
-    null,
-  );
+  const [state, form, pending] = useFormSubmit(updateProfileAction);
   const [imageUrl, setImageUrl] = useState(user.profileImage || "");
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -40,7 +35,7 @@ export default function BasicSection({
   const emailChanged = email.trim() !== user.email;
 
   const isDev = user.userType === "DEVELOPER";
-  const majorLabel = isDev ? "기업명" : "전공";
+  const majorLabel = isDev ? "기업명" : user.userType === "STAFF" ? "소속" : "전공";
 
   async function upload(file: File) {
     if (!file.type.startsWith("image/")) return toast("이미지 파일만 업로드할 수 있습니다.", "error");
@@ -61,7 +56,7 @@ export default function BasicSection({
   }
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form {...form} className="space-y-5">
       <Card
         title="기본 정보"
         desc="이 정보는 평가 참여·모집 안내에 쓰입니다. 이메일이 곧 로그인 ID 입니다. 바꾸려면 현재 비밀번호가 필요합니다. 비밀번호 변경은 「보안」 탭입니다."
@@ -130,17 +125,7 @@ export default function BasicSection({
             </Field>
 
             <Field label={majorLabel}>
-              {isDev ? (
-                <input
-                  name="major"
-                  defaultValue={user.major}
-                  placeholder="기업명을 입력하세요"
-                  className={INPUT}
-                />
-              ) : (
-                // 가입 폼과 같은 컴포넌트. 프로필에서는 전공이 선택 항목임
-                <MajorSelect name="major" defaultValue={user.major} />
-              )}
+              <input name="major" aria-label={majorLabel} defaultValue={user.major} required={!isDev && Boolean(user.major)} className={INPUT} />
             </Field>
 
             <Field label="연락처">
@@ -176,9 +161,8 @@ export default function BasicSection({
           {!isDev && emailChanged && (
             <>
               <Note tone="warning">
-                이메일은 <strong>로그인 ID</strong> 입니다. 바꾸면 다음 로그인부터 새 주소로
-                접속하고, <strong>인증이 다시 필요합니다</strong> — 저장하면 새 주소로 인증
-                메일이 가고 링크를 누르기 전까지 로그인이 막힙니다.
+                이메일은 <strong>로그인 ID</strong> 입니다. 저장하면 새 주소로 인증 메일이 가고,
+                링크를 누르기 전까지 다시 로그인할 수 없습니다.
               </Note>
               <Field label="현재 비밀번호" hint="로그인 ID를 바꾸므로 본인 확인이 필요합니다.">
                 <input

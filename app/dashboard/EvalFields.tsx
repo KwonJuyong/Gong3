@@ -4,11 +4,12 @@ import { useRef, useState } from "react";
 import { LIKERT5_LABELS } from "../lib/projectQuestions";
 import { toast } from "../components/feedback";
 
-/* 응답 화면의 문항 입력 컴포넌트 */
+// 라디오를 숨기므로 키보드 포커스는 감싼 칸에 표시
+const FOCUS_RING = "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--accent)] has-[:focus-visible]:ring-offset-2";
 
 /** 척도 버튼 공통 모양. 터치 대상은 36px 이상. */
 const choiceCls = (active: boolean) =>
-  `flex items-center justify-center text-center cursor-pointer select-none transition-colors ${
+  `flex items-center justify-center text-center cursor-pointer select-none transition-colors ${FOCUS_RING} ${
     active
       ? "bg-[var(--accent)] text-white font-semibold"
       : "bg-[var(--gray-100)] text-[var(--gray-700)] hover:bg-[var(--gray-200)]"
@@ -168,7 +169,7 @@ export function StarRating({ name, defaultValue, onPick }: { name: string; defau
       {[1, 2, 3, 4, 5].map((v) => (
         <label
           key={v}
-          className={`w-11 h-11 flex items-center justify-center text-2xl cursor-pointer rounded-[var(--radius-md)] hover:bg-[var(--gray-50)] ${
+          className={`w-11 h-11 flex items-center justify-center text-2xl cursor-pointer rounded-[var(--radius-md)] hover:bg-[var(--gray-50)] ${FOCUS_RING} ${
             value >= v ? "text-amber-500" : "text-[var(--gray-300)]"
           }`}
           aria-label={`${v}점`}
@@ -242,7 +243,7 @@ export function ImageUploadField({
         role="button"
         tabIndex={0}
         aria-label="이미지 업로드"
-        className="border-2 border-dashed border-[var(--gray-300)] rounded-[var(--radius-lg)] p-6 text-center cursor-pointer hover:border-[var(--accent)] transition-colors"
+        className="border-2 border-dashed border-[var(--gray-300)] rounded-[var(--radius-lg)] p-6 text-center cursor-pointer hover:border-[var(--accent)] focus-visible:border-[var(--accent)] focus-visible:outline-none transition-colors"
         onClick={() => fileRef.current?.click()}
         // Enter·Space 로도 파일 선택을 열기
         onKeyDown={(e) => {

@@ -6,15 +6,17 @@ import { useFormStatus } from "react-dom";
 /**
  * 제출 중에는 비활성화하고 「처리 중…」을 보여주는 submit 버튼.
  * 서버 컴포넌트 페이지의 <form action> 안에 그대로 넣을 수 있음
+ * onSubmit 으로 제출하는 폼(useFormSubmit)은 useFormStatus 가 모르므로 pending 을 넘김
  */
 export default function SubmitButton({
   children,
   pendingText = "처리 중…",
   disabled,
+  pending: pendingProp = false,
   className = "",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { pendingText?: string }) {
-  const { pending } = useFormStatus();
+}: ButtonHTMLAttributes<HTMLButtonElement> & { pendingText?: string; pending?: boolean }) {
+  const pending = useFormStatus().pending || pendingProp;
   return (
     <button
       type="submit"

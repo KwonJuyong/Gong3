@@ -46,11 +46,12 @@ function cellXml(colIndex: number, rowNum: number, value: CellValue): string {
 /**
  * 템플릿의 `Sheet1` 에 데이터 행을 채워 넣은 xlsx 바이트를 만듦
  *
- * @param templatePath 원본 양식 경로 (repo 기준 상대 경로)
+ * @param templateName `app/lib/templates` 안의 원본 양식 파일 이름
  * @param rows 2행부터 넣을 값들. 각 행은 A~N 순서의 14개 값.
  */
-export function fillTemplateSheet1(templatePath: string, rows: CellValue[][]): Uint8Array {
-  const buf = readFileSync(path.join(process.cwd(), templatePath));
+export function fillTemplateSheet1(templateName: string, rows: CellValue[][]): Uint8Array {
+  // 폴더를 고정해 빌드 추적이 양식 폴더만 포함하게 함
+  const buf = readFileSync(path.join(process.cwd(), "app", "lib", "templates", templateName));
   const files = unzipSync(new Uint8Array(buf));
 
   const sheetKey = "xl/worksheets/sheet1.xml";

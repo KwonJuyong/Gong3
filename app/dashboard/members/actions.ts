@@ -86,17 +86,26 @@ export async function updateMemberAction(formData: FormData) {
   if (changes.length === 0) done("변경된 내용이 없습니다.");
 
   try {
-    await prisma.user.update({
-      where: { id },
-      data: {
-        name,
-        major,
-        phone,
-        email,
-        // 이메일이 바뀌면 인증을 풀어 본인 확인을 다시 받음
-        ...(emailChanged ? { emailVerifiedAt: null } : {}),
-      },
-    });
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id },
+        data: {
+          name,
+          major,
+          phone,
+          email,
+          // 이메일이 바뀌면 인증을 풀어 본인 확인을 다시 받음
+          ...(emailChanged ? { emailVerifiedAt: null } : {}),
+        },
+      }),
+      // 옛 주소로 나간 재설정·인증 링크 폐기
+      ...(emailChanged
+        ? [
+            prisma.passwordResetToken.deleteMany({ where: { userId: id, usedAt: null } }),
+            prisma.emailVerificationToken.deleteMany({ where: { userId: id, usedAt: null } }),
+          ]
+        : []),
+    ]);
   } catch (e) {
     // phone·email 은 unique 다. 다른 회원이 쓰는 값이면 여기서 걸림
     if ((e as { code?: string }).code === "P2002") {
@@ -372,10 +381,10 @@ export async function issueClaimLinksAction(
     .map((s) => s.trim())
     .filter(Boolean);
 
-  // 이메일이 없는 활성 계정만(탈퇴·정지 계정 제외)
+  // 이메일이 없거나 미인증인 활성 계정만(탈퇴·정지 계정 제외)
   const targets = await prisma.user.findMany({
     where: {
-      email: null,
+      OR: [{ email: null }, { emailVerifiedAt: null }],
       status: "ACTIVE",
       ...(picked.length > 0 ? { id: { in: picked } } : {}),
     },
@@ -384,7 +393,7 @@ export async function issueClaimLinksAction(
   });
 
   if (targets.length === 0) {
-    return { error: "발급 대상이 없습니다. (이메일이 없는 활성 계정이 0명입니다)" };
+    return { error: "발급 대상이 없습니다. (이메일이 없거나 미인증인 활성 계정이 0명입니다)" };
   }
 
   const issued = await issueClaimTokens(targets.map((t) => t.id));

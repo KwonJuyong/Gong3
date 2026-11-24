@@ -1,5 +1,6 @@
 import ClearQueryParams from "@/app/components/ClearQueryParams";
 import ConfirmButton from "@/app/components/ConfirmButton";
+import { ui } from "@/app/components/ui";
 import { getSessionUserId, redirectToLogin } from "@/app/session-server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -22,15 +23,6 @@ import {
 
 export const metadata = { title: "평가 승인" };
 
-/**
- * 평가 승인 화면(ADMIN). 문항을 펼쳐 보고 승인·반려함
- *
- * 1. 승인 대기
- * 2. 발주 미연결: 공개됐지만 보상이 생기지 않는 업체·학교 평가(연구비 건 제외)
- *
- * 자금 상태는 판단용으로 표시만 하고 승인을 막지 않음
- */
-
 function seoul(d: Date) {
   return new Intl.DateTimeFormat("ko-KR", {
     dateStyle: "medium",
@@ -42,10 +34,11 @@ function seoul(d: Date) {
 const NOTE: Record<string, { text: string; tone: "ok" | "warn" | "mute" }> = {
   approved: { text: "승인했습니다. 학생에게 공개되고 모집 알림이 발송되었습니다.", tone: "ok" },
   rejected: { text: "반려했습니다. 사유가 개설자에게 전달되었습니다.", tone: "mute" },
-  linked: { text: "의뢰를 연결했습니다. 기존 응답에 대한 보상은 소급 생성됩니다.", tone: "ok" },
+  linked: { text: "의뢰를 연결했습니다. 기존 응답의 보상은 의뢰 입금이 확인되면 생성됩니다(이미 입금된 의뢰는 바로 생성).", tone: "ok" },
   funded: { text: "계약 확인을 기록했습니다. (공개 여부와는 무관한 장부 기록입니다)", tone: "ok" },
   already: { text: "이미 처리된 건입니다. 중복 알림은 발송되지 않았습니다.", tone: "warn" },
   taken: { text: "그 의뢰는 이미 다른 평가에 연결되어 있습니다.", tone: "warn" },
+  mismatch: { text: "그 의뢰는 이 평가와 다른 서비스·기업의 의뢰입니다. 연결하지 않았습니다.", tone: "warn" },
   company: {
     text: "계약 확인 기록은 교육기관 건에만 씁니다. 기업은 의뢰 화면에서 입금을 확인하고(원장에 함께 기록됩니다), 연구비는 평가 종료 후 노무비로 청구합니다.",
     tone: "warn",
@@ -69,7 +62,9 @@ export default async function ApprovalsPage({
 
   const include = {
     creator: { select: { name: true, major: true } },
-    surveyVersion: { select: { round: true, service: { select: { name: true } } } },
+    surveyVersion: { select: { round: true } },
+    service: { select: { name: true } },
+    scenario: { select: { task: true, outcome: true, metric: true, version: true } },
     order: { select: { orderNo: true, status: true, panelSize: true, rewardPerPerson: true } },
     _count: { select: { responses: true } },
   } as const;
@@ -90,16 +85,16 @@ export default async function ApprovalsPage({
         status: true,
         panelSize: true,
         rewardPerPerson: true,
+        serviceId: true,
+        buyerId: true,
         service: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
     }),
   ]);
 
-  const card =
-    "bg-white rounded-[var(--radius-xl)] p-5";
-  const primaryBtn =
-    "px-4 py-2 text-sm font-semibold bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)]";
+  const card = "bg-white rounded-[var(--radius-xl)] p-5";
+  const primaryBtn = ui.primarySm;
   const dangerBtn =
     "px-3 py-2 text-sm font-medium border border-[var(--danger)] text-[var(--danger)] rounded-[var(--radius-md)] hover:bg-[var(--danger-light)]";
   const ghostBtn =
@@ -114,15 +109,17 @@ export default async function ApprovalsPage({
     const capacity = capacityOf(p);
     const unit = rewardPerPersonOf(p);
     const fundReady = fundStatusOf(p);
+    // 같은 서비스이거나 같은 기업이 낸 의뢰만 고를 수 있게 함(다른 기업 의뢰 오연결 방지)
+    const orders = linkableOrders.filter((o) => o.serviceId === p.serviceId || o.buyerId === p.creatorId);
 
     return (
       <section className={card}>
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0">
             <p className="text-xs font-semibold tracking-wider text-[var(--muted)]">
-              {p.questionSource === "AUTO" ? "자동 생성" : "수동 생성"}
-              {p.surveyVersion &&
-                ` · ${p.surveyVersion.service.name} 회차 ${p.surveyVersion.round}`}
+              {p.evalMode === "ACCOMPANY" ? "Evi 동행 평가" : p.questionSource === "AUTO" ? "표준 설문" : "자유 설문"}
+              {p.service && ` · ${p.service.name}`}
+              {p.surveyVersion && ` 회차 ${p.surveyVersion.round}`}
             </p>
             <h3 className="text-base font-semibold text-[var(--foreground)] mt-0.5">{p.title}</h3>
             <p className="text-xs text-[var(--muted)] mt-1">
@@ -141,14 +138,25 @@ export default async function ApprovalsPage({
           </div>
         </div>
 
+        {/* 승인 전 학생에게 보낼 서비스 주소를 직접 열어 확인함 */}
+        <p className="text-sm mt-3 break-all">
+          <span className="text-[var(--muted)]">서비스 주소 </span>
+          {p.link ? (
+            <a href={p.link} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] underline underline-offset-2">
+              {p.link}
+            </a>
+          ) : (
+            <span className="text-[var(--danger)]">없음(학생이 열 서비스가 없음)</span>
+          )}
+        </p>
         {p.description && (
-          <p className="text-sm text-[var(--muted)] mt-3 whitespace-pre-wrap">{p.description}</p>
+          <p className="text-sm text-[var(--muted)] mt-2 whitespace-pre-wrap">{p.description}</p>
         )}
 
         {/* 자금 상태(참고용) */}
         <div className="mt-3 text-xs bg-[var(--gray-50)] rounded-[var(--radius-md)] px-3 py-2.5 space-y-1 leading-relaxed">
           <p>
-            <strong>자금 근거</strong> — {FUNDING_EVIDENCE[p.fundingType]}
+            <strong>자금 근거</strong> · {FUNDING_EVIDENCE[p.fundingType]}
           </p>
           {p.order ? (
             <p className="text-[var(--muted)]">
@@ -159,7 +167,7 @@ export default async function ApprovalsPage({
             isPayerUs(p.fundingType) && (
               <p className="text-[var(--warning)]">
                 의뢰가 없습니다. <strong>공개는 되지만 보상이 생기지 않습니다.</strong>{" "}
-                의뢰는 나중에 연결할 수 있고, 연결하면 기존 응답분도 소급 생성됩니다.
+                의뢰는 나중에 연결할 수 있고, 의뢰 입금이 확인되면 기존 응답분도 소급 생성됩니다.
               </p>
             )
           )}
@@ -178,6 +186,21 @@ export default async function ApprovalsPage({
           )}
         </div>
 
+        {p.evalMode === "ACCOMPANY" ? (
+          p.scenario ? (
+            <>
+            <dl className="mt-3 text-sm space-y-1">
+              <div><dt className="inline text-[var(--muted)]">과제 </dt><dd className="inline whitespace-pre-wrap">{p.scenario.task}</dd></div>
+              <div><dt className="inline text-[var(--muted)]">찾고 싶은 문제 </dt><dd className="inline">{p.scenario.outcome}</dd></div>
+              <div><dt className="inline text-[var(--muted)]">완료 조건 </dt><dd className="inline">{p.scenario.metric.split("\n").filter((l) => l.trim()).join(" · ")}</dd></div>
+              <div><dt className="inline text-[var(--muted)]">버전 </dt><dd className="inline">{p.scenario.version}</dd></div>
+            </dl>
+            <Link href={`/dashboard?view=task&p=${p.id}`} className="mt-2 inline-block text-xs text-[var(--accent)] underline">과제 내용 전체와 공개 화면</Link>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-[var(--warning)]">Evi 과제 인터뷰를 아직 저장하지 않았어요. 승인해도 과제를 공개하려면 과제 내용이 필요해요.</p>
+          )
+        ) : (
         <details className="mt-3">
           <summary className="text-xs text-[var(--accent)] cursor-pointer">
             문항 {questions.length}개 보기
@@ -190,6 +213,7 @@ export default async function ApprovalsPage({
             ))}
           </ol>
         </details>
+        )}
 
         {mode === "approve" ? (
           <div className="flex items-center gap-2 mt-4 flex-wrap">
@@ -224,17 +248,17 @@ export default async function ApprovalsPage({
           <div className="mt-4 space-y-3">
             <p className="text-xs text-[var(--muted)] bg-[var(--gray-50)] px-3 py-2 rounded-[var(--radius-md)] leading-relaxed">
               이 평가는 <strong>이미 공개되어 있습니다.</strong> 의뢰를 연결하면 정원·1인 보상액의
-              정본이 의뢰로 넘어가고, 이미 들어온 응답 {p._count.responses}건에 대한 보상이 소급
-              생성됩니다.
+              정본이 의뢰로 넘어가고, 이미 들어온 응답 {p._count.responses}건에 대한 보상은 의뢰
+              입금이 확인되면 소급 생성됩니다.
             </p>
-            {linkableOrders.length > 0 ? (
+            {orders.length > 0 ? (
               <form action={linkOrderToProjectAction} className="flex items-center gap-2 flex-wrap">
                 <input type="hidden" name="projectId" value={p.id} />
                 <select name="orderId" required className={input} defaultValue="">
                   <option value="" disabled>
                     연결할 의뢰를 고르세요
                   </option>
-                  {linkableOrders.map((o) => (
+                  {orders.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.orderNo} · {o.service.name} · {o.panelSize}명 ×{" "}
                       {o.rewardPerPerson.toLocaleString("ko-KR")}원
@@ -243,7 +267,7 @@ export default async function ApprovalsPage({
                   ))}
                 </select>
                 <ConfirmButton
-                  message={`「${p.title}」에 의뢰 {orderId} 을(를) 연결합니다.\n\n· 정원·1인 보상액의 기준이 이 의뢰로 바뀝니다.\n· 이미 들어온 응답 ${p._count.responses}건의 보상이 소급 생성됩니다.\n· 연결은 화면에서 풀 수 없습니다.\n\n정말 연결하시겠습니까?`}
+                  message={`「${p.title}」에 아래 의뢰를 연결합니다.\n{orderId}\n\n· 정원·1인 보상액의 기준이 이 의뢰로 바뀝니다.\n· 이미 들어온 응답 ${p._count.responses}건의 보상은 의뢰 입금이 확인되면 생성됩니다.\n· 연결은 화면에서 풀 수 없습니다.\n\n정말 연결하시겠습니까?`}
                   className={primaryBtn}
                 >
                   의뢰 연결

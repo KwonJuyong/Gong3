@@ -2,22 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
-/**
- * 앱 공용 토스트와 확인 대화상자(alert·confirm 대신 씀).
- *
- * 사용: toast("저장했습니다", "success"), await confirmDialog("…"),
- * 폼이면 onSubmit={(e) => confirmSubmit(e, "…")}. 호스트(<FeedbackHost/>)는 루트 레이아웃에 하나 있음
- * 호스트가 없으면 네이티브 confirm/alert 를 씀. 확인창은 실수 방지용이며 권한 검사는 서버에서 함
- */
-
 export type ToastTone = "info" | "success" | "error";
 type ToastItem = { id: number; message: string; tone: ToastTone };
 
 export type ConfirmOptions = {
   message: string;
-  /** 확인 버튼 글자. 기본 「확인」, 가능하면 동사로(「삭제」「발행」). */
   confirmLabel?: string;
-  /** 되돌릴 수 없는 파괴적 조작이면 확인 버튼을 빨갛게 */
   danger?: boolean;
 };
 type ConfirmRequest = ConfirmOptions & { resolve: (ok: boolean) => void };

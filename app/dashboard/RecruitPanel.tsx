@@ -1,6 +1,7 @@
 "use client";
 
 import SubmitButton from "@/app/components/SubmitButton";
+import { ui } from "@/app/components/ui";
 import { useActionState, useMemo, useState } from "react";
 import { confirmSubmit } from "@/app/components/feedback";
 import {
@@ -8,6 +9,7 @@ import {
   restoreEnrollmentAction,
   removeParticipantAction,
   addParticipantAction,
+  reviewPendingEnrollmentAction,
   type RestoreState,
   type ParticipantState,
 } from "./actions";
@@ -36,6 +38,8 @@ type Project = {
   responses?: { userId: string }[];
   minParticipants: number;
   maxParticipants: number;
+  /** 의뢰가 연결되면 의뢰 인원이 정원(capacityOf) */
+  capacity: number;
   enrollmentDeadline: string | null;
   enrollments: Enrollment[];
 };
@@ -98,7 +102,7 @@ function RecruitSelector({
 
   const visible = enrollments.filter(matches);
   const count = selected.size;
-  const overCapacity = count > project.maxParticipants;
+  const overCapacity = count > project.capacity;
   const belowMinimum = count < project.minParticipants;
 
   const toggle = (userId: string) =>
@@ -155,7 +159,7 @@ function RecruitSelector({
           <p className="text-xs text-[var(--muted)] mt-0.5">선택</p>
         </div>
         <div className="rounded-[var(--radius-md)] bg-[var(--surface)] p-4 text-center">
-          <p className="text-2xl font-bold text-[var(--foreground)]">{project.maxParticipants}</p>
+          <p className="text-2xl font-bold text-[var(--foreground)]">{project.capacity}</p>
           <p className="text-xs text-[var(--muted)] mt-0.5">정원</p>
         </div>
       </div>
@@ -265,6 +269,7 @@ function RecruitSelector({
                     matches(e) ? "" : "hidden"
                   } ${checked ? "bg-[var(--accent-light)]/40" : "hover:bg-[var(--surface)]"}`}
                 >
+                  <input type="hidden" name="shown" value={e.userId} />
                   <input
                     type="checkbox"
                     name="accepted"
@@ -296,7 +301,7 @@ function RecruitSelector({
 
           {overCapacity && (
             <p className="text-xs text-[var(--danger)]">
-              정원({project.maxParticipants}명)보다 {count - project.maxParticipants}명 많이 선택했습니다.
+              정원({project.capacity}명)보다 {count - project.capacity}명 많이 선택했어요.
             </p>
           )}
           {!overCapacity && belowMinimum && (
@@ -318,7 +323,7 @@ function RecruitSelector({
               name="start"
               value="1"
               disabled={overCapacity || belowMinimum}
-              className="flex-1 py-2.5 rounded-[var(--radius-md)] bg-[var(--accent)] text-white font-semibold text-sm hover:bg-[var(--accent-dark)] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 transition-all"
+              className={`${ui.primary} flex-1`}
             >
               이 {count}명으로 평가 시작
             </SubmitButton>
@@ -357,7 +362,7 @@ function RestoreEnrollment({ projectId }: { projectId: string }) {
       <p className="text-xs text-[var(--gray-600)] leading-relaxed">
         학생이 실수로 신청을 취소했는데 신청 기한이 지나 다시 신청할 수 없을 때 씁니다.
         복구하면 <strong>신청 대기(PENDING)</strong> 상태가 되므로, 아래 목록에서 선발해야
-        응답할 수 있습니다.
+        참여할 수 있습니다.
       </p>
       <form
         action={formAction}
@@ -374,10 +379,7 @@ function RestoreEnrollment({ projectId }: { projectId: string }) {
           placeholder="학번 · 사번"
           className="flex-1 px-3 py-2 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors"
         />
-        <button
-          disabled={pending}
-          className="px-3.5 py-2 text-xs font-semibold rounded-[var(--radius-md)] bg-[var(--accent)] text-white hover:bg-[var(--accent-dark)] disabled:opacity-50 transition-colors"
-        >
+        <button disabled={pending} className={ui.primaryXs}>
           {pending ? "복구 중…" : "복구"}
         </button>
         <button
@@ -408,8 +410,10 @@ function ParticipantManager({
 }) {
   const responded = new Set((project.responses || []).map((r) => r.userId));
   const accepted = project.enrollments.filter((e) => e.status === "ACCEPTED");
+  const pendingList = project.enrollments.filter((e) => e.status === "PENDING");
   const removed = project.enrollments.filter((e) => e.status === "REMOVED");
   const respondedCount = accepted.filter((e) => responded.has(e.userId)).length;
+  const full = accepted.length >= project.capacity;
 
   return (
     <div className="bg-white rounded-[var(--radius-xl)] p-8">
@@ -433,15 +437,41 @@ function ParticipantManager({
           <p className="text-xs text-[var(--muted)] mt-0.5">응답 완료</p>
         </div>
         <div className="rounded-[var(--radius-md)] bg-[var(--surface)] p-4 text-center">
-          <p className="text-2xl font-bold text-[var(--foreground)]">{project.maxParticipants}</p>
+          <p className="text-2xl font-bold text-[var(--foreground)]">{project.capacity}</p>
           <p className="text-xs text-[var(--muted)] mt-0.5">정원</p>
         </div>
       </div>
 
       {!isAdmin && (
         <p className="text-xs text-[var(--muted)] mb-4">
-          평가자 제외·추가는 관리자만 할 수 있습니다. 필요하면 관리자에게 요청해 주세요.
+          평가자 제외·추가와 추가 신청 처리는 관리자만 할 수 있습니다. 필요하면 관리자에게 요청해 주세요.
         </p>
+      )}
+
+      {pendingList.length > 0 && (
+        <div className="mb-5">
+          <div className="flex items-baseline justify-between gap-2 mb-2">
+            <p className="text-xs font-semibold text-[var(--foreground)]">
+              추가 신청 대기 ({pendingList.length}명)
+            </p>
+            {full && (
+              <p className="text-xs text-[var(--danger)]">
+                정원이 찼습니다. 평가 수정에서 정원을 늘리면 수락할 수 있어요.
+              </p>
+            )}
+          </div>
+          <div className="border border-[var(--gray-200)] rounded-[var(--radius-lg)] divide-y divide-[var(--gray-100)]">
+            {pendingList.map((e) => (
+              <PendingRow
+                key={e.id}
+                projectId={project.id}
+                enrollment={e}
+                isAdmin={isAdmin}
+                full={full}
+              />
+            ))}
+          </div>
+        </div>
       )}
 
       {isAdmin && <AddParticipant projectId={project.id} />}
@@ -548,7 +578,7 @@ function ParticipantRow({
             const reason = (new FormData(ev.currentTarget).get("reason") as string)?.trim();
             const msg =
               `${enrollment.userName}(${enrollment.userStudentId})님을 이 평가에서 제외합니다.\n\n` +
-              `· 즉시 응답할 수 없게 되고, 본인에게 제외 알림이 갑니다${reason ? " (사유 포함)" : ""}.\n` +
+              `· 즉시 참여할 수 없게 되고, 본인에게 제외 알림이 갑니다${reason ? " (사유 포함)" : ""}.\n` +
               `· 기록은 지워지지 않고 「제외됨」으로 남으며, 관리자 조작 기록에도 남습니다.\n` +
               `· 되돌리려면 「평가자 추가」로 다시 넣어야 합니다.\n\n` +
               `제외할까요?`;
@@ -600,7 +630,7 @@ function AddParticipant({ projectId }: { projectId: string }) {
           const id = (new FormData(ev.currentTarget).get("loginId") as string)?.trim();
           const msg =
             `${id} 회원을 이 평가의 평가자로 바로 추가합니다.\n\n` +
-            `· 선발 절차 없이 즉시 응답할 수 있게 되고, 본인에게 알림이 갑니다.\n` +
+            `· 선발 절차 없이 즉시 참여할 수 있게 되고, 본인에게 알림이 갑니다.\n` +
             `· 정원이 차 있으면 추가되지 않습니다(먼저 제외가 필요합니다).\n` +
             `· 관리자 조작 기록에 남습니다.\n\n` +
             `추가할까요?`;
@@ -614,15 +644,89 @@ function AddParticipant({ projectId }: { projectId: string }) {
           placeholder="학번 또는 이메일"
           className="flex-1 min-w-0 px-3 py-2 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors"
         />
-        <button
-          disabled={pending}
-          className="px-3.5 py-2 text-xs font-semibold rounded-[var(--radius-md)] bg-[var(--accent)] text-white hover:bg-[var(--accent-dark)] disabled:opacity-50 transition-colors"
-        >
+        <button disabled={pending} className={ui.primaryXs}>
           {pending ? "추가 중…" : "추가"}
         </button>
       </form>
       {state?.error && <p className="text-xs text-[var(--danger)]">{state.error}</p>}
       {state?.ok && <p className="text-xs text-[var(--accent)]">{state.ok}</p>}
+    </div>
+  );
+}
+
+function PendingRow({
+  projectId,
+  enrollment,
+  isAdmin,
+  full,
+}: {
+  projectId: string;
+  enrollment: Enrollment;
+  isAdmin: boolean;
+  full: boolean;
+}) {
+  const [state, formAction, pending] = useActionState<ParticipantState | null, FormData>(
+    reviewPendingEnrollmentAction,
+    null,
+  );
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-[var(--foreground)] truncate">
+            {enrollment.userName}
+            <span className="ml-2 text-xs font-normal text-[var(--muted)]">{enrollment.userStudentId}</span>
+          </p>
+          <p className="text-xs text-[var(--muted)] truncate mt-0.5">
+            {enrollment.userMajor || "전공 미입력"} · 과거 참여 {enrollment.userResponseCount}회
+          </p>
+        </div>
+        {isAdmin ? (
+          <form
+            action={formAction}
+            className="flex items-center gap-1.5 shrink-0"
+            onSubmit={(ev) => {
+              const submitter = (ev.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+              const accepting = submitter?.value === "ACCEPT";
+              confirmSubmit(ev, {
+                message: accepting
+                  ? `${enrollment.userName}(${enrollment.userStudentId})님의 추가 신청을 수락할까요?\n\n· 즉시 참여할 수 있고 본인에게 선발 알림이 가요.`
+                  : `${enrollment.userName}(${enrollment.userStudentId})님의 추가 신청을 거절할까요?\n\n· 본인에게 비선발 알림이 가요.`,
+                confirmLabel: accepting ? "수락" : "거절",
+                danger: !accepting,
+              });
+            }}
+          >
+            <input type="hidden" name="projectId" value={projectId} />
+            <input type="hidden" name="userId" value={enrollment.userId} />
+            <button
+              type="submit"
+              name="decision"
+              value="ACCEPT"
+              disabled={pending || full}
+              className={`${ui.primarySm} disabled:opacity-40`}
+            >
+              수락
+            </button>
+            <button
+              type="submit"
+              name="decision"
+              value="REJECT"
+              disabled={pending}
+              className={`${ui.secondarySm} disabled:opacity-40`}
+            >
+              거절
+            </button>
+          </form>
+        ) : (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--gray-100)] text-[var(--gray-600)] shrink-0">
+            승인 대기
+          </span>
+        )}
+      </div>
+      {state?.error && <p className="text-xs text-[var(--danger)] mt-1.5">{state.error}</p>}
+      {state?.ok && <p className="text-xs text-[var(--accent)] mt-1.5">{state.ok}</p>}
     </div>
   );
 }

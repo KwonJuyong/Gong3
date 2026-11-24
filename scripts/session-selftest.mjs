@@ -118,7 +118,7 @@ console.log("\n세션 쿠키 자체 점검\n");
 }
 
 //
-// middleware 의 슬라이딩 갱신을 흉내 내 유휴 만료 직전마다 재서명함
+// proxy 의 슬라이딩 갱신을 흉내 내 유휴 만료 직전마다 재서명함
 // abs 를 갱신 때 다시 계산하면 끝나지 않으므로, 어느 시점에 반드시 끊겨야 함
 {
   resetClock();
@@ -136,7 +136,7 @@ console.log("\n세션 쿠키 자체 점검\n");
       break;
     }
     alive++;
-    // middleware 와 같이 abs 는 이어받고 exp 만 미룸
+    // proxy 와 같이 abs 는 이어받고 exp 만 미룸
     value = await signSessionValue(s.userId, s.epoch, s.ttl, s.abs);
   }
 
@@ -193,7 +193,7 @@ console.log("\n세션 쿠키 자체 점검\n");
   t("T-07b", "옛 형식 3조각(epoch 포함)은 받아준다", !!s3 && s3.epoch === 4,
     s3 ? `epoch=${s3.epoch}` : "null");
 
-  t("T-07c", "옛 형식에는 절대 만료가 없다(middleware 가 채운다)",
+  t("T-07c", "옛 형식에는 절대 만료가 없다(proxy 가 채운다)",
     !!s2 && s2.abs === undefined && !!s3 && s3.abs === undefined);
 }
 
@@ -208,7 +208,7 @@ console.log("\n세션 쿠키 자체 점검\n");
   t("T-08c", "절대 만료가 유휴보다 길다(즉시 끊기지 않는다) — 두 권한 모두",
     sessionAbsoluteTtlFor("ADMIN") > sessionTtlFor("ADMIN") &&
       sessionAbsoluteTtlFor("USER") > sessionTtlFor("USER"));
-  t("T-08d", "ttl 로 절대 만료를 역산하면 원래 값이 나온다(middleware 경로)",
+  t("T-08d", "ttl 로 절대 만료를 역산하면 원래 값이 나온다(proxy 경로)",
     absoluteTtlForTtl(sessionTtlFor("ADMIN")) === sessionAbsoluteTtlFor("ADMIN") &&
       absoluteTtlForTtl(sessionTtlFor("USER")) === sessionAbsoluteTtlFor("USER"));
 
@@ -245,9 +245,9 @@ console.log("\n세션 쿠키 자체 점검\n");
 }
 
 //
-// middleware(Edge)는 서명과 만료만 보고, getSessionUserId() 는 DB epoch 까지 대조함
+// proxy 는 서명과 만료만 보고, getSessionUserId() 는 DB epoch 까지 대조함
 // 서명은 맞고 epoch 이 다르면 두 층의 판정이 엇갈려, 페이지가 "/" 로 보내면
-// middleware 가 다시 "/dashboard" 로 보내는 루프가 됨
+// proxy 가 다시 "/dashboard" 로 보내는 루프가 됨
 // DB 없이 소스를 읽어, 세션 부재 시 /dashboard 아래에서 redirect("/") 를 쓰지 않는지 확인함
 {
   const { readdirSync, readFileSync, statSync, existsSync } = await import("node:fs");
@@ -272,14 +272,14 @@ console.log("\n세션 쿠키 자체 점검\n");
     existsSync("app/session-expired/route.ts") &&
       /cookies\.delete/.test(readFileSync("app/session-expired/route.ts", "utf8")));
 
-  // 이 출구가 middleware matcher 에 들어가면 쿠키를 지우기 전에 다시 루프가 됨
+  // 이 출구가 proxy matcher 에 들어가면 쿠키를 지우기 전에 다시 루프가 됨
   // matcher 배열의 문자열만 검사함(주석은 제외). matcher 를 못 찾으면 실패로 봄
-  const mwSrc = readFileSync("middleware.ts", "utf8");
+  const mwSrc = readFileSync("proxy.ts", "utf8");
   const arr = mwSrc.match(/matcher:\s*\[([\s\S]*?)\]/);
   const patterns = arr ? [...arr[1].matchAll(/["'`]([^"'`]+)["'`]/g)].map((m) => m[1]) : [];
-  t("T-11c", "출구 경로가 middleware matcher 밖에 있다",
+  t("T-11c", "출구 경로가 proxy matcher 밖에 있다",
     patterns.length > 0 && !patterns.some((x) => x.includes("session-expired")),
-    patterns.length ? patterns.join(" ") : "middleware.ts 에서 matcher 배열을 못 찾았다");
+    patterns.length ? patterns.join(" ") : "proxy.ts 에서 matcher 배열을 못 찾았다");
 
   // 로그인 화면이 ?expired=1 을 읽어 만료 안내를 보여주는지 확인함
   t("T-11d", "로그인 화면이 만료 안내를 띄운다",

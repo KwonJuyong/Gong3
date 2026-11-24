@@ -79,9 +79,9 @@ export default function AuditTable({
   return (
     <div className="px-4 sm:px-6 py-8 max-w-[1100px] mx-auto">
       <header className="mb-4">
-        <h1 className="text-xl font-bold text-[var(--foreground)]">AI 도우미 질의 감사 로그</h1>
+        <h1 className="text-xl font-bold text-[var(--foreground)]">Evi 질의 감사 로그</h1>
         <p className="text-sm text-[var(--gray-500)] mt-1">
-          도우미가 실행한 모든 데이터 조회를 기록합니다. 차단된 질의도 남습니다.
+          Evi가 실행한 모든 데이터 조회와 차단한 질문을 기록합니다. 차단된 질의도 남습니다.
           질의 원문의 주민등록번호·계좌번호·비밀번호는 저장 시점에 지워집니다.
         </p>
       </header>

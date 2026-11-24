@@ -22,8 +22,13 @@ import {
   type Attachment,
   type UserLite,
 } from "./messenger/actions";
+import { ui } from "@/app/components/ui";
+import Icon from "@/app/components/Icon";
+import EviAvatar from "@/app/components/EviAvatar";
+import { normalizeUploadFile } from "@/app/lib/projectGuides";
+import { hubDock, useDockInline, useDockRequest } from "./hubDock";
 // 모든 대시보드 페이지 우하단에 떠 있는 통합 메신저.
-// 카카오톡식 채팅방 모델: 1:1(DM) / 단체(GROUP) / AI 도우미(AI).
+// 카카오톡식 채팅방 모델: 1:1(DM) / 단체(GROUP) / Evi(AI).
 
 type View = "list" | "room" | "new";
 type NewMode = "pick" | "dm" | "group";
@@ -35,6 +40,10 @@ export default function FloatingHub({
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>("list");
+  const dock = useDockRequest();
+  const inline = useDockInline();
+  const [dockTab, setDockTab] = useState<"bot" | "messenger">("bot");
+  const dockSlot = useCallback((el: HTMLDivElement | null) => hubDock.setSlot(el), []);
 
   // 방 목록
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
@@ -172,7 +181,7 @@ export default function FloatingHub({
     }
   }, [messages, aiThinking, view]);
 
-  async function openRoom(id: string) {
+  const openRoom = useCallback(async (id: string) => {
     setMsgInput("");
     setPendingAtt([]);
     setAiThinking(false);
@@ -180,7 +189,22 @@ export default function FloatingHub({
     setView("room");
     await reloadRoom(id);
     refreshRooms();
-  }
+  }, [reloadRoom, refreshRooms]);
+
+  useEffect(() => {
+    const showConversation = (event: Event) => {
+      setOpen(true);
+      const detail = event instanceof CustomEvent ? event.detail : null;
+      // 문자열은 대화 id, 객체는 { room, draft }(평가 화면에서 문의할 때 어떤 평가인지 입력칸에 미리 채움)
+      const id = typeof detail === "string" ? detail : typeof detail?.room === "string" ? detail.room : null;
+      if (!id) return setView("list");
+      void openRoom(id).then(() => {
+        if (typeof detail?.draft === "string") setMsgInput(detail.draft);
+      });
+    };
+    window.addEventListener("hub:open", showConversation);
+    return () => window.removeEventListener("hub:open", showConversation);
+  }, [openRoom]);
 
   async function doLeaveRoom() {
     const ar = activeRoom;
@@ -192,11 +216,14 @@ export default function FloatingHub({
     refreshRooms();
   }
 
-  async function handleFiles(files: FileList | null) {
+  const [dragging, setDragging] = useState(false);
+
+  async function handleFiles(files: FileList | File[] | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
     try {
-      for (const file of Array.from(files)) {
+      for (const raw of Array.from(files)) {
+        const file = normalizeUploadFile(raw);
         const fd = new FormData();
         fd.set("file", file);
         try {
@@ -359,7 +386,7 @@ export default function FloatingHub({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  // ── 상단 고정 / 드래그 정렬 ──
+  // 상단 고정 / 드래그 정렬
   async function togglePin(id: string, pinned: boolean) {
     await pinRoom(id, !pinned);
     refreshRooms();
@@ -385,6 +412,18 @@ export default function FloatingHub({
     reorderPinnedRooms(next).then(refreshRooms);
   }
 
+  const pinIcon = (filled: boolean, size: number) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M16 3l5 5-4 1-4 4 1 5-2 2-4-6-5 5-1-1 5-5-6-4 2-2 5 1 4-4 1-4z" />
+    </svg>
+  );
+
+  function avatarOf(kind: string, label: string) {
+    if (kind === "AI") return <EviAvatar size={40} />;
+    if (kind === "GROUP") return <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent-light)] text-[var(--accent)]"><Icon name="users" size={18} /></span>;
+    return <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--gray-100)] text-sm font-semibold text-[var(--gray-700)]">{label}</span>;
+  }
+
   function renderRoom(r: RoomSummary, draggable: boolean) {
     return (
       <div
@@ -392,90 +431,47 @@ export default function FloatingHub({
         role="button"
         tabIndex={0}
         onClick={() => openRoom(r.id)}
+        onKeyDown={(e) => { if (e.key === "Enter") openRoom(r.id); }}
         draggable={draggable}
         onDragStart={draggable ? () => setDragId(r.id) : undefined}
         onDragEnd={draggable ? () => setDragId(null) : undefined}
         onDragOver={draggable ? (e) => e.preventDefault() : undefined}
         onDrop={draggable ? () => handleDropOnPinned(r.id) : undefined}
-        className={`group w-full flex items-center gap-3 px-4 py-3 border-b border-[var(--gray-100)] hover:bg-[var(--gray-50)] transition-colors text-left cursor-pointer ${
-          dragId === r.id ? "opacity-40" : ""
-        }`}
+        className={`group flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--gray-50)] ${dragId === r.id ? "opacity-40" : ""}`}
       >
-        <span
-          className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0 ${
-            r.kind === "AI"
-              ? "bg-[var(--accent)] text-white text-xs"
-              : r.kind === "GROUP"
-                ? "bg-violet-100 text-violet-600"
-                : "bg-[var(--gray-100)] text-[var(--gray-600)]"
-          }`}
-        >
-          {r.kind === "GROUP" ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-          ) : (
-            r.avatarLabel
-          )}
-        </span>
+        {avatarOf(r.kind, r.avatarLabel)}
         <span className="min-w-0 flex-1">
           <span className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium text-[var(--foreground)] truncate flex items-center gap-1">
-              {r.pinned && (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-[var(--accent)] shrink-0">
-                  <path d="M16 3l5 5-4 1-4 4 1 5-2 2-4-6-5 5-1-1 5-5-6-4 2-2 5 1 4-4 1-4z" />
-                </svg>
-              )}
+            <span className="flex min-w-0 items-center gap-1 text-sm font-semibold">
+              {r.pinned && <span className="text-[var(--accent)]">{pinIcon(true, 12)}</span>}
               <span className="truncate">{r.title}</span>
-              {r.kind === "GROUP" && (
-                <span className="text-xs text-[var(--gray-500)]">{r.memberCount}</span>
-              )}
+              {r.kind === "GROUP" && <span className="text-xs font-normal text-[var(--muted)]">{r.memberCount}</span>}
             </span>
-            {r.lastAt && (
-              <span className="text-xs text-[var(--gray-500)] shrink-0">{timeLabel(r.lastAt)}</span>
-            )}
+            {r.lastAt && <span className="shrink-0 text-xs text-[var(--muted)]">{timeLabel(r.lastAt)}</span>}
           </span>
-          <span className="text-xs text-[var(--muted)] truncate block">
-            {r.lastContent || "새 대화"}
-          </span>
+          <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">{r.lastContent || "새 대화"}</span>
         </span>
-        {/* 고정 토글 (고정 방은 항상, 일반 방은 hover 시) */}
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            togglePin(r.id, r.pinned);
-          }}
-          className={`shrink-0 w-6 h-6 rounded flex items-center justify-center transition-opacity ${
-            r.pinned
-              ? "text-[var(--accent)]"
-              : "text-[var(--gray-500)] opacity-0 group-hover:opacity-100 hover:text-[var(--foreground)]"
-          }`}
+          onClick={(e) => { e.stopPropagation(); togglePin(r.id, r.pinned); }}
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition ${r.pinned ? "text-[var(--accent)]" : "text-[var(--muted)] opacity-0 hover:bg-[var(--gray-100)] group-hover:opacity-100"}`}
           aria-label={r.pinned ? "고정 해제" : "상단 고정"}
           title={r.pinned ? "고정 해제" : "상단 고정"}
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill={r.pinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M16 3l5 5-4 1-4 4 1 5-2 2-4-6-5 5-1-1 5-5-6-4 2-2 5 1 4-4 1-4z" />
-          </svg>
+          {pinIcon(r.pinned, 14)}
         </button>
         {r.unreadCount > 0 && (
-          <span className="min-w-5 h-5 px-1.5 bg-[var(--danger)] text-white text-xs font-semibold rounded-full flex items-center justify-center shrink-0">
-            {r.unreadCount}
-          </span>
+          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--danger)] px-1.5 text-xs font-semibold text-white">{r.unreadCount}</span>
         )}
       </div>
     );
   }
 
-  const headerTitle =
-    view === "room"
-      ? activeRoom?.title || "대화"
-      : view === "new"
-        ? "새 채팅"
-        : "메신저";
-
+  const headerTitle = view === "room" ? activeRoom?.title || "대화" : view === "new" ? "새 채팅" : "메신저";
+  const headerSub = view === "room"
+    ? activeRoom?.kind === "AI" ? (aiThinking ? "답을 쓰는 중…" : "평가·일정·보상을 물어보세요") : activeRoom?.kind === "GROUP" ? `${activeRoom.members.length}명` : "1:1 대화"
+    : view === "new" ? "대화 상대를 고르세요" : unreadMessages > 0 ? `읽지 않은 메시지 ${unreadMessages}개` : "사람·Evi와 나눈 대화";
   const showBack = view === "room" || view === "new";
+  const iconBtn = "flex h-9 w-9 items-center justify-center rounded-full text-[var(--gray-700)] transition-colors hover:bg-[var(--gray-100)]";
 
   // 첨부 렌더 (메시지 버블 내부)
   function renderAttachments(m: RoomMessage) {
@@ -484,35 +480,24 @@ export default function FloatingHub({
     return (
       <>
         {imgs.length > 0 && (
-          <div className={`flex flex-wrap gap-1 mb-1 ${m.mine ? "justify-end" : "justify-start"}`}>
+          <div className={`mb-1 flex flex-wrap gap-1 ${m.mine ? "justify-end" : "justify-start"}`}>
             {imgs.map((a, ai) => (
               <a key={ai} href={a.url} target="_blank" rel="noopener noreferrer">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={a.url}
-                  alt={a.name}
-                  className="max-w-[180px] max-h-[180px] rounded-[var(--radius-md)] border border-[var(--gray-200)] object-cover"
-                />
+                <img src={a.url} alt={a.name} className="max-h-[180px] max-w-[180px] rounded-[var(--radius-lg)] object-cover" />
               </a>
             ))}
           </div>
         )}
         {files.length > 0 && (
-          <div className={`flex flex-col gap-1 mb-1 ${m.mine ? "items-end" : "items-start"}`}>
+          <div className={`mb-1 flex flex-col gap-1 ${m.mine ? "items-end" : "items-start"}`}>
             {files.map((a, ai) => (
-              <a
-                key={ai}
-                href={`${a.url}?name=${encodeURIComponent(a.name)}`}
-                download={a.name}
-                className="flex items-center gap-2 px-3 py-2 rounded-[var(--radius-md)] bg-white border border-[var(--gray-200)] text-[var(--gray-700)] hover:bg-[var(--gray-50)] transition-colors max-w-[240px]"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--muted)]">
-                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                  <path d="M14 2v6h6" />
-                </svg>
+              <a key={ai} href={`${a.url}?name=${encodeURIComponent(a.name)}`} download={a.name}
+                className="flex max-w-[240px] items-center gap-2 rounded-[var(--radius-lg)] bg-white px-3 py-2 text-[var(--gray-700)] ring-1 ring-inset ring-[var(--gray-200)] transition-colors hover:bg-[var(--gray-50)]">
+                <Icon name="file" size={18} className="text-[var(--muted)]" />
                 <span className="min-w-0">
-                  <span className="text-xs font-medium truncate block">{a.name}</span>
-                  {a.size ? <span className="text-xs text-[var(--gray-500)]">{fmtSize(a.size)}</span> : null}
+                  <span className="block truncate text-xs font-medium">{a.name}</span>
+                  {a.size ? <span className="text-xs text-[var(--muted)]">{fmtSize(a.size)}</span> : null}
                 </span>
               </a>
             ))}
@@ -522,359 +507,253 @@ export default function FloatingHub({
     );
   }
 
+  const pickCard = "flex w-full items-center gap-3 rounded-[var(--radius-lg)] bg-white p-3 text-left ring-1 ring-inset ring-[var(--gray-200)] transition-colors hover:bg-[var(--accent-light)] hover:ring-[var(--accent)] disabled:opacity-50";
+  const suggestions = ["진행 중인 내 평가 보여줘", "참여할 수 있는 평가 찾아줘", "받을 보상 알려줘"];
+
+  const messenger = (
+    <>
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-[var(--gray-100)] px-3">
+        {showBack ? (
+          <button onClick={() => { setView("list"); setActiveRoom(null); }} className={iconBtn} aria-label="뒤로"><Icon name="back" size={18} /></button>
+        ) : (
+          <span className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent-light)] text-[var(--accent)]"><Icon name="chat" size={16} /></span>
+        )}
+        <div className="min-w-0 flex-1 leading-tight">
+          <h2 className="truncate text-sm font-semibold">{headerTitle}</h2>
+          <p className="truncate text-xs text-[var(--muted)]">{headerSub}</p>
+        </div>
+        {view === "room" && activeRoom && <button onClick={doLeaveRoom} className={`${iconBtn} w-auto px-3 text-xs font-semibold`}>나가기</button>}
+        {view === "list" && <button onClick={openNew} className={iconBtn} aria-label="새 채팅" title="새 채팅"><Icon name="plus" size={18} /></button>}
+        {!dock && <button onClick={() => setOpen(false)} className={iconBtn} aria-label="닫기"><Icon name="close" size={18} /></button>}
+      </div>
+
+      {view === "list" && (
+        <div className="custom-scrollbar flex-1 divide-y divide-[var(--gray-100)] overflow-y-auto">
+          {rooms.length === 0 && (
+            <div className="space-y-3 px-6 py-10 text-center">
+              <p className="text-sm text-[var(--muted)]">아직 대화가 없어요.</p>
+              <button onClick={startAi} disabled={creating} className={ui.primary}>Evi에게 물어보기</button>
+            </div>
+          )}
+          {rooms.some((r) => r.pinned) && <p className="bg-[var(--gray-50)] px-4 pb-1 pt-2 text-xs font-semibold text-[var(--muted)]">고정</p>}
+          {rooms.filter((r) => r.pinned).map((r) => renderRoom(r, true))}
+          {rooms.some((r) => r.pinned) && rooms.some((r) => !r.pinned) && <p className="bg-[var(--gray-50)] px-4 pb-1 pt-2 text-xs font-semibold text-[var(--muted)]">일반</p>}
+          {rooms.filter((r) => !r.pinned).map((r) => renderRoom(r, false))}
+        </div>
+      )}
+
+      {view === "new" && (
+        <div className="flex min-h-0 flex-1 flex-col bg-[var(--gray-50)]">
+          {newMode === "pick" && (
+            <div className="space-y-2 p-3">
+              <button onClick={startAi} disabled={creating} className={pickCard}>
+                <EviAvatar size={40} />
+                <span><span className="block text-sm font-semibold">Evi</span><span className="text-xs text-[var(--muted)]">평가·일정·보상을 물어보기</span></span>
+              </button>
+              <button onClick={() => pickNewMode("dm")} className={pickCard}>
+                {avatarOf("DM", "")}
+                <span><span className="block text-sm font-semibold">1:1 대화</span><span className="text-xs text-[var(--muted)]">사람을 찾아 대화를 시작</span></span>
+              </button>
+              <button onClick={() => pickNewMode("group")} className={pickCard}>
+                {avatarOf("GROUP", "")}
+                <span><span className="block text-sm font-semibold">단체 채팅방</span><span className="text-xs text-[var(--muted)]">여러 명을 초대</span></span>
+              </button>
+            </div>
+          )}
+
+          {(newMode === "dm" || newMode === "group") && (
+            <>
+              <div className="shrink-0 space-y-2 border-b border-[var(--gray-100)] bg-white p-3">
+                {newMode === "group" && (
+                  <input value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} placeholder="방 이름 (선택)" className={`${ui.field} text-sm`} />
+                )}
+                <form onSubmit={runSearch} className="flex gap-2">
+                  <input value={userQuery} onChange={(e) => setUserQuery(e.target.value)} placeholder="이름 또는 학번" aria-label="이름 또는 학번 검색" className={`${ui.field} min-w-0 flex-1 text-sm`} />
+                  <button type="submit" disabled={searching} className={ui.primary}>{searching ? "검색 중" : "검색"}</button>
+                </form>
+                {newMode === "group" && selectedUsers.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {selectedUsers.map((u) => (
+                      <span key={u.id} className={`${ui.badge} bg-[var(--accent)] text-white`}>
+                        {u.name}
+                        <button onClick={() => toggleSelect(u)} aria-label={`${u.name} 제거`}><Icon name="close" size={12} /></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="custom-scrollbar flex-1 divide-y divide-[var(--gray-100)] overflow-y-auto bg-white">
+                {userResults.length === 0 && (
+                  <p className="py-10 text-center text-sm text-[var(--muted)]">{searchNote || "이름이나 학번을 입력하고 Enter 를 눌러 주세요."}</p>
+                )}
+                {userResults.map((u) => {
+                  const picked = selectedUsers.some((x) => x.id === u.id);
+                  return (
+                    <button key={u.id} onClick={() => (newMode === "dm" ? startDm(u) : toggleSelect(u))} disabled={creating}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--gray-50)] disabled:opacity-50">
+                      {avatarOf("DM", u.name.charAt(0))}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{u.name}</span>
+                        <span className="block truncate text-xs text-[var(--muted)]">{u.studentId}{u.major ? ` · ${u.major}` : ""}</span>
+                      </span>
+                      {newMode === "group" && (
+                        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${picked ? "bg-[var(--accent)] text-white" : "ring-1 ring-inset ring-[var(--gray-300)]"}`}>
+                          {picked && <Icon name="check" size={12} />}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {newMode === "group" && (
+                <div className="shrink-0 border-t border-[var(--gray-100)] bg-white p-3">
+                  <button onClick={createGroup} disabled={creating || selectedUsers.length === 0} className={`${ui.primary} w-full`}>{selectedUsers.length}명과 방 만들기</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {view === "room" && activeRoom && (
+        <div
+          className={`flex min-h-0 flex-1 flex-col transition-shadow ${dragging ? "ring-2 ring-inset ring-[var(--accent)]" : ""}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            void handleFiles(e.dataTransfer.files);
+          }}
+        >
+          <div ref={scrollRef} className="custom-scrollbar flex-1 space-y-3 overflow-y-auto bg-[var(--gray-50)] px-3 py-4">
+            {activeRoom.truncated && <p className="text-center text-xs text-[var(--muted)]">최근 메시지만 표시하고 있어요.</p>}
+            {activeRoom.kind === "AI" && messages.length === 0 && !aiThinking && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2">
+                  <EviAvatar size={28} />
+                  <p className={ui.bubbleAiOnGray}>안녕하세요, Evi예요. 무엇이든 물어보세요. 이미지나 파일(txt·csv·md·json 등)을 끌어다 놓거나 Ctrl+V로 붙여 물어볼 수도 있어요.</p>
+                </div>
+                <div className="flex flex-wrap gap-2 pl-9">
+                  {suggestions.map((q) => <button key={q} type="button" className={ui.chip} onClick={() => setMsgInput(q)}>{q}</button>)}
+                </div>
+              </div>
+            )}
+            {activeRoom.kind !== "AI" && messages.length === 0 && <p className="py-10 text-center text-sm text-[var(--muted)]">첫 메시지를 보내 보세요.</p>}
+            {messages.map((m, i) => {
+              const showAvatar = !m.mine && activeRoom.kind === "AI" && messages[i - 1]?.mine !== false;
+              return (
+                <div key={m.id} className={`flex items-end gap-2 ${m.mine ? "justify-end" : "justify-start"}`}>
+                  {!m.mine && activeRoom.kind === "AI" && <EviAvatar size={28} className={`self-start ${showAvatar ? "" : "invisible"}`} />}
+                  <div className="min-w-0 max-w-[85%]">
+                    {!m.mine && activeRoom.kind === "GROUP" && <span className="mb-0.5 ml-1 block text-xs text-[var(--muted)]">{m.senderName}</span>}
+                    {renderAttachments(m)}
+                    {m.content && <p className={`${m.mine ? ui.bubbleMe : ui.bubbleAiOnGray} max-w-none text-sm`}>{m.content}</p>}
+                    <span className={`mt-1 block text-[11px] text-[var(--muted)] ${m.mine ? "text-right" : "text-left"}`}>{timeLabel(m.createdAt)}</span>
+                  </div>
+                </div>
+              );
+            })}
+            {aiThinking && (
+              <div className="flex items-start gap-2">
+                <EviAvatar size={28} />
+                <p className={`${ui.bubbleAiOnGray} inline-flex gap-1`} aria-label="답을 쓰는 중">
+                  {[0, 150, 300].map((d) => <span key={d} className="h-2 w-2 animate-bounce rounded-full bg-[var(--muted)]" style={{ animationDelay: `${d}ms` }} />)}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {(pendingAtt.length > 0 || uploading) && (
+            <div className="flex flex-wrap gap-1.5 border-t border-[var(--gray-100)] bg-white px-3 pt-2">
+              {pendingAtt.map((a, i) =>
+                a.kind === "image" ? (
+                  <span key={i} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={a.url} alt={a.name} className="h-12 w-12 rounded-[var(--radius-md)] object-cover" />
+                    <button onClick={() => setPendingAtt((prev) => prev.filter((_, j) => j !== i))} className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--gray-700)] text-white" aria-label="첨부 제거"><Icon name="close" size={10} /></button>
+                  </span>
+                ) : (
+                  <span key={i} className={`${ui.badge} bg-[var(--gray-100)] text-[var(--gray-700)]`}>
+                    {a.name}
+                    <button onClick={() => setPendingAtt((prev) => prev.filter((_, j) => j !== i))} aria-label="첨부 제거"><Icon name="close" size={12} /></button>
+                  </span>
+                ),
+              )}
+              {uploading && <span className="px-2 py-1 text-xs text-[var(--muted)]">업로드 중…</span>}
+            </div>
+          )}
+
+          <form onSubmit={(e) => { e.preventDefault(); send(); }} className="flex shrink-0 items-end gap-2 border-t border-[var(--gray-100)] bg-white p-3">
+            <input ref={fileRef} type="file" multiple
+              accept="image/*,.pdf,.txt,.csv,.tsv,.md,.json,.log,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.hwp,.hwpx,.zip,.7z,.rar"
+              className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+            <button type="button" onClick={() => fileRef.current?.click()} className={`${iconBtn} h-11 w-11 shrink-0 bg-[var(--gray-100)]`} aria-label="파일 첨부" title="이미지·문서 첨부">
+              <Icon name="attach" size={18} />
+            </button>
+            <textarea rows={1} value={msgInput} onChange={(e) => setMsgInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}
+              onPaste={(e) => {
+                const pasted = Array.from(e.clipboardData?.items ?? [])
+                  .filter((it) => it.kind === "file")
+                  .map((it) => it.getAsFile())
+                  .filter((f): f is File => f !== null);
+                if (pasted.length > 0) {
+                  e.preventDefault();
+                  void handleFiles(pasted);
+                }
+              }}
+              placeholder={activeRoom.kind === "AI" ? "Evi에게 물어보세요" : "메시지를 입력하세요"} aria-label="메시지"
+              className={`${ui.field} min-h-11 flex-1 resize-none text-sm`} />
+            <button type="submit" disabled={uploading || sending || aiThinking} className={ui.primary} aria-label="전송"><Icon name="send" size={16} /></button>
+          </form>
+        </div>
+      )}
+    </>
+  );
+
+  // 평가 화면이 Evi 평가 세션을 띄우면 창을 오른쪽 패널로 고정하고 Evi·메신저 탭으로 나눔
+  if (dock) {
+    return (
+      // 상단 바(z-40) 아래에 둠: 알림·프로필 메뉴와 확인 대화상자가 패널 위로 열려야 함
+      <aside aria-label="Evi와 메신저" className="fixed bottom-0 right-0 top-14 z-30 flex w-[440px] flex-col bg-white shadow-[var(--shadow-lg)]">
+        <nav aria-label="창 구역" className="flex shrink-0 gap-1 px-3 pt-2 shadow-[inset_0_-1px_0_var(--gray-200)]">
+          {([["bot", "Evi", 0], ["messenger", "메신저", unreadMessages]] as const).map(([id, label, count]) => (
+            <button key={id} type="button" onClick={() => setDockTab(id)} aria-current={dockTab === id ? "page" : undefined}
+              className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm transition-colors ${dockTab === id ? "border-[var(--accent)] font-semibold" : "border-transparent text-[var(--gray-700)] hover:text-[var(--foreground)]"}`}>
+              {id === "bot" ? <EviAvatar size={18} /> : <Icon name="users" size={15} />}{label}
+              {count > 0 && <span className="ml-1 inline-block min-w-5 rounded-full bg-[var(--danger)] px-1.5 text-center text-xs font-semibold text-white">{count}</span>}
+            </button>
+          ))}
+        </nav>
+        <div ref={dockSlot} className={`min-h-0 flex-1 flex-col [&>section]:h-full [&>section]:min-h-0 [&>section]:rounded-none ${dockTab === "bot" ? "flex" : "hidden"}`} />
+        {dockTab === "messenger" && <div className="flex min-h-0 flex-1 flex-col">{messenger}</div>}
+      </aside>
+    );
+  }
+
   return (
     <>
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-[70] w-14 h-14 rounded-full bg-[var(--accent)] text-white shadow-[var(--shadow-lg)] flex items-center justify-center hover:bg-[var(--accent-dark)] transition-colors"
-          aria-label="메신저 열기"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-            <path d="M8 12h.01M12 12h.01M16 12h.01" />
-          </svg>
+      {!open && !inline && (
+        <button onClick={() => setOpen(true)}
+          className="fixed bottom-5 right-5 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-[var(--shadow-lg)] transition-colors hover:bg-[var(--accent-dark)]"
+          aria-label="Evi와 메신저 열기">
+          <EviAvatar size={34} bare />
           {unreadMessages > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-5 h-5 px-1 bg-[var(--danger)] text-white text-xs font-semibold rounded-full flex items-center justify-center border-2 border-white">
+            <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-[var(--danger)] px-1 text-xs font-semibold text-white">
               {unreadMessages > 99 ? "99+" : unreadMessages}
             </span>
           )}
         </button>
       )}
-
       {open && (
-        <div className="fixed bottom-5 right-5 z-[70] w-[min(92vw,400px)] h-[min(82vh,600px)] bg-white rounded-[var(--radius-xl)] border border-[var(--gray-200)] shadow-[var(--shadow-lg)] flex flex-col overflow-hidden">
-          <div className="flex items-center gap-2 px-3 h-12 border-b border-[var(--gray-200)] shrink-0 bg-[var(--accent)] text-white">
-            {showBack ? (
-              <button
-                onClick={() => {
-                  setView("list");
-                  setActiveRoom(null);
-                }}
-                className="w-7 h-7 -ml-1 rounded-[var(--radius-md)] flex items-center justify-center hover:bg-white/15"
-                aria-label="뒤로"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m15 18-6-6 6-6" />
-                </svg>
-              </button>
-            ) : (
-              <span className="w-6 h-6 ml-1 rounded-full bg-white/20 flex items-center justify-center text-xs font-semibold">
-                AI
-              </span>
-            )}
-            <h2 className="text-sm font-semibold flex-1 truncate">
-              {headerTitle}
-              {view === "room" && activeRoom?.kind === "GROUP" && (
-                <span className="ml-1.5 text-xs font-normal opacity-80">
-                  {activeRoom.members.length}
-                </span>
-              )}
-            </h2>
-            {view === "room" && activeRoom && (
-              <button
-                onClick={doLeaveRoom}
-                className="px-2 h-7 rounded-[var(--radius-md)] text-xs flex items-center hover:bg-white/15"
-                title="나가기"
-              >
-                나가기
-              </button>
-            )}
-            {view === "list" && (
-              <button
-                onClick={openNew}
-                className="w-7 h-7 rounded-[var(--radius-md)] flex items-center justify-center hover:bg-white/15"
-                aria-label="새 채팅"
-                title="새 채팅"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
-            )}
-            <button
-              onClick={() => setOpen(false)}
-              className="w-7 h-7 rounded-[var(--radius-md)] flex items-center justify-center hover:bg-white/15"
-              aria-label="닫기"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {view === "list" && (
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-              {rooms.length === 0 && (
-                <p className="text-sm text-[var(--gray-500)] text-center py-8">
-                  대화가 없습니다. 우측 상단 + 로 새 채팅을 시작하세요.
-                </p>
-              )}
-
-              {/* 고정 방 (드래그로 순서 조정) */}
-              {rooms.some((r) => r.pinned) && (
-                <>
-                  <div className="px-4 pt-2 pb-1 text-xs font-semibold text-[var(--gray-500)] bg-[var(--surface)]">
-                    고정
-                  </div>
-                  {rooms.filter((r) => r.pinned).map((r) => renderRoom(r, true))}
-                </>
-              )}
-
-              {/* 일반 방 (최근순) */}
-              {rooms.some((r) => r.pinned) && rooms.some((r) => !r.pinned) && (
-                <div className="px-4 pt-2 pb-1 text-xs font-semibold text-[var(--gray-500)] bg-[var(--surface)]">
-                  일반
-                </div>
-              )}
-              {rooms.filter((r) => !r.pinned).map((r) => renderRoom(r, false))}
-            </div>
-          )}
-
-          {view === "new" && (
-            <div className="flex-1 flex flex-col min-h-0 bg-white">
-              {newMode === "pick" && (
-                <div className="p-3 space-y-2">
-                  <button
-                    onClick={() => pickNewMode("dm")}
-                    className="w-full flex items-center gap-3 p-3 rounded-[var(--radius-md)] border border-[var(--gray-200)] hover:bg-[var(--gray-50)] transition-colors text-left"
-                  >
-                    <span className="w-9 h-9 rounded-full bg-[var(--gray-100)] text-[var(--gray-600)] flex items-center justify-center shrink-0">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                    </span>
-                    <span>
-                      <span className="text-sm font-medium block">1:1 대화</span>
-                      <span className="text-xs text-[var(--muted)]">사람을 찾아 대화를 시작</span>
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => pickNewMode("group")}
-                    className="w-full flex items-center gap-3 p-3 rounded-[var(--radius-md)] border border-[var(--gray-200)] hover:bg-[var(--gray-50)] transition-colors text-left"
-                  >
-                    <span className="w-9 h-9 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-                    </span>
-                    <span>
-                      <span className="text-sm font-medium block">단체 채팅방</span>
-                      <span className="text-xs text-[var(--muted)]">여러 명을 초대</span>
-                    </span>
-                  </button>
-                  <button
-                    onClick={startAi}
-                    disabled={creating}
-                    className="w-full flex items-center gap-3 p-3 rounded-[var(--radius-md)] border border-[var(--gray-200)] hover:bg-[var(--gray-50)] transition-colors text-left disabled:opacity-50"
-                  >
-                    <span className="w-9 h-9 rounded-full bg-[var(--accent)] text-white text-xs font-semibold flex items-center justify-center shrink-0">AI</span>
-                    <span>
-                      <span className="text-sm font-medium block">AI 도우미</span>
-                      <span className="text-xs text-[var(--muted)]">새 AI 대화방을 생성</span>
-                    </span>
-                  </button>
-                </div>
-              )}
-
-              {(newMode === "dm" || newMode === "group") && (
-                <>
-                  <div className="p-3 border-b border-[var(--gray-100)] shrink-0 space-y-2">
-                    {newMode === "group" && (
-                      <input
-                        value={groupTitle}
-                        onChange={(e) => setGroupTitle(e.target.value)}
-                        placeholder="방 이름 (선택)"
-                        className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
-                      />
-                    )}
-                    <form onSubmit={runSearch} className="flex gap-2">
-                      <input
-                        value={userQuery}
-                        onChange={(e) => setUserQuery(e.target.value)}
-                        placeholder="이름 또는 학번"
-                        aria-label="이름 또는 학번 검색"
-                        className="flex-1 min-w-0 px-3 py-2 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
-                      />
-                      <button
-                        type="submit"
-                        disabled={searching}
-                        className="shrink-0 px-3 py-2 rounded-[var(--radius-md)] bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-dark)] transition-colors disabled:opacity-50"
-                      >
-                        {searching ? "검색 중" : "검색"}
-                      </button>
-                    </form>
-                    {newMode === "group" && selectedUsers.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {selectedUsers.map((u) => (
-                          <span key={u.id} className="text-xs bg-[var(--accent)] text-white px-2 py-0.5 rounded-full flex items-center gap-1">
-                            {u.name}
-                            <button onClick={() => toggleSelect(u)} aria-label="제거">×</button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar">
-                    {userResults.length === 0 && (
-                      <p className="text-sm text-[var(--gray-500)] text-center py-8">
-                        {searchNote || "이름이나 학번을 입력하고 Enter 를 눌러 주세요."}
-                      </p>
-                    )}
-                    {userResults.map((u) => {
-                      const picked = selectedUsers.some((x) => x.id === u.id);
-                      return (
-                        <button
-                          key={u.id}
-                          onClick={() => (newMode === "dm" ? startDm(u) : toggleSelect(u))}
-                          disabled={creating}
-                          className="w-full flex items-center gap-3 px-4 py-3 border-b border-[var(--gray-100)] hover:bg-[var(--gray-50)] transition-colors text-left disabled:opacity-50"
-                        >
-                          <span className="w-9 h-9 rounded-full bg-[var(--gray-100)] text-[var(--gray-600)] flex items-center justify-center text-sm font-medium shrink-0">
-                            {u.name.charAt(0)}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="text-sm font-medium text-[var(--foreground)] truncate block">{u.name}</span>
-                            <span className="text-xs text-[var(--muted)] truncate block">
-                              {u.studentId}{u.major ? ` · ${u.major}` : ""}
-                            </span>
-                          </span>
-                          {newMode === "group" && (
-                            <span className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${picked ? "bg-[var(--accent)] border-[var(--accent)] text-white" : "border-[var(--gray-300)]"}`}>
-                              {picked && (
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                              )}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {newMode === "group" && (
-                    <div className="p-3 border-t border-[var(--gray-100)] shrink-0">
-                      <button
-                        onClick={createGroup}
-                        disabled={creating || selectedUsers.length === 0}
-                        className="w-full py-2.5 bg-[var(--accent)] text-white rounded-[var(--radius-md)] text-sm font-medium hover:bg-[var(--accent-dark)] transition-colors disabled:opacity-50"
-                      >
-                        {selectedUsers.length}명과 방 만들기
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* 방(대화) */}
-          {view === "room" && activeRoom && (
-            <>
-              <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 bg-[var(--surface)]">
-                {activeRoom.truncated && (
-                  <p className="text-xs text-[var(--muted)] text-center">최근 메시지만 표시하고 있어요.</p>
-                )}
-                {activeRoom.kind === "AI" && messages.length === 0 && !aiThinking && (
-                  <div className="text-sm text-[var(--gray-500)] bg-white rounded-[var(--radius-lg)] p-3">
-                    무엇이든 물어보세요. 예: &quot;진행 중 평가 목록 보여줘&quot;, &quot;학생 평가자 명단 알려줘&quot;. 이미지나 텍스트 파일(txt·csv·md·json)을 첨부해 물어볼 수도 있어요.
-                  </div>
-                )}
-                {activeRoom.kind !== "AI" && messages.length === 0 && (
-                  <p className="text-sm text-[var(--gray-500)] text-center py-8">첫 메시지를 보내보세요</p>
-                )}
-                {messages.map((m) => (
-                  <div key={m.id} className={`flex ${m.mine ? "justify-end" : "justify-start"}`}>
-                    <div className="group max-w-[85%]">
-                      {!m.mine && activeRoom.kind === "GROUP" && (
-                        <span className="text-xs text-[var(--gray-500)] ml-1 mb-0.5 block">{m.senderName}</span>
-                      )}
-                      {renderAttachments(m)}
-                      {m.content && (
-                        <div
-                          className={`px-3 py-2 rounded-[var(--radius-lg)] text-sm leading-relaxed whitespace-pre-wrap break-words ${
-                            m.mine
-                              ? "bg-[var(--accent)] text-white"
-                              : m.isAI
-                                ? "bg-white border border-[var(--gray-200)] text-[var(--gray-700)]"
-                                : "bg-white border border-[var(--gray-200)] text-[var(--gray-700)]"
-                          }`}
-                        >
-                          {m.content}
-                        </div>
-                      )}
-                      <span className={`text-xs text-[var(--gray-500)] mt-0.5 block ${m.mine ? "text-right" : "text-left"}`}>
-                        {timeLabel(m.createdAt)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                {aiThinking && (
-                  <div className="flex justify-start">
-                    <div className="px-3 py-2 rounded-[var(--radius-lg)] bg-white text-sm text-[var(--gray-500)]">
-                      답변 생성 중…
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {(pendingAtt.length > 0 || uploading) && (
-                <div className="px-3 pt-2 flex flex-wrap gap-1.5 border-t border-[var(--gray-100)] bg-white">
-                  {pendingAtt.map((a, i) =>
-                    a.kind === "image" ? (
-                      <span key={i} className="relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={a.url} alt={a.name} className="w-12 h-12 object-cover rounded-[var(--radius-md)] border border-[var(--gray-200)]" />
-                        <button onClick={() => setPendingAtt((prev) => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[var(--danger)] text-white text-xs flex items-center justify-center" aria-label="제거">×</button>
-                      </span>
-                    ) : (
-                      <span key={i} className="text-xs text-[var(--gray-600)] bg-[var(--gray-100)] px-2 py-1 rounded flex items-center gap-1">
-                        {a.name}
-                        <button onClick={() => setPendingAtt((prev) => prev.filter((_, j) => j !== i))} aria-label="제거">×</button>
-                      </span>
-                    ),
-                  )}
-                  {uploading && <span className="text-xs text-[var(--gray-500)] px-2 py-1">업로드 중…</span>}
-                </div>
-              )}
-
-              <form
-                onSubmit={(e) => { e.preventDefault(); send(); }}
-                className="p-2.5 border-t border-[var(--gray-100)] flex items-center gap-1.5 shrink-0 bg-white"
-              >
-                <input
-                  ref={fileRef}
-                  type="file"
-                  multiple
-                  accept="image/*,.pdf,.txt,.csv,.tsv,.md,.json,.log,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.hwp,.hwpx,.zip,.7z,.rar"
-                  className="hidden"
-                  onChange={(e) => handleFiles(e.target.files)}
-                />
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  className="shrink-0 w-9 h-9 rounded-[var(--radius-md)] border border-[var(--gray-300)] text-[var(--muted)] flex items-center justify-center hover:bg-[var(--gray-50)]"
-                  aria-label="파일 첨부"
-                  title="이미지·문서 첨부"
-                >
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                  </svg>
-                </button>
-                <input
-                  value={msgInput}
-                  onChange={(e) => setMsgInput(e.target.value)}
-                  placeholder="메시지를 입력하세요..."
-                  className="flex-1 min-w-0 px-3 py-2 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors"
-                />
-                <button
-                  type="submit"
-                  disabled={uploading || sending || aiThinking}
-                  className="shrink-0 w-9 h-9 rounded-[var(--radius-md)] bg-[var(--accent)] text-white flex items-center justify-center hover:bg-[var(--accent-dark)] transition-colors disabled:opacity-50"
-                  aria-label="전송"
-                >
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="m22 2-7 20-4-9-9-4Z" />
-                    <path d="M22 2 11 13" />
-                  </svg>
-                </button>
-              </form>
-            </>
-          )}
+        <div className="fixed bottom-5 right-5 z-[70] flex h-[min(82vh,640px)] w-[min(92vw,420px)] flex-col overflow-hidden rounded-[var(--radius-xl)] bg-white shadow-[var(--shadow-lg)]">
+          {messenger}
         </div>
       )}
     </>

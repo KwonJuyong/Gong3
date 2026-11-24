@@ -1,29 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState, useActionState } from "react";
-import { toast } from "./components/feedback";
+import { useCallback, useEffect, useRef, useState } from "react";
 import SubmitButton from "./components/SubmitButton";
-import {
-  loginAction,
-  registerAction,
-  requestPasswordResetAction,
-  migrateToEmailLoginAction,
-} from "./actions";
-import { ActionState } from "./db";
-import PhoneInput from "./components/PhoneInput";
-import MajorSelect from "./components/MajorSelect";
+import PasswordInput from "./components/PasswordInput";
+import { useFormSubmit } from "./components/useFormSubmit";
+import { loginAction, requestPasswordResetAction, migrateToEmailLoginAction } from "./actions";
 import ResendForm from "./verify/ResendForm";
 import DemoAccountsPanel from "./components/DemoAccountsPanel";
-import { EMAIL_UNVERIFIED_ERROR, LEGACY_ID_ERROR } from "./lib/authMessages";
+import RegisterForm, { type RegType } from "./RegisterForm";
+import { Alert, BTN_PRIMARY, ChoiceCard, Group, INPUT, LABEL, Req, Steps } from "./AuthParts";
+import { EMAIL_UNVERIFIED_ERROR, LEGACY_ID_ERROR, LOGIN_FAILED_ERROR } from "./lib/authMessages";
 
 /**
  * 로그인 · 회원가입 · 계정 복구 화면.
  *
- * start ─┬─ 로그인
- *        │    └─ 로그인이 안 되시나요? → help ─┬─ 비밀번호 재설정       → reset
- *        │                                     ├─ 인증 메일 재발송      → resend
- *        │                                     └─ 이메일 등록(학번만)   → migrate
- *        └─ 회원가입 ── 1 유형 선택 ── 2 정보 입력 ── 3 인증 메일 안내
+ * start(로그인) ─┬─ 로그인이 안 되시나요? → help ─┬─ 비밀번호 재설정       → reset
+ *                 │                                ├─ 인증 메일 재발송      → resend
+ *                 │                                └─ 이메일 등록(학번만)   → migrate
+ *                 └─ 회원가입 ── 1 유형 선택 ── 2 정보 입력 ── 3 인증 메일 안내
  *
  * 복구 경로는 로그인에 실패하지 않아도 help 화면에서 항상 고를 수 있게 둠
  */
@@ -39,12 +33,7 @@ type Mode =
   | "register"
   | "registered";
 
-type RegType = "STUDENT" | "DEVELOPER" | "STAFF";
-
-/**
- * 가입 유형. 유형에 따라 입력 칸이 달라지므로 이 선택만 별도 단계로 둠
- * 나머지 칸은 한 폼에 둠. 단계를 더 나누면 중간 상태 보관과 단계별 중복 검사(계정 열거)가 필요해짐
- */
+/** 가입 유형. 유형에 따라 입력 칸이 달라지므로 이 선택만 별도 단계로 둠 */
 const REG_TYPES: { key: RegType; label: string; desc: string; icon: string }[] = [
   {
     key: "STUDENT",
@@ -65,133 +54,6 @@ const REG_TYPES: { key: RegType; label: string; desc: string; icon: string }[] =
     icon: "M20 7h-9M14 17H5M17 21a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM7 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z",
   },
 ];
-
-const INPUT =
-  "w-full px-3.5 py-2.5 rounded-[var(--radius-md)] bg-white border border-[var(--gray-300)] text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors placeholder:text-[var(--gray-400)]";
-const LABEL = "block text-xs font-medium text-[var(--gray-700)] mb-1.5";
-const BTN_PRIMARY =
-  "w-full py-2.5 bg-[var(--accent)] text-white rounded-[var(--radius-md)] font-semibold text-sm hover:bg-[var(--accent-dark)] active:scale-[0.98] transition-all";
-
-const Req = () => <span className="text-[var(--danger)]">*</span>;
-
-/**
- * 시작·유형·도움말 화면의 선택 카드.
- * 렌더 함수 안에서 정의하면 매번 리마운트되므로 모듈 레벨에 둠
- */
-function ChoiceCard({
-  label,
-  desc,
-  icon,
-  onClick,
-  primary = false,
-}: {
-  label: string;
-  desc: string;
-  icon: string;
-  onClick: () => void;
-  primary?: boolean;
-}) {
-  // 회색 면 한 줄. 권하는 선택(primary)은 아이콘 칸만 강조색으로 칠함
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full flex items-center gap-3 text-left p-3 sm:p-3.5 rounded-[var(--radius-lg)] bg-[var(--gray-100)] hover:bg-[var(--gray-200)] transition-colors"
-    >
-      <span
-        className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-[10px] ${
-          primary ? "bg-[var(--accent)] text-white" : "bg-white text-[var(--gray-700)]"
-        }`}
-        aria-hidden
-      >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d={icon} />
-        </svg>
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-semibold text-[var(--gray-900)]">{label}</span>
-        <span className="block text-[13px] text-[var(--muted)] leading-relaxed mt-0.5">{desc}</span>
-      </span>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--gray-500)]" aria-hidden>
-        <path d="m9 18 6-6-6-6" />
-      </svg>
-    </button>
-  );
-}
-
-/** 회원가입 단계 표시 */
-function Steps({ current }: { current: 1 | 2 | 3 }) {
-  const labels = ["유형 선택", "정보 입력", "이메일 인증"];
-  return (
-    <ol className="flex items-center gap-1.5 mb-5" aria-label="회원가입 단계">
-      {labels.map((l, i) => {
-        const n = (i + 1) as 1 | 2 | 3;
-        const done = n < current;
-        const now = n === current;
-        return (
-          <li key={l} className="flex items-center gap-1.5 min-w-0">
-            <span
-              className={`shrink-0 w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center ${
-                now
-                  ? "bg-[var(--accent)] text-white"
-                  : done
-                    ? "bg-[var(--accent-light)] text-[var(--accent)]"
-                    : "bg-[var(--gray-100)] text-[var(--gray-500)]"
-              }`}
-            >
-              {done ? "✓" : n}
-            </span>
-            <span
-              className={`text-xs truncate ${
-                now ? "font-semibold text-[var(--gray-900)]" : "text-[var(--gray-500)]"
-              }`}
-            >
-              {l}
-            </span>
-            {i < labels.length - 1 && (
-              <span className="w-3 h-px bg-[var(--gray-200)] shrink-0 ml-0.5" aria-hidden />
-            )}
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-/** 폼 안의 입력 묶음 */
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <fieldset className="space-y-3">
-      <legend className="text-xs font-semibold text-[var(--gray-500)] mb-2">
-        {title}
-      </legend>
-      {children}
-    </fieldset>
-  );
-}
-
-function Alert({ tone, children }: { tone: "error" | "success" | "info"; children: React.ReactNode }) {
-  const cls =
-    tone === "error"
-      ? "text-[var(--danger)] bg-[var(--danger-light)]"
-      : tone === "success"
-        ? "text-[var(--success)] bg-[var(--success-light)]"
-        : "text-[var(--gray-700)] bg-[var(--gray-100)]";
-  return (
-    <div className={`text-sm px-3 py-2.5 rounded-[var(--radius-md)] leading-relaxed ${cls}`}>
-      {children}
-    </div>
-  );
-}
 
 /** ?mode= 로 바로 열 수 있는 화면. 성공 화면은 제외함 */
 const URL_MODES: Mode[] = ["login", "help", "reset", "resend", "migrate", "register"];
@@ -219,14 +81,16 @@ export default function Page() {
   }, []);
   // null = 유형 선택(1단계). 고르면 정보 입력(2단계)으로 넘어감
   const [regType, setRegType] = useState<RegType | null>(null);
-  const [privacyAgreed, setPrivacyAgreed] = useState(false);
+  // 가입·등록·로그인에 쓴 주소를 다음 화면(로그인·재발송·재설정) 입력칸에 미리 채움
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const migrateEmail = useRef("");
 
-  const [loginState, loginFormAction] = useActionState<ActionState, FormData>(loginAction, null);
-  const [registerState, registerFormAction] = useActionState<ActionState, FormData>(registerAction, null);
-  const [resetState, resetFormAction] = useActionState<ActionState, FormData>(requestPasswordResetAction, null);
-  const [migrateState, migrateFormAction] = useActionState<ActionState, FormData>(migrateToEmailLoginAction, null);
+  const [loginState, loginForm, loginPending] = useFormSubmit(loginAction);
+  const [resetState, resetForm, resetPending] = useFormSubmit(requestPasswordResetAction);
+  const [migrateState, migrateForm, migratePending] = useFormSubmit(migrateToEmailLoginAction);
 
-  // 세션 만료로 튕겨나온 경우 middleware 가 `?next=<원래 경로>` 를 붙여 보냄
+  // 세션 만료로 튕겨나온 경우 proxy 가 `?next=<원래 경로>` 를 붙여 보냄
   // 이를 로그인 폼에 실어 보내 로그인 후 그 화면으로 복귀시킴
   // (useSearchParams 는 프리렌더 시 Suspense 경계를 요구하므로 마운트 후 직접 읽음)
   const [next, setNext] = useState("");
@@ -242,17 +106,13 @@ export default function Page() {
     if (n || q.get("expired") === "1") setModeState("login");
   }, []);
 
-  // 가입·이메일 등록에 성공하면 안내 화면으로 넘어감
+  // 이메일 등록에 성공하면 안내 화면으로 넘어감
   // 의존성을 success 불리언으로 두면 두 번째 성공(true → true)에서 효과가 돌지 않으므로 상태 객체를 씀
   // setMode 가 주소창 기록도 바꿔 렌더 중 처리 불가
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (registerState?.success) setMode("registered");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registerState]);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (migrateState?.success) setMode("migrated");
+    if (!migrateState?.success) return;
+    setEmail(migrateEmail.current);
+    setMode("migrated");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [migrateState]);
 
@@ -268,7 +128,7 @@ export default function Page() {
 
   const SUBTITLE: Record<Mode, string> = {
     start: "AI 서비스를 평가하고 보상을 받는 곳",
-    login: "이메일로 로그인하세요",
+    login: "이메일로 로그인해 주세요",
     help: "어떤 상황이신가요?",
     reset: "비밀번호 재설정",
     resend: "인증 메일 다시 받기",
@@ -286,39 +146,9 @@ export default function Page() {
           <h1 className="text-2xl font-bold text-[var(--gray-900)] mb-1 tracking-tight">AI 평가단</h1>
           <p className="text-sm text-[var(--muted)] mb-7">{SUBTITLE[mode]}</p>
 
-          {mode === "start" && (
-            <div className="space-y-2.5">
-              <ChoiceCard
-                primary
-                label="로그인"
-                desc="이미 계정이 있어요"
-                icon="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"
-                onClick={() => setMode("login")}
-              />
-              <ChoiceCard
-                label="회원가입"
-                desc="처음 오셨나요? 계정을 만드세요"
-                icon="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 8v6M22 11h-6"
-                onClick={() => {
-                  setRegType(null);
-                  setMode("register");
-                }}
-              />
-              <div className="pt-2 text-center">
-                <button
-                  type="button"
-                  onClick={() => setMode("help")}
-                  className="text-xs text-[var(--muted)] hover:text-[var(--accent)] transition-colors"
-                >
-                  로그인이 안 되시나요?
-                </button>
-              </div>
-            </div>
-          )}
-
-          {mode === "login" && (
+          {/* 가장 많이 쓰는 로그인을 첫 화면에 바로 둠 */}
+          {(mode === "start" || mode === "login") && (
             <>
-              {back("start", "처음으로")}
               {/* 만료 안내는 오류가 아니므로 info 톤 */}
               {expired && (
                 <div className="mb-3 text-sm text-[var(--gray-700)] bg-[var(--accent-light)] px-3 py-2.5 rounded-[var(--radius-md)] leading-relaxed">
@@ -329,7 +159,7 @@ export default function Page() {
                   </p>
                 </div>
               )}
-              <form key="login" action={loginFormAction} className="space-y-3">
+              <form key="login" {...loginForm} className="space-y-3">
                 <input type="hidden" name="next" value={next} />
                 <div>
                   <label htmlFor="login-email" className={LABEL}>
@@ -345,6 +175,8 @@ export default function Page() {
                     required
                     autoComplete="username"
                     placeholder="example@hallym.ac.kr"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className={INPUT}
                   />
                 </div>
@@ -352,19 +184,20 @@ export default function Page() {
                   <label htmlFor="login-password" className={LABEL}>
                     비밀번호
                   </label>
-                  <input
+                  <PasswordInput
                     id="login-password"
                     name="password"
-                    type="password"
                     required
                     autoComplete="current-password"
                     placeholder="비밀번호 입력"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className={INPUT}
                   />
                 </div>
 
                 {loginState?.error && (
-                  <div className="text-sm text-[var(--danger)] bg-[var(--danger-light)] px-3 py-2.5 rounded-[var(--radius-md)] leading-relaxed">
+                  <div role="alert" className="text-sm text-[var(--danger)] bg-[var(--danger-light)] px-3 py-2.5 rounded-[var(--radius-md)] leading-relaxed">
                     <p>{loginState.error}</p>
                     {/* 오류에 맞는 복구 화면으로 바로 가는 버튼(help 화면에도 같은 경로가 있음) */}
                     {loginState.error === LEGACY_ID_ERROR && (
@@ -374,6 +207,15 @@ export default function Page() {
                         className="mt-2 w-full py-2 text-xs font-semibold rounded-[var(--radius-md)] bg-white border border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--danger-light)] transition-colors"
                       >
                         로그인용 이메일 등록하기
+                      </button>
+                    )}
+                    {loginState.error === LOGIN_FAILED_ERROR && (
+                      <button
+                        type="button"
+                        onClick={() => setMode("reset")}
+                        className="mt-2 w-full py-2 text-xs font-semibold rounded-[var(--radius-md)] bg-white border border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--danger-light)] transition-colors"
+                      >
+                        비밀번호 재설정
                       </button>
                     )}
                     {loginState.error === EMAIL_UNVERIFIED_ERROR && (
@@ -388,8 +230,19 @@ export default function Page() {
                   </div>
                 )}
 
-                <SubmitButton pendingText="로그인 중…" className={`${BTN_PRIMARY} mt-2`}>로그인</SubmitButton>
+                <SubmitButton pending={loginPending} pendingText="로그인 중…" className={`${BTN_PRIMARY} mt-2`}>로그인</SubmitButton>
               </form>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setRegType(null);
+                  setMode("register");
+                }}
+                className="mt-3 w-full py-2.5 rounded-[var(--radius-md)] bg-[var(--gray-100)] text-sm font-semibold text-[var(--gray-800)] hover:bg-[var(--gray-200)] transition-colors"
+              >
+                처음이신가요? 회원가입
+              </button>
 
               <div className="flex items-center justify-center pt-4">
                 <button
@@ -440,7 +293,7 @@ export default function Page() {
                 <strong>새 비밀번호를 정하는 링크</strong>를 가입 이메일로 보냅니다. 링크는{" "}
                 <strong>30분</strong> 동안 유효합니다. 비밀번호는 링크를 눌러야 바뀝니다.
               </Alert>
-              <form key="reset" action={resetFormAction} className="space-y-3 mt-3">
+              <form key="reset" {...resetForm} className="space-y-3 mt-3">
                 <div>
                   <label htmlFor="reset-identifier" className={LABEL}>
                     이메일
@@ -454,6 +307,7 @@ export default function Page() {
                     required
                     autoComplete="username"
                     placeholder="example@hallym.ac.kr"
+                    defaultValue={email}
                     className={INPUT}
                   />
                 </div>
@@ -465,7 +319,7 @@ export default function Page() {
                     포함)을 확인해 주세요.
                   </Alert>
                 )}
-                <SubmitButton pendingText="보내는 중…" className={`${BTN_PRIMARY} mt-2`}>재설정 링크 받기</SubmitButton>
+                <SubmitButton pending={resetPending} pendingText="보내는 중…" className={`${BTN_PRIMARY} mt-2`}>재설정 링크 받기</SubmitButton>
               </form>
             </>
           )}
@@ -478,7 +332,7 @@ export default function Page() {
                 <strong>24시간</strong> 동안 유효합니다. <strong>비밀번호는 바뀌지 않습니다.</strong>
               </Alert>
               <div className="mt-3">
-                <ResendForm />
+                <ResendForm defaultIdentifier={email} />
               </div>
             </>
           )}
@@ -492,7 +346,15 @@ export default function Page() {
                 지금까지 쓰시던 <strong>학번·사번과 비밀번호</strong>가 필요합니다.
                 비밀번호는 바뀌지 않습니다.
               </Alert>
-              <form key="migrate" action={migrateFormAction} className="space-y-5 mt-4">
+              <form
+                key="migrate"
+                action={migrateForm.action}
+                onSubmit={(e) => {
+                  migrateEmail.current = String(new FormData(e.currentTarget).get("email") ?? "").trim();
+                  migrateForm.onSubmit(e);
+                }}
+                className="space-y-5 mt-4"
+              >
                 <Group title="본인 확인">
                   <div>
                     <label htmlFor="mig-legacyId" className={LABEL}>
@@ -502,6 +364,8 @@ export default function Page() {
                       id="mig-legacyId"
                       name="legacyId"
                       required
+                      // 로그인 칸에 학번을 넣고 안내를 받아 넘어온 경우 그대로 이어 씀
+                      defaultValue={email.includes("@") ? "" : email}
                       placeholder="20240001 / AB1234"
                       className={INPUT}
                     />
@@ -510,10 +374,9 @@ export default function Page() {
                     <label htmlFor="mig-password" className={LABEL}>
                       기존 비밀번호 <Req />
                     </label>
-                    <input
+                    <PasswordInput
                       id="mig-password"
                       name="password"
-                      type="password"
                       required
                       autoComplete="current-password"
                       placeholder="비밀번호 입력"
@@ -557,14 +420,14 @@ export default function Page() {
                 </Group>
 
                 {migrateState?.error && <Alert tone="error">{migrateState.error}</Alert>}
-                <SubmitButton pendingText="보내는 중…" className={BTN_PRIMARY}>이메일 등록하고 인증 메일 받기</SubmitButton>
+                <SubmitButton pending={migratePending} pendingText="보내는 중…" className={BTN_PRIMARY}>이메일 등록하고 인증 메일 받기</SubmitButton>
               </form>
             </>
           )}
 
           {mode === "register" && regType === null && (
             <>
-              {back("start", "처음으로")}
+              {back("start", "로그인으로")}
               <Steps current={1} />
               <p className="text-xs text-[var(--muted)] mb-3 leading-relaxed">
                 어떤 자격으로 참여하시나요? 선택에 따라 입력할 항목이 달라집니다.
@@ -594,218 +457,14 @@ export default function Page() {
               </button>
               <Steps current={2} />
 
-              <form
-                key={`register-${regType}`}
-                action={registerFormAction}
-                onSubmit={(e) => {
-                  if (!privacyAgreed) {
-                    e.preventDefault();
-                    toast("개인정보 수집 및 이용에 동의해 주세요.", "error");
-                  }
+              <RegisterForm
+                key={regType}
+                regType={regType}
+                onRegistered={(addr) => {
+                  setEmail(addr);
+                  setMode("registered");
                 }}
-                className="space-y-6"
-              >
-                <input type="hidden" name="userType" value={regType} />
-
-                <Group title="기본 정보">
-                  <div>
-                    <label htmlFor="reg-name" className={LABEL}>
-                      이름 <Req />
-                    </label>
-                    <input
-                      id="reg-name"
-                      name="name"
-                      placeholder="홍길동"
-                      required
-                      autoComplete="name"
-                      className={INPUT}
-                    />
-                    <p className="text-xs text-[var(--danger)] mt-1">
-                      반드시 실명을 입력해 주세요.
-                    </p>
-                  </div>
-                  <div>
-                    <label className={LABEL}>
-                      전화번호 <Req />
-                    </label>
-                    <PhoneInput name="phone" required />
-                  </div>
-                </Group>
-
-                <Group title={regType === "DEVELOPER" ? "소속 기업" : "소속 정보"}>
-                  {regType === "STUDENT" && (
-                    <>
-                      <div>
-                        <label htmlFor="reg-studentId" className={LABEL}>
-                          학번 <Req />
-                        </label>
-                        <input
-                          id="reg-studentId"
-                          name="studentId"
-                          placeholder="20240001"
-                          required
-                          inputMode="numeric"
-                          className={INPUT}
-                        />
-                      </div>
-                      <div>
-                        <label className={LABEL}>
-                          전공 <Req />
-                        </label>
-                        {/* 항목이 100개가 넘어 검색형으로 고름 */}
-                        <MajorSelect name="major" required />
-                      </div>
-                    </>
-                  )}
-
-                  {regType === "STAFF" && (
-                    <>
-                      <div>
-                        <label htmlFor="reg-employeeId" className={LABEL}>
-                          사번 <Req />
-                        </label>
-                        <input
-                          id="reg-employeeId"
-                          name="employeeId"
-                          placeholder="AB1234"
-                          required
-                          maxLength={8}
-                          pattern="[a-zA-Z0-9]+"
-                          title="영문과 숫자만 입력 가능합니다"
-                          className={INPUT}
-                        />
-                        <p className="text-xs text-[var(--gray-500)] mt-1">
-                          영문·숫자만, 최대 8자리
-                        </p>
-                      </div>
-                      <div>
-                        <label className={LABEL}>
-                          소속 <Req />
-                        </label>
-                        <MajorSelect
-                          name="major"
-                          required
-                          placeholder="소속을 검색하세요 (예: 정보과학, 간호)"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {regType === "DEVELOPER" && (
-                    <div>
-                      <label htmlFor="reg-companyName" className={LABEL}>
-                        기업명 <Req />
-                      </label>
-                      <input
-                        id="reg-companyName"
-                        name="companyName"
-                        placeholder="(주)회사명"
-                        required
-                        autoComplete="organization"
-                        className={INPUT}
-                      />
-                      <p className="text-xs text-[var(--gray-500)] mt-1">
-                        사업자등록번호는 나중에 프로필에서 등록합니다. 의뢰·견적서에 필요합니다.
-                      </p>
-                    </div>
-                  )}
-                </Group>
-
-                <Group title="로그인 정보">
-                  {/* 게스트는 devEmail 로 받고 registerAction 이 email 에도 넣음 */}
-                  <div>
-                    <label
-                      htmlFor={regType === "DEVELOPER" ? "reg-devEmail" : "reg-email"}
-                      className={LABEL}
-                    >
-                      이메일 (로그인 ID) <Req />
-                    </label>
-                    <input
-                      id={regType === "DEVELOPER" ? "reg-devEmail" : "reg-email"}
-                      name={regType === "DEVELOPER" ? "devEmail" : "email"}
-                      type="email"
-                      required
-                      autoComplete="email"
-                      placeholder={
-                        regType === "DEVELOPER" ? "you@company.com" : "example@hallym.ac.kr"
-                      }
-                      className={INPUT}
-                    />
-                    <p className="text-xs text-[var(--gray-500)] mt-1 leading-relaxed">
-                      <strong>가입 후 이 주소로 인증 메일이 갑니다.</strong> 링크를 눌러야
-                      로그인할 수 있으니 받을 수 있는 주소를 넣어 주세요.
-                    </p>
-                  </div>
-                  <div>
-                    <label htmlFor="reg-password" className={LABEL}>
-                      비밀번호 <Req />
-                    </label>
-                    <input
-                      id="reg-password"
-                      name="password"
-                      type="password"
-                      required
-                      minLength={8}
-                      autoComplete="new-password"
-                      placeholder="8자 이상"
-                      className={INPUT}
-                    />
-                  </div>
-                </Group>
-
-                <div className="border-t border-[var(--gray-200)] pt-5 space-y-3">
-                  <div className="text-xs text-[var(--gray-500)] leading-relaxed space-y-1">
-                    <p>
-                      <strong className="text-[var(--gray-700)]">수집 항목</strong> · 이름,
-                      전화번호, 이메일
-                      {regType === "STUDENT" && ", 학번, 전공"}
-                      {regType === "STAFF" && ", 사번, 소속"}
-                      {regType === "DEVELOPER" && ", 기업명"}
-                    </p>
-                    <p>
-                      <strong className="text-[var(--gray-700)]">수집 목적</strong> · 서비스 이용,
-                      본인 확인, 비밀번호 찾기
-                      {regType !== "DEVELOPER" && ", 보상 지급"}
-                    </p>
-                    <p>
-                      <strong className="text-[var(--gray-700)]">보유 기간</strong> · 회원 탈퇴
-                      시까지
-                    </p>
-                    {/* 접속기록은 법령에 따른 수집이라 동의 대상이 아님. 보관기간은 accessLog.ts 와 맞춤 */}
-                    <p>
-                      <strong className="text-[var(--gray-700)]">자동 수집(안내)</strong> · 로그인·개인정보
-                      처리 시 접속 IP·일시·브라우저 정보를 접속기록으로 남기며, 관련 법령에 따라 2년간
-                      보관합니다.
-                    </p>
-                    <p className="text-[var(--gray-500)]">
-                      동의하지 않으실 수 있으며, 그 경우 서비스 이용이 제한됩니다.
-                    </p>
-                  </div>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={privacyAgreed}
-                      onChange={(e) => setPrivacyAgreed(e.target.checked)}
-                      className="w-4 h-4 rounded accent-[var(--accent)]"
-                    />
-                    <span className="text-xs font-medium text-[var(--gray-700)]">
-                      개인정보 수집 및 이용에 동의합니다. <Req />
-                    </span>
-                  </label>
-                </div>
-
-                {registerState?.error && <Alert tone="error">{registerState.error}</Alert>}
-                <SubmitButton
-                  pendingText="가입 처리 중…"
-                  className={`w-full py-2.5 rounded-[var(--radius-md)] font-semibold text-sm transition-all ${
-                    privacyAgreed
-                      ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-dark)] active:scale-[0.98]"
-                      : "bg-[var(--gray-200)] text-[var(--gray-500)] cursor-not-allowed"
-                  }`}
-                >
-                  회원가입
-                </SubmitButton>
-              </form>
+              />
             </>
           )}
 
@@ -864,18 +523,6 @@ export default function Page() {
         </div>
 
         <div className="text-center mt-4">
-          {mode === "login" && (
-            <button
-              type="button"
-              onClick={() => {
-                setRegType(null);
-                setMode("register");
-              }}
-              className="text-sm text-[var(--muted)] hover:text-[var(--accent)] transition-colors"
-            >
-              계정이 없으신가요? 회원가입
-            </button>
-          )}
           {mode === "register" && (
             <button
               type="button"
@@ -898,11 +545,26 @@ export default function Page() {
         </div>
 
         {/* 1320px 미만에서는 카드 아래 접힌 목록으로 보임(스테이징 전용). */}
-        <DemoAccountsPanel compact />
+        <DemoAccountsPanel
+          compact
+          activeEmail={email}
+          onSelect={(selectedEmail, selectedPw) => {
+            setMode("login");
+            setEmail(selectedEmail);
+            setPassword(selectedPw);
+          }}
+        />
       </div>
 
       {/* 스테이징 전용. 운영에서는 아무것도 렌더되지 않음 */}
-      <DemoAccountsPanel />
+      <DemoAccountsPanel
+        activeEmail={email}
+        onSelect={(selectedEmail, selectedPw) => {
+          setMode("login");
+          setEmail(selectedEmail);
+          setPassword(selectedPw);
+        }}
+      />
     </main>
   );
 }

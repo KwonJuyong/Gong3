@@ -4,10 +4,15 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { checkLimit } from "../lib/limits";
 import { prisma, getSessionUser } from "../db";
+import { redirectToLogin } from "../session-server";
 import { createNotifications } from "../lib/notify";
 // 승인·반려 액션은 app/dashboard/approvals/actions.ts 에 있음
-import { notifyAdminsForReview, capacityOf, FUNDING_TYPES } from "../lib/approvals";
+import { notifyAdminsForReview, capacityOf } from "../lib/approvals";
+import { parseFundingType, strOrNull, linkOrder, normalizeUrl, parseEnrollmentDeadline } from "../lib/projectForm";
+import { parseProjectGuides } from "../lib/projectGuides";
 import { createRewardForResponse } from "../lib/rewards";
+import { maskStudentId } from "../lib/privacy";
+import { saveResponse } from "../lib/responses";
 import { type SurveyBlock } from "../lib/surveyBlocks";
 import {
   blocksToProjectQuestions,
@@ -19,49 +24,6 @@ import {
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
-}
-
-/**
- * 자금 출처를 폼에서 읽음. 알 수 없는 값이면 입금 확인이 필요한 업체(COMPANY)로 봄
- */
-function parseFundingType(formData: FormData): string {
-  const raw = ((formData.get("fundingType") as string) || "").trim();
-  return FUNDING_TYPES.includes(raw as (typeof FUNDING_TYPES)[number]) ? raw : "COMPANY";
-}
-
-function strOrNull(formData: FormData, key: string): string | null {
-  return ((formData.get(key) as string) || "").trim() || null;
-}
-
-/**
- * 발주를 평가에 연결함(선택 사항). 연결 전에는 보상이 생기지 않으며,
- * 나중에 승인 화면에서 연결할 수도 있음(linkOrderToProjectAction).
- * 본인 발주(또는 ADMIN)만 연결할 수 있고, 한 발주는 한 평가에만 붙음(projectId unique).
- */
-async function linkOrder(
-  orderId: string | null,
-  projectId: string,
-  me: { id: string; role: string },
-): Promise<void> {
-  if (!orderId) return;
-  const where =
-    me.role === "ADMIN"
-      ? { id: orderId, projectId: null }
-      : { id: orderId, projectId: null, buyerId: me.id };
-  await prisma.order.updateMany({ where, data: { projectId } });
-}
-
-function normalizeUrl(raw: string): string | null {
-  const s = (raw || "").trim();
-  if (!s) return null;
-  const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s}`;
-  try {
-    const u = new URL(withScheme);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
-    return u.toString();
-  } catch {
-    return null;
-  }
 }
 
 function parseQuestions(formData: FormData) {
@@ -81,12 +43,14 @@ function parseQuestions(formData: FormData) {
   return questions;
 }
 
-/** 신청 마감 일시. 날짜가 없으면 마감 없음. 수동·자동 생성이 같은 규칙을 씀 */
-function parseEnrollmentDeadline(formData: FormData): Date | null {
-  const d = (formData.get("enrollmentDeadlineDate") as string) || "";
-  const t = (formData.get("enrollmentDeadlineTime") as string) || "";
-  return d ? new Date(`${d}T${t || "23:59"}:00+09:00`) : null;
+/** 참여가 열린 학생에게 보낼 안내. 동행 평가는 과제가 공개돼야 시작할 수 있음 */
+function startNotice(project: { id: string; evalMode: string; scenario: { publishedAt: Date | null } | null }, lead: string) {
+  if (project.evalMode !== "ACCOMPANY") return { content: `${lead} 지금부터 응답할 수 있어요.`, link: `/dashboard?view=eval&p=${project.id}` };
+  return project.scenario?.publishedAt
+    ? { content: `${lead} 지금 Evi와 과제를 시작할 수 있어요.`, link: `/dashboard?view=task&p=${project.id}` }
+    : { content: `${lead} Evi 과제가 공개되면 다시 알려 드릴게요.`, link: `/dashboard?view=detail&p=${project.id}` };
 }
+
 
 export async function createProjectAction(formData: FormData) {
   const me = await getSessionUser();
@@ -119,6 +83,7 @@ export async function createProjectAction(formData: FormData) {
       location,
       startTime,
       questions,
+      guides: parseProjectGuides(formData.get("guides")),
       // 관리자가 승인해야 모집이 시작됨
       status: "PENDING_APPROVAL",
       // 문항 출처: 직접 입력. 자금 출처는 fundingType 이 따로 정함
@@ -150,26 +115,51 @@ export async function updateProjectAction(formData: FormData) {
   const projectId = (formData.get("projectId") as string) || "";
   if (!projectId) return;
 
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { order: { select: { panelSize: true } } },
+  });
   if (!project) return;
 
   if (me.role !== "ADMIN" && project.creatorId !== me.id) return;
+
+  const [responseCount, acceptedCount] = await Promise.all([
+    prisma.response.count({ where: { projectId } }),
+    prisma.enrollment.count({ where: { projectId, status: "ACCEPTED" } }),
+  ]);
 
   // 문항은 편집기를 보냈을 때(editQuestions=1)만 바꿈. 표준 구성 문항(itemKey)이 있거나
   // 응답이 있으면 바꾸지 않음. 수동 편집기가 표준 문항을 표현하지 못하고, 응답 키가
   // 배열 인덱스라 문항을 지우면 기존 응답이 다른 문항에 붙기 때문임
   const questionsLocked =
-    (await prisma.response.count({ where: { projectId } })) > 0 ||
+    responseCount > 0 ||
     ((project.questions as unknown as { itemKey?: string }[]) || []).some((q) => !!q?.itemKey);
-  // 승인 후에는 문항·서비스 주소를 ADMIN 만 바꿈. 개설자가 바꾸면 승인 검토를 거치지 않은 내용이 학생에게 나감
+  // 승인 후에는 문항·서비스 주소·정원을 ADMIN 만 바꿈. 개설자가 바꾸면 승인 검토를 거치지 않은 내용이 학생에게 나감
   const approvedLock =
-    me.role !== "ADMIN" && project.status !== "PENDING_APPROVAL" && project.status !== "REJECTED";
+    me.role !== "ADMIN" && !["DRAFT", "PENDING_APPROVAL", "REJECTED"].includes(project.status);
   const questions =
-    formData.get("editQuestions") === "1" && !questionsLocked && !approvedLock ? parseQuestions(formData) : undefined;
+    formData.get("editQuestions") === "1" && project.evalMode === "SURVEY" && !questionsLocked && !approvedLock
+      ? parseQuestions(formData)
+      : undefined;
   const title = (formData.get("title") as string) || "";
   const description = ((formData.get("description") as string) || "").trim() || null;
   const location = (formData.get("location") as string) || "미정";
   const link = approvedLock ? project.link : normalizeUrl((formData.get("link") as string) || "");
+
+  // 의뢰가 연결된 평가는 의뢰 인원(order.panelSize)이 정본이라 maxParticipants 를 바꾸지 않음
+  let nextMaxParticipants: number | undefined;
+  if (!approvedLock && !project.order && formData.has("maxParticipants")) {
+    const parsed = parseInt(String(formData.get("maxParticipants") || ""), 10);
+    if (Number.isInteger(parsed) && parsed >= 1) {
+      const floor = Math.max(project.minParticipants, acceptedCount, responseCount);
+      nextMaxParticipants = Math.max(floor, parsed);
+    }
+  }
+  const reopenByCapacity =
+    project.status === "ACTIVE" &&
+    project.closedAt !== null &&
+    nextMaxParticipants !== undefined &&
+    nextMaxParticipants > responseCount;
 
   const now = new Date();
   const date =
@@ -180,37 +170,53 @@ export async function updateProjectAction(formData: FormData) {
     `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
   const startTime = new Date(`${date}T${time}:00+09:00`);
 
+  // 반려된 평가를 고치면 다시 승인 대기로 돌림. 화면 안내(「고쳐서 다시 요청」)의 유일한 경로
+  const resubmit = project.status === "REJECTED";
   await prisma.project.update({
     where: { id: projectId },
-    data: { title, description, location, startTime, link, ...(questions ? { questions } : {}) },
+    data: {
+      title,
+      description,
+      location,
+      startTime,
+      link,
+      ...(!approvedLock && formData.has("guides") ? { guides: parseProjectGuides(formData.get("guides")) } : {}),
+      ...(nextMaxParticipants !== undefined ? { maxParticipants: nextMaxParticipants } : {}),
+      ...(reopenByCapacity ? { closedAt: null } : {}),
+      ...(questions ? { questions } : {}),
+      ...(resubmit ? { status: "PENDING_APPROVAL", rejectReason: null, rejectedAt: null } : {}),
+    },
   });
+  if (resubmit) await notifyAdminsForReview({ title, requesterId: me.id });
 
   revalidatePath("/dashboard");
-  redirect("/dashboard");
+  revalidatePath("/dashboard/surveys");
+  redirect(resubmit ? "/dashboard?submitted=1" : `/dashboard?view=detail&p=${projectId}`);
 }
 
 export async function submitResponseAction(formData: FormData) {
-  const me = await getSessionUser();
-  if (!me) return;
-
   const projectId = (formData.get("projectId") as string) || "";
+  const me = await getSessionUser();
+  // 작성 내용은 기기에 남아 있어 다시 로그인하면 같은 평가 화면에서 이어서 제출 가능
+  if (!me) redirectToLogin(projectId ? `/dashboard?view=eval&p=${projectId}` : undefined);
   if (!projectId) return;
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {
-      enrollments: { select: { userId: true, status: true } },
+      enrollments: { where: { userId: me.id }, select: { status: true } },
       // 정원·보상 단가. 발주가 없으면 Project 값을 씀
       order: { select: { panelSize: true, rewardPerPerson: true } },
     },
   });
-  // 모집중(RECRUITING)에는 응답을 받지 않음
-  if (!project || project.status !== "ACTIVE") return;
-
-  const isAccepted = project.enrollments.some(
-    (e) => e.userId === me.id && e.status === "ACCEPTED"
-  );
-  if (!isAccepted) return;
+  if (!project) redirect("/dashboard");
+  // 작성 중에 평가가 끝났거나 선발에서 제외된 경우. 조용히 끝내면 제출된 줄 알게 됨
+  const isAccepted = project.enrollments[0]?.status === "ACCEPTED";
+  if (project.status !== "ACTIVE" || !isAccepted) {
+    redirect(`/dashboard?view=detail&p=${projectId}&answer=closed`);
+  }
+  // 동행 평가는 과제 대화를 저장할 때 응답이 생김. 설문 제출로 빈 응답·보상이 생기지 않게 막음
+  if (project.evalMode === "ACCOMPANY") redirect(`/dashboard?view=task&p=${projectId}`);
 
   // 응답 키는 questionKey() 로 만듦(수동 문항은 인덱스, 설문 원본 문항은 itemKey).
   const projectQuestions = (project.questions as unknown as ProjectQuestion[]) || [];
@@ -242,43 +248,25 @@ export async function submitResponseAction(formData: FormData) {
     );
   if (!valid) redirect("/dashboard?invalid=1");
 
-  // 기존 응답이 있으면 수정, 없으면 새로 생성
-  const existing = await prisma.response.findFirst({
-    where: { projectId, userId: me.id },
-  });
+  const outcome = await saveResponse(projectId, me.id, answers, capacityOf(project));
 
-  if (existing) {
-    // 수정은 정원·보상에 영향이 없음
-    await prisma.response.update({ where: { id: existing.id }, data: { answers } });
+  if (outcome.kind === "full") redirect("/dashboard?full=1");
+  if (outcome.kind === "updated") {
     revalidatePath("/dashboard");
-    // 처리 결과를 안내함
-    redirect("/dashboard?answered=updated");
+    redirect(`/dashboard?answered=updated&done=${projectId}`);
   }
 
-  // 정원을 넘는 응답은 받지 않음. 동시 제출에 대비해 보상 생성에서도 한 번 더 확인함
-  const capacity = capacityOf(project);
-  const answered = await prisma.response.count({ where: { projectId } });
-  if (project.closedAt || answered >= capacity) {
-    redirect("/dashboard?full=1");
+  // 기기 시계 기준이라 검수 보조 표시에만 씀. 30일을 넘는 값은 버림
+  const elapsed = Number(formData.get("elapsedSec"));
+  if (Number.isInteger(elapsed) && elapsed >= 0 && elapsed <= 30 * 86400) {
+    await prisma.response.update({ where: { id: outcome.responseId }, data: { durationSec: elapsed } });
   }
-
-  const created = await prisma.response.create({
-    data: { projectId, userId: me.id, answers },
-  });
 
   // 유상 평가면 보상을 만듦(연구비 건은 만들지 않음).
-  await createRewardForResponse(created.id);
-
-  // 정원이 차면 응답을 마감함
-  if (answered + 1 >= capacity) {
-    await prisma.project.updateMany({
-      where: { id: projectId, closedAt: null },
-      data: { closedAt: new Date() },
-    });
-  }
+  await createRewardForResponse(outcome.responseId);
 
   revalidatePath("/dashboard");
-  redirect("/dashboard?answered=1");
+  redirect(`/dashboard?answered=1&done=${projectId}`);
 }
 
 export async function finishProjectAction(formData: FormData) {
@@ -290,7 +278,10 @@ export async function finishProjectAction(formData: FormData) {
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: { responses: { select: { userId: true } } },
+    include: {
+      responses: { select: { userId: true } },
+      enrollments: { where: { status: "ACCEPTED" }, select: { userId: true } },
+    },
   });
   if (!project) return;
 
@@ -301,16 +292,24 @@ export async function finishProjectAction(formData: FormData) {
     data: { status: "FINISHED", endTime: new Date() },
   });
 
-  const participantIds = [...new Set(project.responses.map((r) => r.userId))];
-  if (participantIds.length > 0) {
-    await createNotifications(
-      participantIds.map((uid) => ({
-        userId: uid,
-        type: "INFO",
-        content: `참여한 평가가 종료되었습니다: ${project.title}`,
-      })),
-    );
-  }
+  const participantIds = new Set(project.responses.map((r) => r.userId));
+  // 선발됐지만 아직 응답하지 않은 사람도 작성 중일 수 있어 따로 알림
+  const unansweredIds = project.enrollments.map((e) => e.userId).filter((uid) => !participantIds.has(uid));
+  await createNotifications([
+    ...[...participantIds].map((uid) => ({
+      userId: uid,
+      type: "INFO",
+      content: `참여한 평가가 종료되었어요: ${project.title}`,
+      // 동행 평가는 종료 뒤에도 내 기록·개발사 답을 과제 화면에서 봄
+      link: `/dashboard?view=${project.evalMode === "ACCOMPANY" ? "task" : "detail"}&p=${projectId}`,
+    })),
+    ...unansweredIds.map((uid) => ({
+      userId: uid,
+      type: "INFO",
+      content: `"${project.title}" 평가가 종료되어 더 이상 참여할 수 없어요.`,
+      link: `/dashboard?view=detail&p=${projectId}`,
+    })),
+  ]);
 
   revalidatePath("/dashboard");
   redirect("/dashboard");
@@ -341,23 +340,33 @@ export async function enrollProjectAction(formData: FormData) {
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: { enrollments: true },
+    include: {
+      _count: { select: { enrollments: true } },
+      enrollments: { where: { status: "ACCEPTED" }, select: { id: true } },
+      order: { select: { panelSize: true } },
+    },
   });
   if (!project) return;
-  // 신청은 모집 중에만 받음(시작 후 신청은 선발을 거칠 수 없음).
-  // 화면을 열어 둔 사이 마감된 경우라 조용히 끝내지 않고 상세 창에서 알림
-  const closed =
-    project.status !== "RECRUITING" ||
-    (project.enrollmentDeadline && new Date() > project.enrollmentDeadline);
-  if (closed) redirect(`/dashboard?view=detail&p=${projectId}&enroll=closed`);
-  // 신청은 정원을 넘어도 받고, 정원은 선발할 때 적용함
+  const capacity = capacityOf(project);
+  const acceptedCount = project.enrollments.length;
+  // 모집 중이면 기한 전까지 정원과 무관하게 신청 가능. 진행 중이면 마감 전이면서 정원에 빈자리가 있을 때만 추가 신청 허용
+  const recruitingOpen =
+    project.status === "RECRUITING" &&
+    !(project.enrollmentDeadline && new Date() > project.enrollmentDeadline);
+  const lateOpen =
+    project.status === "ACTIVE" &&
+    project.closedAt === null &&
+    acceptedCount < capacity;
+  if (!recruitingOpen && !lateOpen) {
+    redirect(`/dashboard?view=detail&p=${projectId}&enroll=closed`);
+  }
 
-  const existing = await prisma.enrollment.findUnique({
-    where: { projectId_userId: { projectId, userId: me.id } },
+  // 연속 클릭·재시도로 같은 신청이 겹쳐도 한 건만 만들고 알림도 한 번만 보냄(unique 충돌 오류 화면 방지)
+  const { count } = await prisma.enrollment.createMany({
+    data: [{ projectId, userId: me.id, status: "PENDING" }],
+    skipDuplicates: true,
   });
-  if (existing) return;
-
-  await prisma.enrollment.create({ data: { projectId, userId: me.id, status: "PENDING" } });
+  if (count === 0) return;
 
   const notifyUserIds = new Set<string>();
   if (project.creatorId) notifyUserIds.add(project.creatorId);
@@ -366,14 +375,17 @@ export async function enrollProjectAction(formData: FormData) {
   notifyUserIds.delete(me.id);
 
   if (notifyUserIds.size > 0) {
+    const content = lateOpen
+      ? `${me.name}(${maskStudentId(me.studentId, false)})님이 "${project.title}" 평가에 추가 참여 신청했습니다. (참여 ${acceptedCount}/${capacity}명)`
+      : `${me.name}(${maskStudentId(me.studentId, false)})님이 "${project.title}" 평가에 참여 신청했습니다. (신청 ${project._count.enrollments + 1}명 · 정원 ${capacity}명)`;
     // 신청마다 가는 알림이라 푸시는 보내지 않고 인앱에만 쌓음
     await createNotifications(
       Array.from(notifyUserIds).map((uid) => ({
         userId: uid,
         type: "INFO",
-        content: `${me.name}(${me.studentId})님이 "${project.title}" 평가에 참여 신청했습니다. (신청 ${project.enrollments.length + 1}명 · 정원 ${project.maxParticipants}명)`,
+        content,
       })),
-      { push: false },
+      { push: false, link: `/dashboard?view=recruit&p=${projectId}` },
     );
   }
 
@@ -387,7 +399,7 @@ export async function enrollProjectAction(formData: FormData) {
 }
 
 /**
- * * 모집 중이거나 선발되지 않은 신청만 취소할 수 있음. 평가가 시작된 뒤 선발된 사람의 제외는
+ * 모집 중이거나 선발되지 않은 신청만 취소할 수 있음. 평가가 시작된 뒤 선발된 사람의 제외는
  * 관리자가 removeParticipantAction 으로 함
  */
 export async function cancelEnrollmentAction(formData: FormData) {
@@ -427,7 +439,7 @@ export async function cancelEnrollmentAction(formData: FormData) {
 }
 
 /**
- * * 체크된 신청자를 ACCEPTED, 나머지를 REJECTED 로 확정함
+ * 체크된 신청자를 ACCEPTED, 나머지를 REJECTED 로 확정함
  * formData.start === "1" 이면 선발 확정과 동시에 평가를 시작(RECRUITING → ACTIVE)함
  */
 export async function selectParticipantsAction(formData: FormData) {
@@ -439,7 +451,11 @@ export async function selectParticipantsAction(formData: FormData) {
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: { enrollments: { select: { userId: true, status: true } } },
+    include: {
+      enrollments: { select: { userId: true, status: true } },
+      scenario: { select: { publishedAt: true } },
+      order: { select: { panelSize: true } },
+    },
   });
   // 선발은 모집 중에만 함. 진행 중에 실행하면 체크하지 않은 응답자까지 REJECTED 가 됨
   // 진행 중 인원 조정은 제외·추가 액션으로 함
@@ -451,13 +467,16 @@ export async function selectParticipantsAction(formData: FormData) {
   const enrolledIds = new Set(
     project.enrollments.filter((e) => e.status !== "REMOVED").map((e) => e.userId),
   );
+  const start = (formData.get("start") as string) === "1";
+  // 선발 저장 때는 화면을 연 뒤 들어온 신청을 그대로 둠(개설자가 보지 못함). 시작하면 더 뽑을 수 없어 모두 비선발
+  const shownIds = new Set(formData.getAll("shown").map((v) => String(v)));
   // 신청하지 않은 사용자가 섞여 들어오는 것을 막음
   const accepted = [...acceptedIds].filter((id) => enrolledIds.has(id));
-  const rejected = [...enrolledIds].filter((id) => !acceptedIds.has(id));
+  const rejected = [...enrolledIds].filter((id) => !acceptedIds.has(id) && (start || shownIds.has(id)));
 
-  if (accepted.length > project.maxParticipants) return;
+  // 의뢰 인원이 정원. 응답 저장(saveResponse)과 같은 기준이어야 선발된 학생이 정원 마감에 막히지 않음
+  if (accepted.length > capacityOf(project)) return;
 
-  const start = (formData.get("start") as string) === "1";
   if (start && accepted.length < project.minParticipants) return;
 
   await prisma.$transaction([
@@ -480,7 +499,7 @@ export async function selectParticipantsAction(formData: FormData) {
       ...accepted.map((uid) => ({
         userId: uid,
         type: "INFO",
-        content: `"${project.title}" 평가에 선발되었습니다. 지금부터 응답할 수 있습니다.`,
+        ...startNotice(project, `"${project.title}" 평가에 선발되었어요.`),
         fromUserId: me.id,
       })),
       ...rejected.map((uid) => ({
@@ -488,6 +507,7 @@ export async function selectParticipantsAction(formData: FormData) {
         type: "INFO",
         content: `"${project.title}" 평가는 정원이 마감되어 이번에는 참여하지 못하게 되었습니다.`,
         fromUserId: me.id,
+        link: `/dashboard?view=detail&p=${projectId}`,
       })),
     ];
     if (notifications.length > 0) {
@@ -499,19 +519,20 @@ export async function selectParticipantsAction(formData: FormData) {
   redirect(start ? "/dashboard" : `/dashboard?view=recruit&p=${projectId}`);
 }
 
+/** 서비스의 확정한 표준 문항(versionId)으로 표준 설문 평가를 만듦. 동행 평가는 accompany/create-actions.ts */
 export async function createProjectFromServiceAction(formData: FormData) {
   const me = await getSessionUser();
   if (!me || (me.role !== "DEVELOPER" && me.role !== "ADMIN")) return;
 
   const versionId = ((formData.get("versionId") as string) || "").trim();
   if (!versionId) return;
-
   const version = await prisma.surveyVersion.findUnique({
     where: { id: versionId, status: "CONFIRMED" },
     include: { service: true },
   });
   if (!version) return;
-  if (version.service.ownerId !== me.id && me.role !== "ADMIN") return;
+  const service = version.service;
+  if (service.ownerId !== me.id && me.role !== "ADMIN") return;
 
   // 설문 → 평가 문항 변환은 projectQuestions.ts 에서 함
   const blocks = (version.blocks as unknown as SurveyBlock[]) || [];
@@ -520,7 +541,7 @@ export async function createProjectFromServiceAction(formData: FormData) {
   // Prisma Json 입력 타입이 인덱스 시그니처를 요구해서 캐스팅함
   const questions = blocksToProjectQuestions(blocks, snapshot) as unknown as object[];
 
-  const title = ((formData.get("title") as string) || version.service.name).trim();
+  const title = ((formData.get("title") as string) || service.name).trim();
   const location = ((formData.get("location") as string) || "미정").trim();
   const description = ((formData.get("description") as string) || "").trim() || null;
 
@@ -538,15 +559,17 @@ export async function createProjectFromServiceAction(formData: FormData) {
       location,
       startTime,
       questions,
+      guides: parseProjectGuides(formData.get("guides")),
       // 관리자가 승인해야 모집이 시작됨
       status: "PENDING_APPROVAL",
-      // 문항 출처: 서비스 설문에서 자동 생성. 원본 회차를 남김
+      // 표준 설문. 원본 회차를 남김
       questionSource: "AUTO",
       surveyVersionId: version.id,
+      serviceId: service.id,
       fundingType: parseFundingType(formData),
       contractRef: strOrNull(formData, "contractRef"),
       fundRef: strOrNull(formData, "fundRef"),
-      link: null,
+      link: normalizeUrl((formData.get("link") as string) || ""),
       creatorId: me.id,
       minParticipants,
       maxParticipants,
@@ -721,6 +744,7 @@ export async function addParticipantAction(
     include: {
       order: { select: { panelSize: true } },
       enrollments: { where: { status: "ACCEPTED" }, select: { userId: true } },
+      scenario: { select: { publishedAt: true } },
     },
   });
   if (!project) return { error: "평가를 찾을 수 없습니다." };
@@ -765,7 +789,7 @@ export async function addParticipantAction(
     {
       userId: user.id,
       type: "INFO",
-      content: `"${project.title}" 평가자로 추가되었습니다. 지금부터 응답할 수 있습니다.`,
+      ...startNotice(project, `"${project.title}" 평가자로 추가되었어요.`),
       fromUserId: me.id,
     },
   ]);
@@ -777,5 +801,94 @@ export async function addParticipantAction(
   );
 
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/surveys");
   return { ok: `${user.name}님을 평가자로 추가했습니다. (${project.enrollments.length + 1}/${capacity}명)` };
+}
+
+/** 진행 중(ACTIVE) 추가 신청(PENDING)을 수락하거나 거절함. 정원 초과를 막기 위해 프로젝트 행을 잠금 */
+export async function reviewPendingEnrollmentAction(
+  _prev: ParticipantState | null,
+  formData: FormData,
+): Promise<ParticipantState> {
+  const me = await getSessionUser();
+  if (!me || me.role !== "ADMIN") return { error: "관리자만 추가 신청을 처리할 수 있습니다." };
+
+  const projectId = (formData.get("projectId") as string) || "";
+  const userId = (formData.get("userId") as string) || "";
+  const decision = (formData.get("decision") as string) || "";
+  if (!projectId || !userId || (decision !== "ACCEPT" && decision !== "REJECT")) {
+    return { error: "요청 값이 올바르지 않습니다." };
+  }
+
+  const outcome = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+    const project = await tx.project.findUnique({
+      where: { id: projectId },
+      include: {
+        order: { select: { panelSize: true } },
+        scenario: { select: { publishedAt: true } },
+      },
+    });
+    if (!project) return { error: "평가를 찾을 수 없습니다." } as const;
+    if (project.status !== "ACTIVE") return { error: "진행 중인 평가에서만 처리할 수 있습니다." } as const;
+
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { name: true, status: true } });
+    if (!user) return { error: "회원을 찾을 수 없습니다." } as const;
+
+    const capacity = capacityOf(project);
+    const acceptedCount = await tx.enrollment.count({ where: { projectId, status: "ACCEPTED" } });
+
+    if (decision === "ACCEPT") {
+      if (project.closedAt) return { error: "응답이 마감된 평가라 수락할 수 없습니다." } as const;
+      if (user.status !== "ACTIVE") return { error: `${user.name}님은 현재 이용할 수 없는 계정입니다.` } as const;
+      if (acceptedCount >= capacity) {
+        return { error: `정원(${capacity}명)이 찼습니다. 정원을 늘리거나 미참여자를 제외한 뒤 수락해 주세요.` } as const;
+      }
+      const updated = await tx.enrollment.updateMany({
+        where: { projectId, userId, status: "PENDING" },
+        data: { status: "ACCEPTED" },
+      });
+      if (updated.count === 0) return { error: `${user.name}님의 신청이 이미 처리되었거나 취소되었습니다.` } as const;
+      return { ok: true, project, userName: user.name, acceptedCount: acceptedCount + 1, capacity } as const;
+    }
+
+    const updated = await tx.enrollment.updateMany({
+      where: { projectId, userId, status: "PENDING" },
+      data: { status: "REJECTED" },
+    });
+    if (updated.count === 0) return { error: `${user.name}님의 신청이 이미 처리되었거나 취소되었습니다.` } as const;
+    return { ok: true, project, userName: user.name, acceptedCount, capacity } as const;
+  });
+
+  if ("error" in outcome) return { error: outcome.error };
+
+  const { project, userName, acceptedCount, capacity } = outcome;
+  if (decision === "ACCEPT") {
+    await createNotifications([
+      {
+        userId,
+        type: "INFO",
+        ...startNotice(project, `"${project.title}" 평가에 추가 선발되었어요.`),
+        fromUserId: me.id,
+      },
+    ]);
+    await participantAudit(me.id, userId, "PROJECT_PARTICIPANT_ADD", `평가 「${project.title}」 추가 신청 수락`);
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/surveys");
+    return { ok: `${userName}님의 추가 신청을 수락했습니다. (${acceptedCount}/${capacity}명)` };
+  }
+
+  await createNotifications([
+    {
+      userId,
+      type: "INFO",
+      content: `"${project.title}" 평가의 추가 신청이 선발되지 않았습니다.`,
+      fromUserId: me.id,
+      link: `/dashboard?view=detail&p=${projectId}`,
+    },
+  ]);
+  await participantAudit(me.id, userId, "PROJECT_PARTICIPANT_REJECT", `평가 「${project.title}」 추가 신청 거절`);
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/surveys");
+  return { ok: `${userName}님의 추가 신청을 거절했습니다.` };
 }

@@ -119,7 +119,7 @@ async function check(link: string, ourHost: string): Promise<boolean | null> {
 }
 
 export async function GET(req: NextRequest) {
-  // /api/* 는 middleware 밖이라 여기서 직접 봄. 존재를 알리지 않도록 404.
+  // /api/* 는 proxy 밖이라 여기서 직접 봄. 존재를 알리지 않도록 404.
   const userId = await getSessionUserId();
   const projectId = req.nextUrl.searchParams.get("p");
   if (!userId || !projectId) return NextResponse.json({ error: "Not found" }, { status: 404 });

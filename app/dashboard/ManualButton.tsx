@@ -17,38 +17,39 @@ type Node = { n: number; label: string; sub: string; tone: "client" | "panel" | 
 const PANEL_FLOW: Node[] = [
   { n: 1, label: "신청", sub: "모집 중일 때", tone: "panel" },
   { n: 2, label: "선발", sub: "참여 확정", tone: "platform" },
-  { n: 3, label: "평가", sub: "응답 제출", tone: "panel" },
+  { n: 3, label: "평가", sub: "Evi 과제·설문", tone: "panel" },
   { n: 4, label: "검수", sub: "통과 확정", tone: "platform" },
   { n: 5, label: "지급", sub: "계좌 입금", tone: "platform" },
 ];
 
 /** 기업: 의뢰가 붙는 흐름 */
 const COMPANY_FLOW: Node[] = [
-  { n: 1, label: "서비스", sub: "정보 등록", tone: "client" },
-  { n: 2, label: "문항", sub: "문항 확정", tone: "client" },
-  { n: 3, label: "의뢰", sub: "금액·입금", tone: "client" },
+  { n: 1, label: "방식", sub: "동행·표준·자유", tone: "client" },
+  { n: 2, label: "준비", sub: "과제 인터뷰·문항", tone: "client" },
+  { n: 3, label: "모집·비용", sub: "일정·의뢰 연결", tone: "client" },
   { n: 4, label: "승인", sub: "관리자 검토", tone: "platform" },
-  { n: 5, label: "수집", sub: "평가자 응답", tone: "panel" },
-  { n: 6, label: "결과", sub: "리포트", tone: "platform" },
+  { n: 5, label: "참여", sub: "학생 과제·응답", tone: "panel" },
+  { n: 6, label: "결과", sub: "요청 회신·리포트", tone: "platform" },
 ];
 
 /** 교직원: 의뢰 없이 연구비에서 사후 정산함 */
 const FACULTY_FLOW: Node[] = [
-  { n: 1, label: "서비스", sub: "정보 등록", tone: "client" },
-  { n: 2, label: "문항", sub: "AI 초안", tone: "client" },
-  { n: 3, label: "평가", sub: "문항 확정", tone: "client" },
+  { n: 1, label: "방식", sub: "동행·표준·자유", tone: "client" },
+  { n: 2, label: "준비", sub: "과제 인터뷰·문항", tone: "client" },
+  { n: 3, label: "모집·비용", sub: "일정·연구비", tone: "client" },
   { n: 4, label: "승인", sub: "관리자 검토", tone: "platform" },
-  { n: 5, label: "결과", sub: "리포트", tone: "platform" },
+  { n: 5, label: "참여", sub: "학생 과제·응답", tone: "panel" },
+  { n: 6, label: "결과", sub: "요청 회신·리포트", tone: "platform" },
 ];
 
 /** 관리자: 전체 7단계 */
 const FULL_FLOW: Node[] = [
-  { n: 1, label: "의뢰", sub: "서비스·문항", tone: "client" },
+  { n: 1, label: "의뢰", sub: "서비스·평가 방식", tone: "client" },
   { n: 2, label: "승인", sub: "공개 결정", tone: "platform" },
   { n: 3, label: "모집", sub: "신청·선발", tone: "panel" },
-  { n: 4, label: "평가", sub: "응답", tone: "panel" },
+  { n: 4, label: "평가", sub: "과제·응답", tone: "panel" },
   { n: 5, label: "검수", sub: "통과·탈락", tone: "platform" },
-  { n: 6, label: "결과", sub: "리포트", tone: "platform" },
+  { n: 6, label: "결과", sub: "회신·리포트", tone: "platform" },
   { n: 7, label: "정산", sub: "지급·환불", tone: "platform" },
 ];
 
@@ -226,14 +227,14 @@ export default function ManualButton({ userType, role }: { userType?: string; ro
                   <Flow nodes={PANEL_FLOW} />
                   <Keys
                     items={[
-                      ["선발돼야 참여", "신청만으론 응답 불가"],
+                      ["선발돼야 참여", "신청만으론 참여 불가"],
+                      ["Evi 동행 평가", "과제 공개 뒤 시작"],
                       ["계좌 등록 필수", "없으면 지급에서 빠짐"],
-                      ["정원 차면 마감", "먼저 제출한 사람까지"],
                     ]}
                   />
                   <Note>
-                    계좌는 프로필 &gt; 정산 정보에서 등록합니다. 지급액은 세전 기준이라 금액에
-                    따라 원천징수될 수 있습니다.
+                    계좌는 프로필 &gt; 정산 정보에서 등록해요. 지급액은 세전 기준이라 금액에
+                    따라 원천징수될 수 있어요. 정원이 차면 먼저 참여를 마친 사람까지 인정돼요.
                   </Note>
                 </>
               )}
@@ -243,14 +244,14 @@ export default function ManualButton({ userType, role }: { userType?: string; ro
                   <Flow nodes={COMPANY_FLOW} />
                   <Keys
                     items={[
+                      ["평가 방식 3가지", "동행·표준·자유 설문"],
                       ["사업자번호 필요", "의뢰·견적서 공통"],
-                      ["세금계산서", "평가 완료 후 발행"],
                       ["미달분 환불", "수수료·부가세 포함"],
                     ]}
                   />
                   <Note>
-                    모집은 관리자 승인으로 시작됩니다. 입금은 모집 시작 조건이 아닙니다.
-                    세금계산서는 입금 전에도 발행됩니다.
+                    Evi 동행 평가는 문항 없이 Evi와 과제를 정하고, 표준 설문은 자동으로 만든 문항을 확정하고, 자유 설문은 문항을 직접 써요.
+                    모집은 관리자 승인으로 시작되고 입금은 조건이 아니에요. 세금계산서는 입금 전에도 발행돼요.
                   </Note>
                 </>
               )}
@@ -261,14 +262,13 @@ export default function ManualButton({ userType, role }: { userType?: string; ro
                   <Keys
                     items={[
                       ["의뢰 절차 없음", "사업자번호 불필요"],
-                      ["문항은 AI 초안", "검토 후 직접 확정"],
-                      ["평가 주소 입력", "등록 뒤 수정에서"],
+                      ["평가 방식 3가지", "동행·표준·자유 설문"],
+                      ["서비스 주소 입력", "학생이 바로 여는 주소"],
                     ]}
                   />
                   <Note>
-                    확정 문항으로 만든 평가에는 평가 대상 주소가 비어 있습니다. 등록한 뒤 수정
-                    화면에서 채워야 평가자가 접속할 수 있습니다. 참여 보상은 연구비에서
-                    사후 정산합니다.
+                    일정·인원을 정할 때 평가할 서비스 주소를 넣어 주세요. 표준 설문은 AI 초안 문항을
+                    검토해 확정해요. 참여 보상은 연구비에서 사후 정산해요.
                   </Note>
                 </>
               )}
@@ -279,13 +279,13 @@ export default function ManualButton({ userType, role }: { userType?: string; ro
                   <Keys
                     items={[
                       ["승인해야 공개", "자금은 판단 자료"],
-                      ["의뢰 미연결 확인", "보상이 안 생긴다"],
-                      ["계좌 미등록자", "지급에서 빠진다"],
+                      ["의뢰 미연결 확인", "보상이 안 생김"],
+                      ["동행 평가 과제 공개", "승인·선발 뒤 운영진이"],
                     ]}
                   />
                   <Note>
                     의뢰는 평가와 별개라 나중에 연결할 수 있고, 연결하면 기존 응답분 보상이
-                    소급 생성됩니다.
+                    소급 생성돼요. 계좌를 등록하지 않은 학생은 지급에서 빠져요.
                   </Note>
                 </>
               )}

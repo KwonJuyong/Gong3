@@ -3,6 +3,7 @@
 import { getSessionUserId } from "@/app/session-server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { reviewStamp } from "./reviewStamp";
 import { prisma } from "../../db";
 import { isConstructActive, type ServiceProfile } from "../../lib/surveyProfile";
 import {
@@ -63,7 +64,7 @@ export async function createServiceAction(formData: FormData) {
   });
 
   revalidatePath(SERVICES_PATH);
-  // 등록 다음 단계인 설문 작성으로 바로 보냄
+  // 등록 다음 단계인 표준 문항 작성으로 바로 보냄
   redirect(`${SERVICES_PATH}/${service.id}?created=1`);
 }
 
@@ -82,7 +83,8 @@ export async function deleteServiceAction(formData: FormData) {
   await prisma.service.delete({ where: { id } });
 
   revalidatePath(SERVICES_PATH);
-  redirect(`${SERVICES_PATH}?deleted=1`);
+  const method = formData.get("method");
+  redirect(`${SERVICES_PATH}?deleted=1${method === "standard" ? "&method=standard" : ""}`);
 }
 
 /** 소유자 본인 또는 ADMIN 인지 확인하고 서비스를 반환 */
@@ -155,7 +157,7 @@ export async function generateDraftsAction(formData: FormData) {
   try {
     results = await generateAdaptiveQuestions(
       genService,
-      targets.map((c) => ({ id: c.id, name: c.name, description: c.description })),
+      targets.map((c) => ({ id: c.id, name: c.name, description: c.description, evaluator: c.evaluator })),
     );
   } catch (e) {
     console.error("평가문항 생성 실패", e);
@@ -163,55 +165,61 @@ export async function generateDraftsAction(formData: FormData) {
   }
 
   // 생성 문구 upsert. 수정본과 승인 상태는 유지하고 generated 만 갱신함
-  for (const r of results) {
-    await prisma.llmQuestionDraft.upsert({
-      where: { surveyVersionId_constructId: { surveyVersionId: version.id, constructId: r.constructId } },
-      update: { generated: r.questionText, scaleType: ADAPTIVE_SCALE },
-      create: {
-        surveyVersionId: version.id,
-        constructId: r.constructId,
-        generated: r.questionText,
-        scaleType: ADAPTIVE_SCALE,
-      },
-    });
-  }
+  const versionId = version.id;
+  await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM "SurveyVersion" WHERE id = ${versionId} FOR UPDATE`;
+    const current = await tx.surveyVersion.findUnique({ where: { id: versionId }, select: { status: true } });
+    if (current?.status !== "DRAFT") redirect(`${SERVICES_PATH}/${serviceId}?saved=changed`);
+    for (const r of results) {
+      await tx.llmQuestionDraft.upsert({
+        where: { surveyVersionId_constructId: { surveyVersionId: versionId, constructId: r.constructId } },
+        update: { generated: r.questionText, scaleType: ADAPTIVE_SCALE },
+        create: {
+          surveyVersionId: versionId,
+          constructId: r.constructId,
+          generated: r.questionText,
+          scaleType: ADAPTIVE_SCALE,
+        },
+      });
+    }
 
-  // 재현을 위해 사용 모델과 프롬프트 판본을 기록함
-  await prisma.surveyVersion.update({
-    where: { id: version.id },
-    data: { llmModelId: activeModel(), promptVersion: PROMPT_VERSION },
+    // 재현을 위해 사용 모델과 프롬프트 판본을 기록함
+    await tx.surveyVersion.update({
+      where: { id: versionId },
+      data: { llmModelId: activeModel(), promptVersion: PROMPT_VERSION },
+    });
   });
 
   revalidatePath(`${SERVICES_PATH}/${serviceId}`);
   redirect(`${SERVICES_PATH}/${serviceId}?generated=1`);
 }
 
-/** LLM 이 만든 문구를 수정·확정함 */
-export async function saveDraftAction(formData: FormData) {
+export async function saveReviewAction(formData: FormData) {
   const me = await getMe();
   if (!me || !canManageService(me.role)) return;
-
-  const draftId = ((formData.get("draftId") as string) || "").trim();
-  if (!draftId) return;
-
-  const draft = await prisma.llmQuestionDraft.findUnique({
-    where: { id: draftId },
-    include: { surveyVersion: { include: { service: true } } },
+  const serviceId = String(formData.get("serviceId") ?? "");
+  const versionId = String(formData.get("versionId") ?? "");
+  if (!await getOwnedService(serviceId, me)) return;
+  await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM "SurveyVersion" WHERE id = ${versionId} AND "serviceId" = ${serviceId} FOR UPDATE`;
+    const version = await tx.surveyVersion.findFirst({
+      where: { id: versionId, serviceId, status: "DRAFT" }, include: { drafts: true }
+    });
+    if (!version || reviewStamp(version.drafts) !== formData.get("stamp")) {
+      redirect(`${SERVICES_PATH}/${serviceId}?saved=changed`);
+    }
+    for (const draft of version.drafts) {
+      if (!formData.has(draft.id)) continue;
+      const text = formData.get(draft.id);
+      if (typeof text !== "string" || !text.trim()) redirect(`${SERVICES_PATH}/${serviceId}?saved=invalid`);
+      if (text.trim() === (draft.edited ?? draft.generated)) continue;
+      await tx.llmQuestionDraft.update({
+        where: { id: draft.id }, data: { edited: text.trim(), approved: true }
+      });
+    }
   });
-  if (!draft) return;
-  const service = draft.surveyVersion.service;
-  if (service.ownerId !== me.id && me.role !== "ADMIN") return;
-
-  const editedRaw = ((formData.get("edited") as string) || "").trim();
-  const approved = formData.get("approved") === "on";
-
-  await prisma.llmQuestionDraft.update({
-    where: { id: draftId },
-    data: { edited: editedRaw || null, approved },
-  });
-
-  revalidatePath(`${SERVICES_PATH}/${service.id}`);
-  redirect(`${SERVICES_PATH}/${service.id}?saved=1`);
+  revalidatePath(`${SERVICES_PATH}/${serviceId}`);
+  redirect(`${SERVICES_PATH}/${serviceId}?saved=1`);
 }
 
 /** DRAFT 버전을 최종 블록으로 조립·스냅샷하고 CONFIRMED로 잠금 */
@@ -327,6 +335,8 @@ export async function freezeVersionAction(formData: FormData) {
     });
   }
 
+  if (!blocks.length) redirect(`${SERVICES_PATH}/${serviceId}?frozen=empty`);
+
   const constructSnapshot = constructs.map((c) => ({
     id: c.id,
     name: c.name,
@@ -335,16 +345,24 @@ export async function freezeVersionAction(formData: FormData) {
     evaluator: c.evaluator,
   }));
 
-  await prisma.surveyVersion.update({
-    where: { id: version.id },
-    data: {
-      status: "CONFIRMED",
-      confirmedAt: new Date(),
-      confirmedById: me.id,
-      blocks: blocks as object,
-      instrumentVersions: instrumentVersions as object,
-      constructSnapshot: constructSnapshot as object,
-    },
+  await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM "SurveyVersion" WHERE id = ${version.id} FOR UPDATE`;
+    const current = await tx.surveyVersion.findUnique({ where: { id: version.id }, include: { drafts: true } });
+    if (current?.status !== "DRAFT" || version.id !== formData.get("versionId") ||
+        reviewStamp(current.drafts) !== formData.get("stamp")) {
+      redirect(`${SERVICES_PATH}/${serviceId}?saved=changed`);
+    }
+    await tx.surveyVersion.update({
+      where: { id: version.id },
+      data: {
+        status: "CONFIRMED",
+        confirmedAt: new Date(),
+        confirmedById: me.id,
+        blocks: blocks as object,
+        instrumentVersions: instrumentVersions as object,
+        constructSnapshot: constructSnapshot as object,
+      },
+    });
   });
 
   // 동결은 공개가 아님. 관리자에게 검토를 요청하고, 공개는 평가를 만들어 승인받은 뒤에 됨

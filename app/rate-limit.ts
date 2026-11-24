@@ -36,6 +36,12 @@ export function checkRateLimit(
   return null;
 }
 
+/** 정상 처리된 시도를 한도에서 빼 줌. 공용 IP 의 성공 시도가 다른 사람을 막지 않게 함 */
+export function refundRateLimit(key: string): void {
+  const entry = attempts.get(key);
+  if (entry && entry.count > 0) entry.count--;
+}
+
 /**
  * 양(바이트 등)을 누적하는 한도. 넘으면 true 를 돌려주고 그 양은 누적하지 않음
  */

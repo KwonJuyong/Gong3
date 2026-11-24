@@ -14,20 +14,32 @@ export const DEMO_PASSWORD = "demo1234!";
 /** 로그인 ID. `studentId` 는 화면 표시용으로만 남음 */
 export const stagingEmail = (studentId: string) => `${studentId}@example.com`;
 
+export type StagingAccount = {
+  studentId: string;
+  name: string;
+  major: string;
+  role: "ADMIN" | "DEVELOPER" | "USER";
+  userType: "STAFF" | "DEVELOPER" | "STUDENT";
+  desc: string;
+};
+
 /**
  * 배포 때 자동으로 만드는 계정(prisma/seedStagingUsers.ts).
- * role(권한)과 userType(표시)은 함께 바꿈. 교직원은 STAFF + DEVELOPER 다.
+ * 관리자 1 · 기업 2 · 학생 20. role(권한)과 userType(표시)은 함께 바꿈
  */
-export const STAGING_ACCOUNTS = [
-  { studentId: "admin", name: "스테이징관리자", major: "운영", role: "ADMIN", userType: "STAFF", desc: "회원 관리 · 평가 승인 · 정산 검수" },
-  { studentId: "prof1", name: "김교수", major: "AI융합", role: "DEVELOPER", userType: "DEVELOPER", desc: "평가 개설 · 문항 생성" },
-  { studentId: "prof2", name: "이교수", major: "소프트웨어", role: "DEVELOPER", userType: "DEVELOPER", desc: "평가 개설 · 문항 생성" },
-  { studentId: "tester1", name: "평가자1", major: "테스트", role: "USER", userType: "STUDENT", desc: "평가 참여 · 보상 확인" },
-  { studentId: "tester2", name: "평가자2", major: "테스트", role: "USER", userType: "STUDENT", desc: "평가 참여 · 보상 확인" },
-  { studentId: "tester3", name: "평가자3", major: "테스트", role: "USER", userType: "STUDENT", desc: "평가 참여 · 보상 확인" },
-  { studentId: "tester4", name: "평가자4", major: "테스트", role: "USER", userType: "STUDENT", desc: "평가 참여 · 보상 확인" },
-  { studentId: "tester5", name: "평가자5", major: "테스트", role: "USER", userType: "STUDENT", desc: "평가 참여 · 보상 확인" },
-] as const;
+export const STAGING_ACCOUNTS: readonly StagingAccount[] = [
+  { studentId: "admin", name: "관리자", major: "운영", role: "ADMIN", userType: "STAFF", desc: "승인 · 관리" },
+  { studentId: "company1", name: "기업 1", major: "테스트기업1", role: "DEVELOPER", userType: "DEVELOPER", desc: "평가 개설" },
+  { studentId: "company2", name: "기업 2", major: "테스트기업2", role: "DEVELOPER", userType: "DEVELOPER", desc: "평가 개설" },
+  ...Array.from({ length: 20 }, (_, i): StagingAccount => ({
+    studentId: `student${i + 1}`,
+    name: `학생 ${i + 1}`,
+    major: "테스트",
+    role: "USER",
+    userType: "STUDENT",
+    desc: "평가 참여",
+  })),
+];
 
 /** 마켓플레이스 시연 계정: 발주 기업 1 + 평가단 6 */
 export const DEMO_BUYER_EMAIL = "demo-buyer@example.com";

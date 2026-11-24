@@ -2,13 +2,10 @@
 
 import SubmitButton from "@/app/components/SubmitButton";
 import ConfirmButton from "@/app/components/ConfirmButton";
+import { ui } from "@/app/components/ui";
 import { useState } from "react";
+import { won } from "../../lib/money";
 import { recordTaxFilingAction, deleteTaxFilingAction } from "./actions";
-
-/**
- * 세무 신고 기록(그 달에 무엇을 신고했는가).
- * 수정신고가 있어 기록은 고칠 수 있음. 현재 집계와 다르면 표시만 하고 자동으로 덮어쓰지 않음
- */
 
 export interface FilingRowView {
   kind: string;
@@ -45,7 +42,6 @@ export interface FilingPanelProps {
   rows: FilingRowView[];
 }
 
-import { won } from "../../lib/money";
 const dstr = (iso: string) =>
   new Intl.DateTimeFormat("ko-KR", {
     month: "2-digit",
@@ -207,7 +203,7 @@ export default function FilingPanel({ year, month, current, rows }: FilingPanelP
                       />
                       이 달은 낼 것이 없음 (지급 0건)
                     </label>
-                    <SubmitButton className="px-3 py-1.5 text-xs font-medium bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)]">
+                    <SubmitButton className={ui.primaryXs}>
                       {f ? "수정 저장" : "신고 완료로 기록"}
                     </SubmitButton>
                   </div>

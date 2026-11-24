@@ -4,6 +4,7 @@ import { getSessionUserId } from "@/app/session-server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "../../db";
+import { createNotifications } from "../../lib/notify";
 import {
   reviewReward,
   generatePayouts,
@@ -70,9 +71,29 @@ export async function reviewRewardAction(formData: FormData) {
   if (!me) return;
   const rewardId = ((formData.get("rewardId") as string) || "").trim();
   const approve = (formData.get("approve") as string) === "1";
-  const reason = ((formData.get("reason") as string) || "").trim();
+  const reason = ((formData.get("reason") as string) || "").trim().slice(0, 200);
   if (!rewardId) return;
-  await reviewReward(rewardId, me.id, approve, reason);
+  // 학생이 이유를 알고 이의를 제기할 수 있도록 반려에는 사유를 받음
+  if (!approve && !reason) redirect(`${PATH}?error=${encodeURIComponent("반려 사유를 입력해 주세요.")}`);
+  const n = await reviewReward(rewardId, me.id, approve, reason);
+  if (n > 0 && !approve) {
+    const r = await prisma.reward.findUnique({
+      where: { id: rewardId },
+      select: { userId: true, grossAmount: true, response: { select: { project: { select: { title: true } } } } },
+    });
+    if (r) {
+      const title = r.response?.project.title;
+      await createNotifications([
+        {
+          userId: r.userId,
+          type: "INFO",
+          content: `${title ? `"${title}" ` : ""}응답의 보상(${r.grossAmount.toLocaleString("ko-KR")}원)이 검수에서 반려되었습니다. 사유: ${reason} 이의가 있으면 관리자에게 문의해 주세요.`,
+          fromUserId: me.id,
+          link: "/dashboard",
+        },
+      ]);
+    }
+  }
   revalidatePath(PATH);
   redirect(PATH);
 }

@@ -1,21 +1,13 @@
 "use client";
 
 import ConfirmButton from "@/app/components/ConfirmButton";
+import { ui } from "@/app/components/ui";
 import { useState } from "react";
 import Link from "next/link";
 import { createOrderAction } from "./actions";
 import BizFields from "./BizFields";
 import { computeAmountsFromSubtotal, won } from "../../lib/money";
 import { TIME_TIERS, DEFAULT_TIER, tierOf } from "../../lib/quoteTiers";
-
-/**
- * 발주·견적서 폼. 필요한 입력이 같아서 한 폼에 버튼 두 개를 둠
- *
- * 견적서 버튼은 formAction/formMethod/formTarget 으로 GET /api/orders/quote 를 새 탭에 열기
- * React 는 submitter 의 formAction 이 문자열이면 브라우저 기본 동작에 맡김
- * Enter 는 첫 번째 submit 버튼을 누르므로 발주 버튼을 먼저 둠
- * 견적서에는 세금계산서 이메일이 필요 없어 formNoValidate 를 줌
- */
 
 export interface OrderFormService {
   id: string;
@@ -89,10 +81,11 @@ export default function OrderForm({
   return (
     <form action={createOrderAction} className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-[var(--muted)] mb-1">
+        <label htmlFor="order-serviceId" className="block text-xs font-medium text-[var(--muted)] mb-1">
           평가 대상 서비스
         </label>
         <select
+          id="order-serviceId"
           name="serviceId"
           value={serviceId}
           onChange={(e) => setServiceId(e.target.value)}
@@ -110,8 +103,9 @@ export default function OrderForm({
 
       {!serviceId && (
         <div>
-          <label className="block text-xs font-medium text-[var(--muted)] mb-1">평가명</label>
+          <label htmlFor="order-serviceName" className="block text-xs font-medium text-[var(--muted)] mb-1">평가명</label>
           <input
+            id="order-serviceName"
             name="serviceName"
             value={serviceName}
             onChange={(e) => setServiceName(e.target.value)}
@@ -126,8 +120,9 @@ export default function OrderForm({
 
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-3 items-end">
         <div>
-          <label className="block text-xs font-medium text-[var(--muted)] mb-1">소요시간</label>
+          <label htmlFor="order-itemTier" className="block text-xs font-medium text-[var(--muted)] mb-1">소요시간</label>
           <select
+            id="order-itemTier"
             name="itemTier"
             value={tier}
             onChange={(e) => {
@@ -145,10 +140,11 @@ export default function OrderForm({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-[var(--muted)] mb-1">
+          <label htmlFor="order-panelSize" className="block text-xs font-medium text-[var(--muted)] mb-1">
             모집 인원{multi && " (1회차)"}
           </label>
           <input
+            id="order-panelSize"
             name="panelSize"
             type="number"
             min={1}
@@ -160,12 +156,13 @@ export default function OrderForm({
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-[var(--muted)] mb-1">
+          <label htmlFor="order-rewardPerPerson" className="block text-xs font-medium text-[var(--muted)] mb-1">
             1인당 보상 (원){multi && " (1회차)"}
           </label>
           {/* step 을 두지 않음. 견적서 버튼은 검증을 건너뛰어 발주와 허용 금액이 달라지기 때문임
               하한은 enforceFloor 가 적용함 */}
           <input
+            id="order-rewardPerPerson"
             name="rewardPerPerson"
             type="number"
             min={tierOf(tier).floor}
@@ -199,10 +196,11 @@ export default function OrderForm({
 
       {/* 납기(견적서 특기사항). 비우면 견적서에서 줄을 생략함. 기본값은 넣지 않음 */}
       <div>
-        <label className="block text-xs font-medium text-[var(--muted)] mb-1">
+        <label htmlFor="order-deliveryTerm" className="block text-xs font-medium text-[var(--muted)] mb-1">
           납기 / 이행 기간 <span className="text-[var(--gray-500)] font-normal">(선택)</span>
         </label>
         <input
+          id="order-deliveryTerm"
           name="deliveryTerm"
           value={deliveryTerm}
           onChange={(e) => setDeliveryTerm(e.target.value)}
@@ -325,7 +323,7 @@ export default function OrderForm({
             플랫폼 수수료율 (bp)
             <span className="text-[var(--gray-500)] font-normal">
               {" "}
-              — 100 bp = 1% · 기본 {feeRateBp} bp ({feeRateBp / 100}%)
+              · 100 bp = 1% · 기본 {feeRateBp} bp ({feeRateBp / 100}%)
             </span>
           </label>
           <input
@@ -347,7 +345,7 @@ export default function OrderForm({
           기업 정보
           <span className="text-[var(--muted)] font-normal">
             {" "}
-            — 견적서와 세금계산서에 함께 쓰입니다. 입금 확인 시 전자세금계산서가 자동 발행됩니다
+            · 견적서와 세금계산서에 함께 쓰입니다. 입금 확인 시 전자세금계산서가 자동 발행됩니다
           </span>
         </p>
         <BizFields initial={biz} />
@@ -417,7 +415,7 @@ export default function OrderForm({
           message={`합계 ${won(amounts.totalAmount)}(부가세 포함)으로 평가를 의뢰합니다.\n\n· 의뢰서가 만들어지고 입금 안내가 나갑니다. 견적서와 달리 실제 거래가 시작됩니다.\n· 세금계산서는 입력한 사업자 정보로 발행되니 상호·사업자번호를 다시 확인하세요.\n\n정말 의뢰하시겠습니까?`}
           disabled={orderBlocked}
           title={orderBlocked ? "지금 조건에서는 견적서만 발급할 수 있습니다" : undefined}
-          className="px-4 py-2 text-sm font-medium bg-[var(--accent)] text-white rounded-[var(--radius-md)] hover:bg-[var(--accent-dark)] disabled:opacity-40 disabled:cursor-not-allowed"
+          className={`${ui.primarySm} disabled:cursor-not-allowed`}
         >
           의뢰하고 입금 안내 받기
         </ConfirmButton>

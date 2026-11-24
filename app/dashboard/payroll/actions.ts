@@ -49,10 +49,19 @@ function workTimeFromAmount(amount: number): { start: string; end: string } {
   return { start: "18:00", end: `${pad(endH)}:${pad(endM)}` };
 }
 
+/**
+ * 노무비 대상 평가. 업체·학교 평가는 보상(Reward)으로 지급하므로 넣으면 이중 지급이 됨
+ * 결제 경로가 생기기 전 평가는 마이그레이션에서 RESEARCH_FUND 로 표시돼 그대로 포함됨
+ */
+const researchFundWithin = (from: Date, to: Date) => ({
+  fundingType: "RESEARCH_FUND",
+  startTime: { gte: from, lte: to },
+});
+
 /** 한 사용자의 batch 기간 내 참여기록 → 근무내역 자동 생성 */
 async function autoEntries(userId: string, periodStart: Date, periodEnd: Date, defaultRate: number): Promise<ClaimEntry[]> {
   const responses = await prisma.response.findMany({
-    where: { userId, project: { startTime: { gte: periodStart, lte: periodEnd } } },
+    where: { userId, project: researchFundWithin(periodStart, periodEnd) },
     include: { project: { select: { title: true, startTime: true, endTime: true } } },
     orderBy: { project: { startTime: "asc" } },
   });
@@ -164,7 +173,7 @@ export async function generateClaims(formData: FormData) {
 
   // 기간 내 참여자(중복 제거)
   const responses = await prisma.response.findMany({
-    where: { project: { startTime: { gte: batch.periodStart, lte: batch.periodEnd } } },
+    where: { project: researchFundWithin(batch.periodStart, batch.periodEnd) },
     select: { userId: true },
     distinct: ["userId"],
   });
