@@ -110,6 +110,8 @@ scripts/              자체 점검(세션·조회·사용량 한도·표기 규
 | 진형준 | 프론트엔드 | IRB·행정 절차 | [hyungjunjin](https://github.com/hyungjunjin) |
 | 서지은 | 디자인 | QA·피드백 관리 | [Seojieun9](https://github.com/Seojieun9) |
 
+맡은 화면·파일과 작업 순서: [개인 기여 명세](docs/contributions.md) · 화면 설계: [Figma](https://www.figma.com/design/qNMyBI2a235FoOp7HTYNuS/%EC%86%8C%EC%9C%B5%EC%BA%A1%EC%8A%A4%ED%86%A4?node-id=0-1)
+
 ## 로컬 실행
 
 필요: Node.js 24 LTS, Docker(개발 DB)
